@@ -143,31 +143,31 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           </Btn>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {trm && <span style={{ fontSize: 10, color: "#888" }}>TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
-          {lastFetch && <span style={{ fontSize: 10, color: "#555" }}>Última: {lastFetch}</span>}
-          <span style={{ fontSize: 10, color: "#7B4FB5" }}>{user?.email}</span>
-          <Btn onClick={() => signOut()} color="#333" small>Salir</Btn>
+          {trm && <span style={{ fontSize: 10, color: "#555" }}>TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
+          {lastFetch && <span style={{ fontSize: 10, color: "#333" }}>Última: {lastFetch}</span>}
+          <span style={{ fontSize: 10, color: "#444" }}>{user?.email}</span>
+          <Btn onClick={() => signOut()} color="" small>Salir</Btn>
         </div>
       </div>
 
       <Section title="💰 Dinero Real Disponible">
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <Card title="BANCO (sin rendimiento)" value={COP(cash.banco || 0)} color="#2D2D6B" />
-          <Card title="ALTO RENDIMIENTO" value={COP(hysBalance)} color="#16A085" sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
-          <Card title="DINERO REAL TOTAL" value={COP(dineroReal)} color="#5B2E96" />
+          <Card title="BANCO (sin rendimiento)" value={COP(cash.banco || 0)} />
+          <Card title="ALTO RENDIMIENTO" value={COP(hysBalance)} sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
+          <Card title="DINERO REAL TOTAL" value={COP(dineroReal)} />
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontSize: 11, color: "#aaa" }}>Ajustar saldo banco:</span>
-          <PriceInput value={cash.banco || 0} placeholder="Saldo banco" color="#2D9CDB" width={130} onChange={n => saveCash({ ...cash, banco: n })} />
+          <PriceInput value={cash.banco || 0} placeholder="Saldo banco" width={130} onChange={n => saveCash({ ...cash, banco: n })} />
         </div>
       </Section>
 
       <Section title="📊 Portafolio de Inversiones (Acciones + Cripto)">
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <Card title="ACCIONES" value={COP(totalStocks)} color="#2D2D6B" />
-          <Card title="CRIPTO" value={COP(totalCrypto)} color="#F39C12" />
-          <Card title="TOTAL INVERSIONES" value={COP(totalPortafolio)} color="#7B4FB5" />
-          <Card title="COMISIONES" value={COP(totalComm)} color="#9B59B6" />
+          <Card title="ACCIONES" value={COP(totalStocks)} />
+          <Card title="CRIPTO" value={COP(totalCrypto)} />
+          <Card title="TOTAL INVERSIONES" value={COP(totalPortafolio)} />
+          <Card title="COMISIONES" value={COP(totalComm)} />
         </div>
       </Section>
 
@@ -250,8 +250,8 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
         <>
           <Section title="Precios actuales y objetivos">
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-              <Btn onClick={fetchAllPrices} color={fetching ? "#555" : "#2D9CDB"} small disabled={fetching}>
-                {fetching ? "⏳" : "🔄 Actualizar"}
+              <Btn onClick={fetchAllPrices} color={fetching ? "" : "#2D9CDB"} small disabled={fetching}>
+                {fetching ? "Actualizando..." : "Actualizar"}
               </Btn>
             </div>
             <PriceEditor metrics={stockMetrics} prices={prices} setPrices={savePrices} save={() => {}} />
@@ -309,10 +309,10 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
         <>
           <Section title="Precios actuales">
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-              <Btn onClick={fetchAllPrices} color={fetching ? "#555" : "#2D9CDB"} small disabled={fetching}>
-                {fetching ? "⏳" : "🔄 Actualizar"}
+              <Btn onClick={fetchAllPrices} color={fetching ? "" : "#2D9CDB"} small disabled={fetching}>
+                {fetching ? "Actualizando..." : "Actualizar"}
               </Btn>
-              {trm && <span style={{ fontSize: 10, color: "#888" }}>TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
+              {trm && <span style={{ fontSize: 10, color: "#555" }}>TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
             </div>
             <PriceEditor metrics={cryptoMetrics} prefix="C_" prices={prices} setPrices={savePrices} save={() => {}} />
           </Section>
@@ -373,9 +373,9 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
         <FinForm key={editingFin?.id || "edit"} editingItem={editingFin} onSave={handleFinanceSubmit} onCancel={() => setEditingFin(null)} />
       </Modal>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <Card title="INGRESOS" value={COP(filteredIn)} color="#27AE60" sub={hasFilter ? `de ${COP(totalIn)} total` : ""} />
-        <Card title="EGRESOS" value={COP(filteredOut)} color="#E94560" sub={hasFilter ? `de ${COP(totalOut)} total` : ""} />
-        <Card title="BALANCE" value={COP(filteredIn - filteredOut)} color={filteredIn - filteredOut >= 0 ? "#27AE60" : "#C0392B"} sub={hasFilter ? `${filteredFin.length} de ${finances.length} registros` : "(no es tu dinero real)"} />
+        <Card title="INGRESOS" value={COP(filteredIn)} sub={hasFilter ? `de ${COP(totalIn)} total` : ""} />
+        <Card title="EGRESOS" value={COP(filteredOut)} sub={hasFilter ? `de ${COP(totalOut)} total` : ""} />
+        <Card title="BALANCE" value={COP(filteredIn - filteredOut)} sub={hasFilter ? `${filteredFin.length} de ${finances.length} registros` : "(no es tu dinero real)"} />
       </div>
       <Section title="Filtros">
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 8 }}>
@@ -384,12 +384,12 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Select label="Tipo" options={["", "ingreso", "egreso"]} value={finFilter.type} onChange={e => setFinFilter({ ...finFilter, type: e.target.value })} />
           <Select label="Categoría" options={["", ...allCategories]} value={finFilter.category} onChange={e => setFinFilter({ ...finFilter, category: e.target.value })} />
           <Input label="Buscar" value={finFilter.search} onChange={e => setFinFilter({ ...finFilter, search: e.target.value })} placeholder="texto..." />
-          <Btn onClick={() => setFinFilter({ dateFrom: "", dateTo: "", type: "", category: "", search: "" })} small color="#555">Limpiar</Btn>
+          <Btn onClick={() => setFinFilter({ dateFrom: "", dateTo: "", type: "", category: "", search: "" })} small color="">Limpiar</Btn>
           <Btn onClick={() => exportExcel(filteredFin, `finanzas-filtrado-${new Date().toISOString().slice(0,10)}.xlsx`)} small color="#27AE60">
-            ⬇ Excel filtrado
+            Excel filtrado
           </Btn>
           <Btn onClick={() => exportExcel(finances, `finanzas-todo-${new Date().toISOString().slice(0,10)}.xlsx`)} small color="#2D9CDB">
-            ⬇ Excel todo
+            Excel todo
           </Btn>
         </div>
         {hasFilter && (
@@ -438,7 +438,7 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
               label: "",
               render: r => (
                 <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingFin(r); }}
-                  style={{ background: "none", border: "none", color: "#7B4FB5", cursor: "pointer", fontSize: 12 }}>✎</button>
+                  style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✎</button>
               ),
               noSort: true
             }
@@ -455,23 +455,23 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
     <div>
       <div style={{ display: "flex", gap: 6, alignItems: "flex-end", marginBottom: 14 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <label style={{ fontSize: 10, color: "#aaa" }}>Tasa EA (%)</label>
-          <PriceInput value={hys.rate} placeholder="9.25" color="#16A085" width={70} onChange={n => saveHys({ ...hys, rate: n })} />
+          <label style={{ fontSize: 11, color: "#555" }}>Tasa EA (%)</label>
+          <PriceInput value={hys.rate} placeholder="9.25" width={70} onChange={n => saveHys({ ...hys, rate: n })} />
         </div>
-        <div style={{ color: "#888", fontSize: 11, paddingBottom: 6 }}>
+        <div style={{ color: "#555", fontSize: 11, paddingBottom: 6 }}>
           Diaria: {(hysState.dailyRate * 100).toFixed(5)}%
         </div>
       </div>
       <Section title="Registrar movimiento">
         <HysForm saveHys={saveHys} hys={hys} saveCash={saveCash} cash={cash} />
-        <div style={{ fontSize: 10, color: "#666", marginTop: -6 }}>
+        <div style={{ fontSize: 10, color: "#444", marginTop: -6 }}>
           APERTURA=saldo inicial · INGRESO=metes (debita banco) · RETIRO=sacas (acredita banco) · SALDO=anota saldo real. Tasa vigente ({hys.rate}%) se guarda en cada movimiento.
         </div>
       </Section>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <Card title="SALDO ACTUAL" value={COP(hysBalance)} color="#16A085" sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
-        <Card title="PROYECTADO 1 AÑO" value={COP(hysFinal)} color="#2D9CDB" sub={`+${COP(hysFinal - hysBalance)}`} />
-        <Card title="GANADO DESDE APERTURA" value={COP(hysBalance - (hys.movements.find(m => m.type === "APERTURA")?.amount || 0))} color="#27AE60" />
+        <Card title="SALDO ACTUAL" value={COP(hysBalance)} sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
+        <Card title="PROYECTADO 1 AÑO" value={COP(hysFinal)} sub={`+${COP(hysFinal - hysBalance)}`} />
+        <Card title="GANADO DESDE APERTURA" value={COP(hysBalance - (hys.movements.find(m => m.type === "APERTURA")?.amount || 0))} />
       </div>
       <Section title="Movimientos">
         <Table
@@ -513,18 +513,20 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
 
   // ── RENDER ──
   return (
-    <div style={{ background: "#0e0e1f", minHeight: "100vh", color: "#ddd", fontFamily: "Arial,sans-serif" }}>
-      <div style={{ background: "#14142b", padding: "10px 14px", borderBottom: "1px solid #2d2d6b" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 6 }}>◆ Mi Portafolio & Finanzas</div>
-        <div style={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+    <div style={{ background: "#0c0c0c", minHeight: "100vh", color: "#f0f0f0" }}>
+      <div style={{ background: "#0c0c0c", padding: "10px 20px", borderBottom: "1px solid #1a1a1a" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "#f0f0f0" }}>Mi Portafolio</div>
+        </div>
+        <div style={{ display: "flex", gap: 0, flexWrap: "wrap" }}>
           <Tab active={tab === "dashboard"} label="Dashboard" onClick={() => setTab("dashboard")} />
-          <Tab active={tab === "portafolio"} label="Acciones" onClick={() => setTab("portafolio")} color="#2D2D6B" />
-          <Tab active={tab === "cripto"} label="Cripto" onClick={() => setTab("cripto")} color="#F39C12" />
-          <Tab active={tab === "finanzas"} label="Finanzas" onClick={() => setTab("finanzas")} color="#27AE60" />
-          <Tab active={tab === "hys"} label="Alto Rendim." onClick={() => setTab("hys")} color="#16A085" />
+          <Tab active={tab === "portafolio"} label="Acciones" onClick={() => setTab("portafolio")} />
+          <Tab active={tab === "cripto"} label="Cripto" onClick={() => setTab("cripto")} />
+          <Tab active={tab === "finanzas"} label="Finanzas" onClick={() => setTab("finanzas")} />
+          <Tab active={tab === "hys"} label="Alto Rendim." onClick={() => setTab("hys")} />
         </div>
       </div>
-      <div style={{ padding: 14, maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
         {tab === "dashboard" && <Dashboard />}
         {tab === "portafolio" && <Portafolio />}
         {tab === "cripto" && <CriptoTab />}
