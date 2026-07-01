@@ -1,12 +1,10 @@
 import { PriceInput } from "../UI/PriceInput";
 
 export const PriceEditor = ({ metrics, prefix = "", prices, setPrices, save }) => (
-  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+  <div className="flex gap-1.5 flex-wrap mb-2.5">
     {metrics.map(m => (
-      <div key={m.ticker} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-        <span style={{ color: "#aaa", fontSize: 11, fontWeight: 600 }}>
-          {m.ticker}
-        </span>
+      <div key={m.ticker} className="flex gap-0.5 items-center">
+        <span className="text-muted text-[11px] font-semibold">{m.ticker}</span>
         <PriceInput
           value={prices[prefix + m.ticker] || ""}
           placeholder="Precio"

@@ -1,88 +1,42 @@
-import type { ReactNode, CSSProperties } from "react";
+import type { ReactNode } from "react";
 
 export const Tab = ({ active, label, onClick }: { active?: boolean; label?: string; onClick?: () => void; color?: string }) => (
   <button
     onClick={onClick}
-    style={{
-      padding: "8px 16px",
-      border: "none",
-      borderBottom: active ? "2px solid #f0f0f0" : "2px solid transparent",
-      background: "none",
-      color: active ? "#f0f0f0" : "#444",
-      fontWeight: active ? 500 : 400,
-      fontSize: 13,
-      cursor: "pointer",
-      letterSpacing: 0.2
-    }}
+    className={`px-4 py-2 text-[13px] border-b-2 bg-transparent cursor-pointer tracking-[0.2px] transition-colors ${
+      active ? "border-text text-text font-medium" : "border-transparent text-muted font-normal"
+    }`}
   >
     {label}
   </button>
 );
 
 export const Card = ({ title, value, sub }: { title?: string; value?: ReactNode; color?: string; sub?: string }) => (
-  <div
-    style={{
-      background: "#111",
-      border: "1px solid #1e1e1e",
-      borderRadius: 8,
-      padding: "16px 20px",
-      minWidth: 130,
-      flex: 1
-    }}
-  >
-    <div style={{ fontSize: 11, color: "#555", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-      {title}
-    </div>
-    <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f0" }}>
-      {value}
-    </div>
-    {sub && (
-      <div style={{ fontSize: 11, color: "#444", marginTop: 4 }}>
-        {sub}
-      </div>
-    )}
+  <div className="bg-surface border border-border rounded-lg px-5 py-4 min-w-[130px] flex-1">
+    <div className="text-[11px] text-muted mb-1.5 uppercase tracking-[0.08em]">{title}</div>
+    <div className="text-[22px] font-semibold text-text">{value}</div>
+    {sub && <div className="text-[11px] text-dim mt-1">{sub}</div>}
   </div>
 );
 
-export const Input = ({ label, style, ...p }: { label?: string; style?: CSSProperties; [key: string]: any }) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-    {label && <label style={{ fontSize: 11, color: "#555", letterSpacing: "0.05em" }}>{label}</label>}
+export const Input = ({ label, className: cls, ...p }: { label?: string; className?: string; [key: string]: any }) => (
+  <div className="flex flex-col gap-1 flex-1">
+    {label && <label className="text-[11px] text-muted tracking-[0.05em]">{label}</label>}
     <input
       {...p}
-      style={{
-        background: "#111",
-        border: "1px solid #1e1e1e",
-        borderRadius: 6,
-        padding: "8px 10px",
-        color: "#f0f0f0",
-        fontSize: 13,
-        outline: "none",
-        ...(style || {})
-      }}
+      className={`bg-surface border border-border rounded-md px-2.5 py-2 text-text text-[13px] outline-none ${cls || ""}`}
     />
   </div>
 );
 
 export const Select = ({ label, options, ...p }: { label?: string; options: string[]; [key: string]: any }) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-    {label && <label style={{ fontSize: 11, color: "#555", letterSpacing: "0.05em" }}>{label}</label>}
+  <div className="flex flex-col gap-1 flex-1">
+    {label && <label className="text-[11px] text-muted tracking-[0.05em]">{label}</label>}
     <select
       {...p}
-      style={{
-        background: "#111",
-        border: "1px solid #1e1e1e",
-        borderRadius: 6,
-        padding: "8px 10px",
-        color: "#f0f0f0",
-        fontSize: 13,
-        outline: "none"
-      }}
+      className="bg-surface border border-border rounded-md px-2.5 py-2 text-text text-[13px] outline-none"
     >
-      {options.map(o => (
-        <option key={o} value={o}>
-          {o}
-        </option>
-      ))}
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>
   </div>
 );
@@ -97,24 +51,22 @@ export const Btn = ({ children, onClick, color = "", small, disabled, type = "bu
 }) => {
   const isGreen = color && (color.toLowerCase().includes("27ae60") || color.toLowerCase().includes("4ade80") || color === "#27AE60");
   const isBlue = color && (color.toLowerCase().includes("2d9cdb") || color.toLowerCase().includes("60a5fa") || color === "#2D9CDB");
-  const accentColor = isGreen ? "#4ade80" : isBlue ? "#60a5fa" : null;
+
+  const accentClass = isGreen
+    ? "border-accent-green text-accent-green"
+    : isBlue
+    ? "border-accent-blue text-accent-blue"
+    : "border-btn-bd text-text";
 
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      style={{
-        background: disabled ? "#0e0e0e" : "#1a1a1a",
-        border: `1px solid ${disabled ? "#1a1a1a" : accentColor ? accentColor : "#2a2a2a"}`,
-        borderRadius: 6,
-        padding: small ? "4px 10px" : "7px 14px",
-        color: disabled ? "#333" : accentColor ? accentColor : "#ccc",
-        fontWeight: 400,
-        fontSize: small ? 11 : 12,
-        cursor: disabled ? "not-allowed" : "pointer",
-        letterSpacing: 0.2
-      }}
+      className={`bg-btn border rounded-md tracking-[0.2px] transition-colors
+        ${small ? "px-2.5 py-1 text-[11px]" : "px-3.5 py-1.5 text-[12px]"}
+        ${disabled ? "border-btn bg-bg text-dim cursor-not-allowed" : `${accentClass} cursor-pointer`}
+      `}
     >
       {children}
     </button>
@@ -124,72 +76,21 @@ export const Btn = ({ children, onClick, color = "", small, disabled, type = "bu
 export const Modal = ({ open, title, onClose, children }: { open?: boolean; title?: string; onClose?: () => void; children?: ReactNode }) => {
   if (!open) return null;
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.7)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        zIndex: 1000,
-        padding: 12
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 520,
-          background: "#111",
-          border: "1px solid #1e1e1e",
-          borderRadius: 10,
-          overflow: "hidden"
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "12px 16px",
-            borderBottom: "1px solid #1e1e1e"
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f0" }}>{title}</div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#444",
-              cursor: "pointer",
-              fontSize: 16
-            }}
-          >
-            ✕
-          </button>
+    <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-[1000] p-3">
+      <div className="w-full max-w-[520px] bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="flex justify-between items-center px-4 py-3 border-b border-border">
+          <div className="text-[13px] font-medium text-text">{title}</div>
+          <button onClick={onClose} className="bg-transparent border-none text-muted cursor-pointer text-base leading-none">✕</button>
         </div>
-        <div style={{ padding: 16 }}>{children}</div>
+        <div className="p-4">{children}</div>
       </div>
     </div>
   );
 };
 
 export const Section = ({ title, children }: { title?: string; children?: ReactNode }) => (
-  <div style={{ marginBottom: 20 }}>
-    {title && (
-      <div
-        style={{
-          fontSize: 10,
-          color: "#333",
-          marginBottom: 10,
-          textTransform: "uppercase",
-          letterSpacing: "0.1em"
-        }}
-      >
-        {title}
-      </div>
-    )}
+  <div className="mb-5">
+    {title && <div className="text-[10px] text-dim mb-2.5 uppercase tracking-[0.1em]">{title}</div>}
     {children}
   </div>
 );

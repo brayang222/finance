@@ -42,6 +42,10 @@ export interface Cash {
   note?: string
 }
 
+export interface UserConfig {
+  theme: "dark" | "light"
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -50,4 +54,5 @@ export interface AllData {
   prices: Record<string, number>
   targets: Record<string, number>
   cash: Cash | null
+  config: UserConfig | null
 }

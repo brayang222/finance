@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { signOut } from "next-auth/react";
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
@@ -16,6 +16,7 @@ import {
   savePrices as dbSavePrices,
   saveTargets as dbSaveTargets,
   saveCash as dbSaveCash,
+  saveConfig as dbSaveConfig,
 } from "../../lib/actions";
 import {
   computeStockMetrics,
@@ -41,8 +42,26 @@ interface FinanceAppProps {
 
 export default function FinanceApp({ initialData, user }: FinanceAppProps) {
   const d = initialData;
+
+  // ── THEME ──
+  const [theme, setTheme] = useState<"dark" | "light">(d.config?.theme ?? "dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => (t === "dark" ? "light" : "dark"));
+  }, []);
+
+  const saveThemePref = useCallback((t: "dark" | "light") => {
+    setTheme(t);
+    dbSaveConfig(t).catch(console.error);
+  }, []);
+
   // ── STATE ──
   const [tab, setTab] = useState("dashboard");
+  const [perfilTab, setPerfilTab] = useState<"info" | "config">("info");
   const [stocks, setStocks] = useState(d.stocks ?? []);
   const [crypto, setCrypto] = useState(d.crypto ?? []);
   const [finances, setFinances] = useState(d.finances ?? []);
@@ -56,15 +75,14 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
   const [finFilter, setFinFilter] = useState({ dateFrom: "", dateTo: "", type: "", category: "", search: "" });
   const [editingFin, setEditingFin] = useState<any>(null);
 
-  // ── SAVE CALLBACKS (optimistic + Server Action) ──
-  const saveStocks = useCallback(v => { setStocks(v); dbSaveStocks(v).catch(console.error); }, []);
-  const saveCrypto = useCallback(v => { setCrypto(v); dbSaveCrypto(v).catch(console.error); }, []);
+  // ── SAVE CALLBACKS ──
+  const saveStocks   = useCallback(v => { setStocks(v);   dbSaveStocks(v).catch(console.error); }, []);
+  const saveCrypto   = useCallback(v => { setCrypto(v);   dbSaveCrypto(v).catch(console.error); }, []);
   const saveFinances = useCallback(v => { setFinances(v); dbSaveFinances(v).catch(console.error); }, []);
-  const saveHys = useCallback(v => { setHys(v); dbSaveHys(v).catch(console.error); }, []);
-  const savePrices = useCallback(v => { setPrices(v); dbSavePrices(v).catch(console.error); }, []);
-  const saveTargets = useCallback(v => { setTargets(v); dbSaveTargets(v).catch(console.error); }, []);
-  const saveCash = useCallback(v => { setCash(v); dbSaveCash(v).catch(console.error); }, []);
-
+  const saveHys      = useCallback(v => { setHys(v);      dbSaveHys(v).catch(console.error); }, []);
+  const savePrices   = useCallback(v => { setPrices(v);   dbSavePrices(v).catch(console.error); }, []);
+  const saveTargets  = useCallback(v => { setTargets(v);  dbSaveTargets(v).catch(console.error); }, []);
+  const saveCash     = useCallback(v => { setCash(v);     dbSaveCash(v).catch(console.error); }, []);
 
   // ── FETCH PRICES ──
   const fetchAllPrices = useCallback(async () => {
@@ -87,37 +105,37 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
   }, [stocks, crypto, prices, trm, savePrices]);
 
   // ── METRICS ──
-  const stockMetrics = computeStockMetrics(stocks, prices, targets);
+  const stockMetrics  = computeStockMetrics(stocks, prices, targets);
   const cryptoMetrics = computeCryptoMetrics(crypto, prices);
-  const totalStocks = stockMetrics.reduce((s, m) => s + m.marketVal, 0);
-  const totalCrypto = cryptoMetrics.reduce((s, m) => s + m.marketVal, 0);
-  const totalComm = [...stockMetrics, ...cryptoMetrics].reduce((s, m) => s + m.totalComm, 0);
+  const totalStocks   = stockMetrics.reduce((s, m) => s + m.marketVal, 0);
+  const totalCrypto   = cryptoMetrics.reduce((s, m) => s + m.marketVal, 0);
+  const totalComm     = [...stockMetrics, ...cryptoMetrics].reduce((s, m) => s + m.totalComm, 0);
 
   // ── HYS ──
-  const hysState = computeHysBalance(hys);
+  const hysState   = computeHysBalance(hys);
   const hysBalance = hysState.balance;
-  const hysPj = computeHysProjection(hysBalance, hysState.dailyRate) as any[];
-  const hysFinal = hysPj.length ? hysPj[11].fin : hysBalance;
+  const hysPj      = computeHysProjection(hysBalance, hysState.dailyRate) as any[];
+  const hysFinal   = hysPj.length ? hysPj[11].fin : hysBalance;
 
   // ── FINANCES ──
-  const totalIn = finances.filter(f => f.type === "ingreso").reduce((s, f) => s + f.amount, 0);
+  const totalIn  = finances.filter(f => f.type === "ingreso").reduce((s, f) => s + f.amount, 0);
   const totalOut = finances.filter(f => f.type === "egreso").reduce((s, f) => s + f.amount, 0);
 
   const filteredFin = finances.filter(f => {
     if (finFilter.dateFrom && f.date < finFilter.dateFrom) return false;
-    if (finFilter.dateTo && f.date > finFilter.dateTo) return false;
-    if (finFilter.type && f.type !== finFilter.type) return false;
+    if (finFilter.dateTo   && f.date > finFilter.dateTo)   return false;
+    if (finFilter.type     && f.type !== finFilter.type)    return false;
     if (finFilter.category && f.category !== finFilter.category) return false;
     if (finFilter.search && !((f.desc || "") + (f.category || "")).toLowerCase().includes(finFilter.search.toLowerCase())) return false;
     return true;
   });
 
-  const filteredIn = filteredFin.filter(f => f.type === "ingreso").reduce((s, f) => s + f.amount, 0);
+  const filteredIn  = filteredFin.filter(f => f.type === "ingreso").reduce((s, f) => s + f.amount, 0);
   const filteredOut = filteredFin.filter(f => f.type === "egreso").reduce((s, f) => s + f.amount, 0);
-  const hasFilter = !!(finFilter.dateFrom || finFilter.dateTo || finFilter.type || finFilter.category || finFilter.search);
+  const hasFilter   = !!(finFilter.dateFrom || finFilter.dateTo || finFilter.type || finFilter.category || finFilter.search);
   const allCategories = [...new Set(finances.map(f => f.category))].sort();
 
-  const handleFinanceSubmit = entry => {
+  const handleFinanceSubmit = (entry: any) => {
     const nextFinances = editingFin
       ? finances.map(f => (f.id === editingFin.id ? { ...f, ...entry } : f))
       : [...finances, entry];
@@ -125,7 +143,7 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
     setEditingFin(null);
   };
 
-  const dineroReal = (cash.banco || 0) + hysBalance;
+  const dineroReal    = (cash.banco || 0) + hysBalance;
   const totalPortafolio = totalStocks + totalCrypto;
   const distClase = [{ name: "Acciones", value: totalStocks }, { name: "Cripto", value: totalCrypto }].filter(d => d.value > 0);
   const distActivo = [
@@ -133,50 +151,64 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
     ...cryptoMetrics.filter(m => m.marketVal > 0).map(m => ({ name: m.ticker, value: m.marketVal }))
   ];
 
+  // ── EXPORT EXCEL ──
+  const exportExcel = useCallback((rows: typeof finances, filename: string) => {
+    const data = rows.map(f => ({
+      Fecha: f.date,
+      Tipo: f.type === "ingreso" ? "Ingreso" : "Egreso",
+      Categoría: f.category,
+      Descripción: f.desc ?? "",
+      Monto: f.amount,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Finanzas");
+    XLSX.writeFile(wb, filename);
+  }, [finances]);
+
+  const TICK = { fill: "var(--muted)", fontSize: 9 };
+
   // ── DASHBOARD ──
   const Dashboard = () => (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <Btn onClick={fetchAllPrices} color={fetching ? "" : "#2D9CDB"} small disabled={fetching}>
-            {fetching ? "Actualizando..." : "Actualizar precios"}
-          </Btn>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {trm && <span style={{ fontSize: 10, color: "#555" }}>TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
-          {lastFetch && <span style={{ fontSize: 10, color: "#333" }}>Última: {lastFetch}</span>}
-          <span style={{ fontSize: 10, color: "#444" }}>{user?.email}</span>
-          <Btn onClick={() => signOut()} color="" small>Salir</Btn>
+      <div className="flex justify-between items-center mb-2.5 flex-wrap gap-1.5">
+        <Btn onClick={fetchAllPrices} color={fetching ? "" : "#2D9CDB"} small disabled={fetching}>
+          {fetching ? "Actualizando..." : "Actualizar precios"}
+        </Btn>
+        <div className="flex gap-2 items-center">
+          {trm      && <span className="text-[10px] text-muted">TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
+          {lastFetch && <span className="text-[10px] text-dim">Última: {lastFetch}</span>}
         </div>
       </div>
 
-      <Section title="💰 Dinero Real Disponible">
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <Card title="BANCO (sin rendimiento)" value={COP(cash.banco || 0)} />
+      <Section title="Dinero Real Disponible">
+        <div className="flex gap-2.5 flex-wrap mb-2.5">
+          <Card title="BANCO" value={COP(cash.banco || 0)} />
           <Card title="ALTO RENDIMIENTO" value={COP(hysBalance)} sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
-          <Card title="DINERO REAL TOTAL" value={COP(dineroReal)} />
+          <Card title="TOTAL REAL" value={COP(dineroReal)} />
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: "#aaa" }}>Ajustar saldo banco:</span>
+        <div className="flex gap-1.5 items-center mb-1.5">
+          <span className="text-[11px] text-muted">Saldo banco:</span>
           <PriceInput value={cash.banco || 0} placeholder="Saldo banco" width={130} onChange={n => saveCash({ ...cash, banco: n })} />
         </div>
       </Section>
 
-      <Section title="📊 Portafolio de Inversiones (Acciones + Cripto)">
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <Card title="ACCIONES" value={COP(totalStocks)} />
-          <Card title="CRIPTO" value={COP(totalCrypto)} />
+      <Section title="Portafolio (Acciones + Cripto)">
+        <div className="flex gap-2.5 flex-wrap mb-2.5">
+          <Card title="ACCIONES"         value={COP(totalStocks)} />
+          <Card title="CRIPTO"           value={COP(totalCrypto)} />
           <Card title="TOTAL INVERSIONES" value={COP(totalPortafolio)} />
-          <Card title="COMISIONES" value={COP(totalComm)} />
+          <Card title="COMISIONES"       value={COP(totalComm)} />
         </div>
       </Section>
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+      <div className="flex gap-3.5 flex-wrap">
         {distClase.length > 0 && (
           <Section title="Distribución inversiones">
             <ResponsiveContainer width={250} height={180}>
               <PieChart>
-                <Pie data={distClase} cx="50%" cy="50%" innerRadius={40} outerRadius={72} dataKey="value" label={({ name, percent = 0 }: { name?: string; percent?: number }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                <Pie data={distClase} cx="50%" cy="50%" innerRadius={40} outerRadius={72} dataKey="value"
+                  label={({ name, percent = 0 }: { name?: string; percent?: number }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                   {distClase.map((_, i) => <Cell key={i} fill={["#7B4FB5", "#F39C12"][i]} />)}
                 </Pie>
                 <Tooltip formatter={v => COP(v)} />
@@ -188,7 +220,8 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Section title="Peso por activo">
             <ResponsiveContainer width={250} height={180}>
               <PieChart>
-                <Pie data={distActivo} cx="50%" cy="50%" innerRadius={40} outerRadius={72} dataKey="value" label={({ name, percent = 0 }: { name?: string; percent?: number }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                <Pie data={distActivo} cx="50%" cy="50%" innerRadius={40} outerRadius={72} dataKey="value"
+                  label={({ name, percent = 0 }: { name?: string; percent?: number }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                   {distActivo.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip formatter={v => COP(v)} />
@@ -200,26 +233,26 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Section title="Ingresos vs Egresos">
             <ResponsiveContainer width={320} height={180}>
               <BarChart data={computeMonthlyFinances(finances)}>
-                <XAxis dataKey="month" tick={{ fill: "#888", fontSize: 9 }} />
-                <YAxis tick={{ fill: "#888", fontSize: 9 }} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
+                <XAxis dataKey="month" tick={TICK} />
+                <YAxis tick={TICK} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
                 <Tooltip formatter={v => COP(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="ingresos" fill="#27AE60" name="Ingresos" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="egresos" fill="#E94560" name="Egresos" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="ingresos" fill="#27AE60" name="Ingresos" radius={[3,3,0,0]} />
+                <Bar dataKey="egresos"  fill="#E94560" name="Egresos"  radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </Section>
         )}
       </div>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+      <div className="flex gap-3.5 flex-wrap">
         {computeExpenseByCategory(finances).length > 0 && (
           <Section title="Gastos por categoría">
             <ResponsiveContainer width={300} height={180}>
               <BarChart data={computeExpenseByCategory(finances).slice(0, 8)} layout="vertical">
-                <XAxis type="number" tick={{ fill: "#888", fontSize: 9 }} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "#aaa", fontSize: 9 }} width={80} />
+                <XAxis type="number" tick={TICK} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
+                <YAxis type="category" dataKey="name" tick={TICK} width={80} />
                 <Tooltip formatter={v => COP(v)} />
-                <Bar dataKey="value" fill="#E94560" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="value" fill="#E94560" radius={[0,3,3,0]} />
               </BarChart>
             </ResponsiveContainer>
           </Section>
@@ -228,8 +261,8 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Section title={`Proyección Alto Rend. → ${COP(hysFinal)}`}>
             <ResponsiveContainer width={300} height={180}>
               <LineChart data={hysPj}>
-                <XAxis dataKey="mes" tick={{ fill: "#888", fontSize: 9 }} />
-                <YAxis tick={{ fill: "#888", fontSize: 9 }} tickFormatter={v => "$" + (v / 1e6).toFixed(1) + "M"} domain={["dataMin-20000", "dataMax+20000"]} />
+                <XAxis dataKey="mes" tick={TICK} />
+                <YAxis tick={TICK} tickFormatter={v => "$" + (v / 1e6).toFixed(1) + "M"} domain={["dataMin-20000", "dataMax+20000"]} />
                 <Tooltip formatter={v => COP(v)} />
                 <Line type="monotone" dataKey="fin" stroke="#16A085" strokeWidth={2} dot={{ r: 2 }} name="Saldo" />
               </LineChart>
@@ -249,16 +282,16 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
       {stockMetrics.length > 0 && (
         <>
           <Section title="Precios actuales y objetivos">
-            <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+            <div className="flex gap-1.5 items-center mb-1.5">
               <Btn onClick={fetchAllPrices} color={fetching ? "" : "#2D9CDB"} small disabled={fetching}>
-                {fetching ? "Actualizando..." : "Actualizar"}
+                {fetching ? "⏳" : "🔄 Actualizar"}
               </Btn>
             </div>
             <PriceEditor metrics={stockMetrics} prices={prices} setPrices={savePrices} save={() => {}} />
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+            <div className="flex gap-1.5 flex-wrap mb-1.5">
               {stockMetrics.map(m => (
-                <div key={m.ticker} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                  <span style={{ color: "#aaa", fontSize: 10 }}>Obj {m.ticker}</span>
+                <div key={m.ticker} className="flex gap-1 items-center">
+                  <span className="text-muted text-[10px]">Obj {m.ticker}</span>
                   <PriceInput value={targets[m.ticker] || ""} placeholder="Objetivo" color="#F39C12" onChange={n => saveTargets({ ...targets, [m.ticker]: n })} />
                 </div>
               ))}
@@ -267,15 +300,15 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Section title="PPA y métricas">
             <Table
               cols={[
-                { key: "ticker", label: "Acción", sortKey: r => r.ticker },
-                { label: "Cant.", render: r => r.holding.toFixed(0), sortKey: r => r.holding, align: "right" },
-                { label: "PPA", render: r => COP(r.ppa), sortKey: r => r.ppa, align: "right" },
-                { label: "Valor", render: r => COP(r.marketVal), sortKey: r => r.marketVal, align: "right" },
-                { label: "G/P", render: r => COP(r.gain), sortKey: r => r.gain, align: "right", color: r => (r.gain >= 0 ? "#27AE60" : "#E94560") },
-                { label: "%", render: r => (r.current ? PCT(r.ret) : "—"), sortKey: r => r.ret, align: "right", color: r => (r.ret >= 0 ? "#27AE60" : "#E94560") },
-                { label: "Objetivo", render: r => (r.target ? COP(r.targetGain) : "—"), sortKey: r => r.targetGain, align: "right" },
-                { label: "Obj%", render: r => (r.target ? PCT(r.targetRet) : "—"), sortKey: r => r.targetRet, align: "right" },
-                { label: "Com.", render: r => COP(r.totalComm), sortKey: r => r.totalComm, align: "right" }
+                { key: "ticker",   label: "Acción",   sortKey: r => r.ticker },
+                { label: "Cant.",  render: r => r.holding.toFixed(0), sortKey: r => r.holding,   align: "right" },
+                { label: "PPA",    render: r => COP(r.ppa),           sortKey: r => r.ppa,        align: "right" },
+                { label: "Valor",  render: r => COP(r.marketVal),     sortKey: r => r.marketVal,  align: "right" },
+                { label: "G/P",    render: r => COP(r.gain),          sortKey: r => r.gain,       align: "right", color: r => r.gain >= 0 ? "#27AE60" : "#E94560" },
+                { label: "%",      render: r => r.current ? PCT(r.ret) : "—", sortKey: r => r.ret, align: "right", color: r => r.ret >= 0 ? "#27AE60" : "#E94560" },
+                { label: "Obj.",   render: r => r.target ? COP(r.targetGain) : "—", sortKey: r => r.targetGain, align: "right" },
+                { label: "Obj%",   render: r => r.target ? PCT(r.targetRet) : "—",  sortKey: r => r.targetRet,  align: "right" },
+                { label: "Com.",   render: r => COP(r.totalComm), sortKey: r => r.totalComm, align: "right" }
               ]}
               rows={stockMetrics}
             />
@@ -285,12 +318,12 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
       <Section title="Historial">
         <Table
           cols={[
-            { key: "date", label: "Fecha", sortKey: r => r.date },
+            { key: "date",   label: "Fecha",  sortKey: r => r.date },
             { key: "ticker", label: "Acción", sortKey: r => r.ticker },
-            { label: "Qty", render: r => r.qty, sortKey: r => r.qty, align: "right" },
-            { label: "Precio", render: r => COP(r.priceCOP), sortKey: r => r.priceCOP, align: "right", color: r => (r.priceCOP > 0 ? "#27AE60" : "#E94560") },
+            { label: "Qty",    render: r => r.qty,          sortKey: r => r.qty,        align: "right" },
+            { label: "Precio", render: r => COP(r.priceCOP), sortKey: r => r.priceCOP,  align: "right", color: r => r.priceCOP > 0 ? "#27AE60" : "#E94560" },
             { label: "Fuente", render: r => r.source || "—", sortKey: r => r.source },
-            { label: "Com.", render: r => COP(r.commission), sortKey: r => r.commission, align: "right" }
+            { label: "Com.",   render: r => COP(r.commission), sortKey: r => r.commission, align: "right" }
           ]}
           rows={stocks}
           onDelete={id => saveStocks(stocks.filter(s => s.id !== id))}
@@ -308,24 +341,24 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
       {cryptoMetrics.length > 0 && (
         <>
           <Section title="Precios actuales">
-            <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+            <div className="flex gap-1.5 items-center mb-1.5">
               <Btn onClick={fetchAllPrices} color={fetching ? "" : "#2D9CDB"} small disabled={fetching}>
-                {fetching ? "Actualizando..." : "Actualizar"}
+                {fetching ? "⏳" : "🔄 Actualizar"}
               </Btn>
-              {trm && <span style={{ fontSize: 10, color: "#555" }}>TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
+              {trm && <span className="text-[10px] text-muted">TRM: ${Math.round(trm).toLocaleString("es-CO")}</span>}
             </div>
             <PriceEditor metrics={cryptoMetrics} prefix="C_" prices={prices} setPrices={savePrices} save={() => {}} />
           </Section>
           <Section title="Métricas">
             <Table
               cols={[
-                { key: "ticker", label: "Cripto", sortKey: r => r.ticker },
-                { label: "Cartera", render: r => r.holding.toFixed(8), sortKey: r => r.holding, align: "right" },
-                { label: "PPA", render: r => COP(r.ppa), sortKey: r => r.ppa, align: "right" },
-                { label: "Valor", render: r => COP(r.marketVal), sortKey: r => r.marketVal, align: "right" },
-                { label: "G/P", render: r => COP(r.gain), sortKey: r => r.gain, align: "right", color: r => (r.gain >= 0 ? "#27AE60" : "#E94560") },
-                { label: "%", render: r => (r.current ? PCT(r.ret) : "—"), sortKey: r => r.ret, align: "right", color: r => (r.ret >= 0 ? "#27AE60" : "#E94560") },
-                { label: "Com.", render: r => COP(r.totalComm), sortKey: r => r.totalComm, align: "right" }
+                { key: "ticker", label: "Cripto",   sortKey: r => r.ticker },
+                { label: "Cartera", render: r => r.holding.toFixed(8), sortKey: r => r.holding,  align: "right" },
+                { label: "PPA",     render: r => COP(r.ppa),           sortKey: r => r.ppa,       align: "right" },
+                { label: "Valor",   render: r => COP(r.marketVal),     sortKey: r => r.marketVal, align: "right" },
+                { label: "G/P",     render: r => COP(r.gain),          sortKey: r => r.gain,      align: "right", color: r => r.gain >= 0 ? "#27AE60" : "#E94560" },
+                { label: "%",       render: r => r.current ? PCT(r.ret) : "—", sortKey: r => r.ret, align: "right", color: r => r.ret >= 0 ? "#27AE60" : "#E94560" },
+                { label: "Com.",    render: r => COP(r.totalComm), sortKey: r => r.totalComm, align: "right" }
               ]}
               rows={cryptoMetrics}
             />
@@ -335,10 +368,10 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
       <Section title="Historial">
         <Table
           cols={[
-            { key: "date", label: "Fecha" },
+            { key: "date",   label: "Fecha" },
             { key: "ticker", label: "Cripto" },
-            { label: "Qty", render: r => r.qty.toFixed(8), align: "right" },
-            { label: "COP", render: r => COP(r.priceCOP), align: "right", color: r => (r.priceCOP > 0 ? "#27AE60" : "#E94560") },
+            { label: "Qty",  render: r => r.qty.toFixed(8), align: "right" },
+            { label: "COP",  render: r => COP(r.priceCOP),  align: "right", color: r => r.priceCOP > 0 ? "#27AE60" : "#E94560" },
             { label: "Com.", render: r => COP(r.commission), align: "right" }
           ]}
           rows={crypto}
@@ -348,67 +381,48 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
     </div>
   );
 
-  // ── EXPORT EXCEL ──
-  const exportExcel = useCallback((rows: typeof finances, filename: string) => {
-    const data = rows.map(f => ({
-      Fecha: f.date,
-      Tipo: f.type === "ingreso" ? "Ingreso" : "Egreso",
-      Categoría: f.category,
-      Descripción: f.desc ?? "",
-      Monto: f.amount,
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Finanzas");
-    XLSX.writeFile(wb, filename);
-  }, [finances]);
-
   // ── FINANZAS ──
   const Finanzas = () => (
     <div>
       <Section title="Registrar ingreso o gasto">
         <FinForm key="new" saveFinances={saveFinances} finances={finances} editingItem={null} onSave={handleFinanceSubmit} />
       </Section>
-      <Modal open={!!editingFin} onClose={() => setEditingFin(null)} title={`Editar movimiento #${editingFin?.id || ""}`}>
+      <Modal open={!!editingFin} onClose={() => setEditingFin(null)} title={`Editar movimiento`}>
         <FinForm key={editingFin?.id || "edit"} editingItem={editingFin} onSave={handleFinanceSubmit} onCancel={() => setEditingFin(null)} />
       </Modal>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+      <div className="flex gap-2.5 flex-wrap mb-3.5">
         <Card title="INGRESOS" value={COP(filteredIn)} sub={hasFilter ? `de ${COP(totalIn)} total` : ""} />
-        <Card title="EGRESOS" value={COP(filteredOut)} sub={hasFilter ? `de ${COP(totalOut)} total` : ""} />
-        <Card title="BALANCE" value={COP(filteredIn - filteredOut)} sub={hasFilter ? `${filteredFin.length} de ${finances.length} registros` : "(no es tu dinero real)"} />
+        <Card title="EGRESOS"  value={COP(filteredOut)} sub={hasFilter ? `de ${COP(totalOut)} total` : ""} />
+        <Card title="BALANCE"  value={COP(filteredIn - filteredOut)} sub={hasFilter ? `${filteredFin.length} de ${finances.length} registros` : "(no es tu dinero real)"} />
       </div>
       <Section title="Filtros">
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 8 }}>
-          <Input label="Desde" type="date" value={finFilter.dateFrom} onChange={e => setFinFilter({ ...finFilter, dateFrom: e.target.value })} style={{ width: 120 }} />
-          <Input label="Hasta" type="date" value={finFilter.dateTo} onChange={e => setFinFilter({ ...finFilter, dateTo: e.target.value })} style={{ width: 120 }} />
-          <Select label="Tipo" options={["", "ingreso", "egreso"]} value={finFilter.type} onChange={e => setFinFilter({ ...finFilter, type: e.target.value })} />
-          <Select label="Categoría" options={["", ...allCategories]} value={finFilter.category} onChange={e => setFinFilter({ ...finFilter, category: e.target.value })} />
-          <Input label="Buscar" value={finFilter.search} onChange={e => setFinFilter({ ...finFilter, search: e.target.value })} placeholder="texto..." />
-          <Btn onClick={() => setFinFilter({ dateFrom: "", dateTo: "", type: "", category: "", search: "" })} small color="">Limpiar</Btn>
-          <Btn onClick={() => exportExcel(filteredFin, `finanzas-filtrado-${new Date().toISOString().slice(0,10)}.xlsx`)} small color="#27AE60">
-            Excel filtrado
-          </Btn>
-          <Btn onClick={() => exportExcel(finances, `finanzas-todo-${new Date().toISOString().slice(0,10)}.xlsx`)} small color="#2D9CDB">
-            Excel todo
-          </Btn>
+        <div className="flex gap-1.5 flex-wrap items-end mb-2">
+          <Input label="Desde"     type="date" value={finFilter.dateFrom}  onChange={e => setFinFilter({ ...finFilter, dateFrom: e.target.value })}  className="w-[120px]" />
+          <Input label="Hasta"     type="date" value={finFilter.dateTo}    onChange={e => setFinFilter({ ...finFilter, dateTo: e.target.value })}    className="w-[120px]" />
+          <Select label="Tipo"     options={["", "ingreso", "egreso"]}     value={finFilter.type}     onChange={e => setFinFilter({ ...finFilter, type: e.target.value })} />
+          <Select label="Categoría" options={["", ...allCategories]}       value={finFilter.category} onChange={e => setFinFilter({ ...finFilter, category: e.target.value })} />
+          <Input label="Buscar"    value={finFilter.search} onChange={e => setFinFilter({ ...finFilter, search: e.target.value })} placeholder="texto..." />
+          <Btn onClick={() => setFinFilter({ dateFrom: "", dateTo: "", type: "", category: "", search: "" })} small>Limpiar</Btn>
+          <Btn onClick={() => exportExcel(filteredFin, `finanzas-filtrado-${new Date().toISOString().slice(0,10)}.xlsx`)} small color="#27AE60">⬇ Excel filtrado</Btn>
+          <Btn onClick={() => exportExcel(finances,    `finanzas-todo-${new Date().toISOString().slice(0,10)}.xlsx`)}    small color="#2D9CDB">⬇ Excel todo</Btn>
         </div>
         {hasFilter && (
-          <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
-            Filtrado: {filteredFin.length} de {finances.length} registros | Ingresos: {COP(filteredIn)} | Egresos: {COP(filteredOut)} | Balance: {COP(filteredIn - filteredOut)}
+          <div className="text-[11px] text-muted mb-1.5">
+            Filtrado: {filteredFin.length} de {finances.length} | Ingresos: {COP(filteredIn)} | Egresos: {COP(filteredOut)} | Balance: {COP(filteredIn - filteredOut)}
           </div>
         )}
       </Section>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+      <div className="flex gap-3.5 flex-wrap">
         {computeMonthlyFinances(filteredFin).length > 0 && (
           <Section title="Mensual">
             <ResponsiveContainer width={380} height={200}>
               <BarChart data={computeMonthlyFinances(filteredFin)}>
-                <XAxis dataKey="month" tick={{ fill: "#888", fontSize: 9 }} />
-                <YAxis tick={{ fill: "#888", fontSize: 9 }} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
+                <XAxis dataKey="month" tick={TICK} />
+                <YAxis tick={TICK} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
                 <Tooltip formatter={v => COP(v)} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="ingresos" fill="#27AE60" name="Ingresos" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="egresos" fill="#E94560" name="Egresos" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="ingresos" fill="#27AE60" name="Ingresos" radius={[3,3,0,0]} />
+                <Bar dataKey="egresos"  fill="#E94560" name="Egresos"  radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </Section>
@@ -417,10 +431,10 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Section title="Por categoría">
             <ResponsiveContainer width={300} height={200}>
               <BarChart data={computeExpenseByCategory(filteredFin).slice(0, 8)} layout="vertical">
-                <XAxis type="number" tick={{ fill: "#888", fontSize: 9 }} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "#aaa", fontSize: 9 }} width={80} />
+                <XAxis type="number" tick={TICK} tickFormatter={v => "$" + Math.round(v / 1000) + "k"} />
+                <YAxis type="category" dataKey="name" tick={TICK} width={80} />
                 <Tooltip formatter={v => COP(v)} />
-                <Bar dataKey="value" fill="#E94560" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="value" fill="#E94560" radius={[0,3,3,0]} />
               </BarChart>
             </ResponsiveContainer>
           </Section>
@@ -429,18 +443,17 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
       <Section title={`Historial (${filteredFin.length} registros)`}>
         <Table
           cols={[
-            { key: "date", label: "Fecha", sortKey: r => r.date },
-            { label: "Tipo", render: r => (r.type === "ingreso" ? "↑ Ingreso" : "↓ Egreso"), sortKey: r => r.type, color: r => (r.type === "ingreso" ? "#27AE60" : "#E94560") },
-            { key: "category", label: "Categoría", sortKey: r => r.category },
-            { label: "Monto", render: r => COP(r.amount), sortKey: r => r.amount, align: "right" },
-            { key: "desc", label: "Descripción", noSort: true },
+            { key: "date",     label: "Fecha",      sortKey: r => r.date },
+            { label: "Tipo",   render: r => r.type === "ingreso" ? "↑ Ingreso" : "↓ Egreso", sortKey: r => r.type, color: r => r.type === "ingreso" ? "#27AE60" : "#E94560" },
+            { key: "category", label: "Categoría",  sortKey: r => r.category },
+            { label: "Monto",  render: r => COP(r.amount), sortKey: r => r.amount, align: "right" },
+            { key: "desc",     label: "Descripción", noSort: true },
             {
-              label: "",
+              label: "", noSort: true,
               render: r => (
                 <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingFin(r); }}
-                  style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 12 }}>✎</button>
-              ),
-              noSort: true
+                  className="bg-transparent border-none text-muted cursor-pointer text-[12px]">✎</button>
+              )
             }
           ]}
           rows={filteredFin}
@@ -453,24 +466,24 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
   // ── ALTO RENDIMIENTO ──
   const AltoRend = () => (
     <div>
-      <div style={{ display: "flex", gap: 6, alignItems: "flex-end", marginBottom: 14 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <label style={{ fontSize: 11, color: "#555" }}>Tasa EA (%)</label>
-          <PriceInput value={hys.rate} placeholder="9.25" width={70} onChange={n => saveHys({ ...hys, rate: n })} />
+      <div className="flex gap-1.5 items-end mb-3.5">
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] text-muted">Tasa EA (%)</label>
+          <PriceInput value={hys.rate} placeholder="9.25" color="#16A085" width={70} onChange={n => saveHys({ ...hys, rate: n })} />
         </div>
-        <div style={{ color: "#555", fontSize: 11, paddingBottom: 6 }}>
+        <div className="text-[11px] text-muted pb-1.5">
           Diaria: {(hysState.dailyRate * 100).toFixed(5)}%
         </div>
       </div>
       <Section title="Registrar movimiento">
         <HysForm saveHys={saveHys} hys={hys} saveCash={saveCash} cash={cash} />
-        <div style={{ fontSize: 10, color: "#444", marginTop: -6 }}>
+        <div className="text-[10px] text-dim -mt-1.5">
           APERTURA=saldo inicial · INGRESO=metes (debita banco) · RETIRO=sacas (acredita banco) · SALDO=anota saldo real. Tasa vigente ({hys.rate}%) se guarda en cada movimiento.
         </div>
       </Section>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <Card title="SALDO ACTUAL" value={COP(hysBalance)} sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
-        <Card title="PROYECTADO 1 AÑO" value={COP(hysFinal)} sub={`+${COP(hysFinal - hysBalance)}`} />
+      <div className="flex gap-2.5 flex-wrap mb-3.5">
+        <Card title="SALDO ACTUAL"         value={COP(hysBalance)}  sub={hysState.daysSince > 0 ? `+${hysState.daysSince}d compuestos` : ""} />
+        <Card title="PROYECTADO 1 AÑO"     value={COP(hysFinal)}    sub={`+${COP(hysFinal - hysBalance)}`} />
         <Card title="GANADO DESDE APERTURA" value={COP(hysBalance - (hys.movements.find(m => m.type === "APERTURA")?.amount || 0))} />
       </div>
       <Section title="Movimientos">
@@ -478,9 +491,9 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           cols={[
             { key: "date", label: "Fecha" },
             { key: "type", label: "Tipo" },
-            { label: "Monto", render: r => COP(r.amount), align: "right", color: r => (r.type === "RETIRO" ? "#E94560" : "#27AE60") },
-            { label: "Saldo", render: r => (r.balance != null ? COP(r.balance) : "—"), align: "right" },
-            { label: "Tasa", render: r => (r.rate ? r.rate + "%" : "—"), align: "right", color: () => "#2D9CDB" },
+            { label: "Monto",  render: r => COP(r.amount), align: "right", color: r => r.type === "RETIRO" ? "#E94560" : "#27AE60" },
+            { label: "Saldo",  render: r => r.balance != null ? COP(r.balance) : "—", align: "right" },
+            { label: "Tasa",   render: r => r.rate ? r.rate + "%" : "—", align: "right", color: () => "#2D9CDB" },
             { key: "note", label: "Nota" }
           ]}
           rows={hys.movements}
@@ -491,18 +504,18 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
         <Section title="Proyección 12 meses">
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={hysPj}>
-              <XAxis dataKey="mes" tick={{ fill: "#888", fontSize: 9 }} />
-              <YAxis tick={{ fill: "#888", fontSize: 9 }} tickFormatter={v => "$" + (v / 1e6).toFixed(1) + "M"} />
+              <XAxis dataKey="mes" tick={TICK} />
+              <YAxis tick={TICK} tickFormatter={v => "$" + (v / 1e6).toFixed(1) + "M"} />
               <Tooltip formatter={v => COP(v)} />
               <Line type="monotone" dataKey="fin" stroke="#16A085" strokeWidth={2} dot={{ r: 2 }} name="Saldo" />
             </LineChart>
           </ResponsiveContainer>
           <Table
             cols={[
-              { label: "Mes", render: r => r.mes, align: "center" },
-              { label: "Inicio", render: r => COP(r.inicio), align: "right" },
-              { label: "Interés", render: r => COP(r.interes), align: "right", color: () => "#27AE60" },
-              { label: "Final", render: r => COP(r.fin), align: "right" }
+              { label: "Mes",     render: r => r.mes,            align: "center" },
+              { label: "Inicio",  render: r => COP(r.inicio),    align: "right" },
+              { label: "Interés", render: r => COP(r.interes),   align: "right", color: () => "#27AE60" },
+              { label: "Final",   render: r => COP(r.fin),       align: "right" }
             ]}
             rows={hysPj}
           />
@@ -511,27 +524,96 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
     </div>
   );
 
+  // ── PERFIL ──
+  const PerfilSection = () => (
+    <div>
+      <div className="flex gap-0 mb-5 border-b border-border">
+        <Tab active={perfilTab === "info"}   label="Mi Perfil"      onClick={() => setPerfilTab("info")} />
+        <Tab active={perfilTab === "config"} label="Configuración"  onClick={() => setPerfilTab("config")} />
+      </div>
+
+      {perfilTab === "info" && (
+        <div className="max-w-sm">
+          <Section title="Información de cuenta">
+            <div className="flex flex-col gap-3.5">
+              {user?.image && (
+                <img src={user.image} alt="avatar" className="w-14 h-14 rounded-full border border-border" />
+              )}
+              <div>
+                <div className="text-[11px] text-muted mb-0.5 uppercase tracking-[0.06em]">Nombre</div>
+                <div className="text-sm text-text">{user?.name || "—"}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-muted mb-0.5 uppercase tracking-[0.06em]">Correo</div>
+                <div className="text-sm text-text">{user?.email || "—"}</div>
+              </div>
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {perfilTab === "config" && (
+        <div className="max-w-sm">
+          <Section title="Apariencia">
+            <p className="text-[12px] text-muted mb-3">
+              Tema preferido — se guarda en tu perfil y aplica al iniciar sesión.
+            </p>
+            <div className="flex gap-2.5">
+              {(["dark", "light"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => saveThemePref(t)}
+                  className={`px-5 py-2.5 rounded-lg border cursor-pointer text-[13px] flex items-center gap-2 transition-colors
+                    ${theme === t
+                      ? "border-text bg-btn text-text font-medium"
+                      : "border-border bg-transparent text-muted font-normal"
+                    }`}
+                >
+                  {t === "dark" ? "🌙 Oscuro" : "☀ Claro"}
+                  {theme === t && <span className="text-[10px] text-muted">activo</span>}
+                </button>
+              ))}
+            </div>
+          </Section>
+        </div>
+      )}
+    </div>
+  );
+
   // ── RENDER ──
   return (
-    <div style={{ background: "#0c0c0c", minHeight: "100vh", color: "#f0f0f0" }}>
-      <div style={{ background: "#0c0c0c", padding: "10px 20px", borderBottom: "1px solid #1a1a1a" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: "#f0f0f0" }}>Mi Portafolio</div>
+    <div data-theme={theme} className="bg-bg min-h-screen text-text">
+      <div className="bg-bg border-b border-border px-5 py-2.5">
+        <div className="flex items-center justify-between mb-0.5">
+          <div className="text-sm font-medium text-text">Mi Portafolio</div>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              className="bg-transparent border-none cursor-pointer text-[15px] text-muted px-1 leading-none"
+            >
+              {theme === "dark" ? "☀" : "🌙"}
+            </button>
+            <span className="text-[10px] text-dim">{user?.email}</span>
+            <Btn onClick={() => signOut()} small>Salir</Btn>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 0, flexWrap: "wrap" }}>
-          <Tab active={tab === "dashboard"} label="Dashboard" onClick={() => setTab("dashboard")} />
-          <Tab active={tab === "portafolio"} label="Acciones" onClick={() => setTab("portafolio")} />
-          <Tab active={tab === "cripto"} label="Cripto" onClick={() => setTab("cripto")} />
-          <Tab active={tab === "finanzas"} label="Finanzas" onClick={() => setTab("finanzas")} />
-          <Tab active={tab === "hys"} label="Alto Rendim." onClick={() => setTab("hys")} />
+        <div className="flex flex-wrap gap-0">
+          <Tab active={tab === "dashboard"} label="Dashboard"     onClick={() => setTab("dashboard")} />
+          <Tab active={tab === "portafolio"} label="Acciones"    onClick={() => setTab("portafolio")} />
+          <Tab active={tab === "cripto"}    label="Cripto"        onClick={() => setTab("cripto")} />
+          <Tab active={tab === "finanzas"}  label="Finanzas"      onClick={() => setTab("finanzas")} />
+          <Tab active={tab === "hys"}       label="Alto Rendim."  onClick={() => setTab("hys")} />
+          <Tab active={tab === "perfil"}    label="Perfil"        onClick={() => setTab("perfil")} />
         </div>
       </div>
-      <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
-        {tab === "dashboard" && <Dashboard />}
+      <div className="p-5 max-w-[1100px] mx-auto">
+        {tab === "dashboard"  && <Dashboard />}
         {tab === "portafolio" && <Portafolio />}
-        {tab === "cripto" && <CriptoTab />}
-        {tab === "finanzas" && <Finanzas />}
-        {tab === "hys" && <AltoRend />}
+        {tab === "cripto"     && <CriptoTab />}
+        {tab === "finanzas"   && <Finanzas />}
+        {tab === "hys"        && <AltoRend />}
+        {tab === "perfil"     && <PerfilSection />}
       </div>
     </div>
   );

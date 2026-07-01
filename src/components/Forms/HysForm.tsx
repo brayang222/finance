@@ -34,7 +34,7 @@ export const HysForm = ({ saveHys, hys, saveCash, cash }) => {
   };
 
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+    <div className="flex gap-1.5 flex-wrap items-end mb-2.5">
       <Input
         label="Fecha"
         type="date"

@@ -4,26 +4,14 @@ import React, { useState } from "react";
 import { signIn } from "next-auth/react";
 import { registerUser } from "../../lib/authActions";
 
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%",
-  padding: "9px 12px",
-  background: "#111",
-  border: "1px solid #1e1e1e",
-  borderRadius: 6,
-  color: "#f0f0f0",
-  fontSize: 13,
-  outline: "none",
-  boxSizing: "border-box",
-};
-
 export default function LoginPage() {
-  const [mode, setMode] = useState("login");
+  const [mode, setMode]             = useState("login");
   const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState("");
+  const [password, setPassword]     = useState("");
+  const [name, setName]             = useState("");
+  const [error, setError]           = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [success, setSuccess]       = useState("");
 
   const handleCredentials = async e => {
     e.preventDefault();
@@ -39,66 +27,29 @@ export default function LoginPage() {
       return;
     }
 
-    const res = await signIn("credentials", {
-      identifier,
-      password,
-      redirect: false,
-    });
-
-    if (res?.error) {
-      setError("Correo/celular o contraseña incorrectos");
-    } else {
-      window.location.href = "/";
-    }
+    const res = await signIn("credentials", { identifier, password, redirect: false });
+    if (res?.error) setError("Correo/celular o contraseña incorrectos");
+    else window.location.href = "/";
     setLoading(false);
   };
 
-  const handleGoogle = () => signIn("google", { callbackUrl: "/" });
+  const inputCls = "w-full px-3 py-2.5 bg-surface border border-border rounded-md text-text text-[13px] outline-none placeholder:text-muted";
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0c0c0c",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 16,
-    }}>
-      <div style={{
-        width: "100%",
-        maxWidth: 380,
-        background: "#111",
-        borderRadius: 12,
-        padding: 36,
-        border: "1px solid #1e1e1e",
-      }}>
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f0", letterSpacing: -0.5 }}>
-            Finance
-          </div>
-          <div style={{ fontSize: 12, color: "#555", marginTop: 6 }}>
+    <div className="min-h-screen bg-bg flex items-center justify-center p-4">
+      <div className="w-full max-w-[380px] bg-surface border border-border rounded-xl p-9">
+
+        <div className="text-center mb-7">
+          <div className="text-[22px] font-semibold text-text tracking-tight">Finance</div>
+          <div className="text-[12px] text-muted mt-1.5">
             {mode === "login" ? "Inicia sesión en tu cuenta" : "Crea tu cuenta"}
           </div>
         </div>
 
-        {/* Google */}
-        <button onClick={handleGoogle} style={{
-          width: "100%",
-          padding: "10px",
-          borderRadius: 6,
-          border: "none",
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: "pointer",
-          background: "#fff",
-          color: "#111",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          marginBottom: 20,
-        }}>
+        <button
+          onClick={() => signIn("google", { callbackUrl: "/" })}
+          className="w-full py-2.5 rounded-md text-[13px] font-medium cursor-pointer bg-white text-[#111] flex items-center justify-center gap-2.5 mb-5 border-none"
+        >
           <svg width="16" height="16" viewBox="0 0 48 48">
             <path fill="#EA4335" d="M24 9.5c3.14 0 5.95 1.08 8.17 2.85l6.1-6.1C34.46 3.05 29.53 1 24 1 14.82 1 7.07 6.48 3.64 14.22l7.1 5.52C12.4 13.65 17.73 9.5 24 9.5z"/>
             <path fill="#4285F4" d="M46.52 24.5c0-1.64-.15-3.22-.42-4.75H24v9h12.68c-.55 2.96-2.2 5.47-4.68 7.16l7.18 5.57C43.18 37.16 46.52 31.32 46.52 24.5z"/>
@@ -108,76 +59,44 @@ export default function LoginPage() {
           Continuar con Google
         </button>
 
-        {/* Divider */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <div style={{ flex: 1, height: 1, background: "#1e1e1e" }} />
-          <span style={{ fontSize: 11, color: "#333" }}>o</span>
-          <div style={{ flex: 1, height: 1, background: "#1e1e1e" }} />
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-[11px] text-dim">o</span>
+          <div className="flex-1 h-px bg-border" />
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleCredentials} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <form onSubmit={handleCredentials} className="flex flex-col gap-2.5">
           {mode === "register" && (
-            <input
-              placeholder="Nombre"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              required
-              style={INPUT_STYLE}
-            />
+            <input placeholder="Nombre" value={name} onChange={e => setName(e.target.value)} required className={inputCls} />
           )}
-          <input
-            placeholder="Correo electrónico o celular"
-            value={identifier}
-            onChange={e => setIdentifier(e.target.value)}
-            required
-            style={INPUT_STYLE}
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            style={INPUT_STYLE}
-          />
+          <input placeholder="Correo electrónico o celular" value={identifier} onChange={e => setIdentifier(e.target.value)} required className={inputCls} />
+          <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} required className={inputCls} />
 
-          {error && (
-            <div style={{ fontSize: 12, color: "#f87171", textAlign: "center" }}>{error}</div>
-          )}
-          {success && (
-            <div style={{ fontSize: 12, color: "#4ade80", textAlign: "center" }}>{success}</div>
-          )}
+          {error   && <div className="text-[12px] text-[#f87171] text-center">{error}</div>}
+          {success && <div className="text-[12px] text-[#4ade80] text-center">{success}</div>}
 
-          <button type="submit" disabled={loading} style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: 6,
-            border: "none",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            background: loading ? "#1a1a1a" : "#f0f0f0",
-            color: loading ? "#555" : "#0c0c0c",
-            marginTop: 4,
-          }}>
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-2.5 rounded-md text-[13px] font-semibold mt-1 border-none transition-colors
+              ${loading ? "bg-btn text-dim cursor-not-allowed" : "bg-text text-bg cursor-pointer"}`}
+          >
             {loading ? "..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
           </button>
         </form>
 
-        {/* Toggle */}
-        <div style={{ textAlign: "center", marginTop: 20, fontSize: 12, color: "#555" }}>
+        <div className="text-center mt-5 text-[12px] text-muted">
           {mode === "login" ? (
             <>¿No tienes cuenta?{" "}
               <button onClick={() => { setMode("register"); setError(""); setSuccess(""); }}
-                style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 12, textDecoration: "underline" }}>
+                className="bg-transparent border-none text-muted cursor-pointer text-[12px] underline">
                 Regístrate
               </button>
             </>
           ) : (
             <>¿Ya tienes cuenta?{" "}
               <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
-                style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 12, textDecoration: "underline" }}>
+                className="bg-transparent border-none text-muted cursor-pointer text-[12px] underline">
                 Inicia sesión
               </button>
             </>

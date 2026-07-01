@@ -14,7 +14,7 @@ async function getUserId() {
 export async function loadAll() {
   const userId = await getUserId();
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash] =
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId } }),
       prisma.crypto.findMany({ where: { userId } }),
@@ -24,6 +24,7 @@ export async function loadAll() {
       prisma.price.findMany({ where: { userId } }),
       prisma.target.findMany({ where: { userId } }),
       prisma.cash.findUnique({ where: { userId } }),
+      prisma.userConfig.findUnique({ where: { userId } }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
@@ -32,7 +33,7 @@ export async function loadAll() {
     ? { rate: hys.rate, movements: hysMovements }
     : null;
 
-  return { stocks, crypto, finances, hys: hysData, prices: pricesMap, targets: targetsMap, cash };
+  return { stocks, crypto, finances, hys: hysData, prices: pricesMap, targets: targetsMap, cash, config: config ? { theme: config.theme as "dark" | "light" } : null };
 }
 
 // ── STOCKS ──
@@ -109,6 +110,16 @@ export async function saveCash({ banco, note }: Cash) {
     where: { userId },
     update: { banco, note },
     create: { userId, banco, note },
+  });
+}
+
+// ── USER CONFIG ──
+export async function saveConfig(theme: string) {
+  const userId = await getUserId();
+  await prisma.userConfig.upsert({
+    where: { userId },
+    update: { theme },
+    create: { userId, theme },
   });
 }
 

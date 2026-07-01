@@ -26,6 +26,7 @@ model User {
   prices        Price[]
   targets       Target[]
   cash          Cash?
+  config        UserConfig?
 }
 
 model Account {
@@ -147,4 +148,11 @@ model Cash {
   banco  Float
   note   String?
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserConfig {
+  id     String @id @default(cuid())
+  userId String @unique
+  theme  String @default("dark")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
