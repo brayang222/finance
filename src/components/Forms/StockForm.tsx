@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Input, Select, Btn } from "../UI/UIComponents";
 import { uid, today } from "../../utils/formatters";
 
-export const StockForm = ({ onAdd, saveCash, cash, type = "stock" }) => {
+export const StockForm = ({ onAdd, saveCash, cash, type = "stock" }: { onAdd: (tx: any) => void; saveCash: (c: any) => void; cash: any; type?: string }) => {
   const [f, setF] = useState({
     date: today(),
     ticker: "",

@@ -11,8 +11,8 @@ export const computePPA = (txs, ticker) => {
   return { ticker, qtyBought: qB, qtySold: qS, holding: hold, ppa, invested: inv, totalComm: comm };
 };
 
-export const computeStockMetrics = (stocks, prices, targets) => {
-  const uniqueTickers = [...new Set(stocks.map(t => t.ticker))];
+export const computeStockMetrics = (stocks: any[], prices: Record<string, number>, targets: Record<string, number>) => {
+  const uniqueTickers = [...new Set(stocks.map(t => t.ticker))] as string[];
   return uniqueTickers.map(tk => {
     const m = computePPA(stocks, tk);
     const cur = prices[tk] || 0;
@@ -79,14 +79,14 @@ export const computeHysBalance = (hys) => {
   }
 
   const last = sorted[sorted.length - 1].date;
-  const ds = Math.max(0, Math.floor((new Date() - new Date(last)) / 86400000));
+  const ds = Math.max(0, Math.floor((new Date().getTime() - new Date(last).getTime()) / 86400000));
   const balance = base * Math.pow(1 + dailyRate, ds);
 
   return { balance, base, daysSince: ds, dailyRate };
 };
 
-export const computeHysProjection = (hysBalance, dailyRate) => {
-  const hysPj = [];
+export const computeHysProjection = (hysBalance: number, dailyRate: number) => {
+  const hysPj: { mes: number; inicio: number; interes: number; fin: number }[] = [];
   let bal = hysBalance;
   for (let m = 0; m < 12; m++) {
     const d = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m % 12];
@@ -98,8 +98,8 @@ export const computeHysProjection = (hysBalance, dailyRate) => {
   return hysPj;
 };
 
-export const computeMonthlyFinances = (finances) => {
-  const ms = {};
+export const computeMonthlyFinances = (finances: any[]) => {
+  const ms: Record<string, { month: string; ingresos: number; egresos: number }> = {};
   finances.forEach(f => {
     const m = f.date?.slice(0, 7) || "?";
     if (!ms[m]) ms[m] = { month: m, ingresos: 0, egresos: 0 };
@@ -109,12 +109,12 @@ export const computeMonthlyFinances = (finances) => {
   return Object.values(ms).sort((a, b) => a.month.localeCompare(b.month)).slice(-8);
 };
 
-export const computeExpenseByCategory = (finances) => {
-  const cs = {};
+export const computeExpenseByCategory = (finances: any[]) => {
+  const cs: Record<string, number> = {};
   finances.filter(f => f.type === "egreso").forEach(f => {
     cs[f.category] = (cs[f.category] || 0) + f.amount;
   });
   return Object.entries(cs)
     .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => (b.value as number) - (a.value as number));
 };

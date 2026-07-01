@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export const Table = ({ cols, rows, onDelete, max = 999 }) => {
+export const Table = ({ cols, rows, onDelete, max = 999 }: { cols: any[]; rows: any[]; onDelete?: (id: any) => void; max?: number }) => {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("desc");
 
@@ -33,7 +33,7 @@ export const Table = ({ cols, rows, onDelete, max = 999 }) => {
 
   return (
     <div style={{ overflowX: "auto", marginBottom: 14 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr>
             {cols.map((c, i) => (
@@ -41,14 +41,17 @@ export const Table = ({ cols, rows, onDelete, max = 999 }) => {
                 key={i}
                 onClick={c.noSort ? undefined : () => toggleSort(i)}
                 style={{
-                  padding: "5px 7px",
-                  background: "#1f1f3d",
-                  color: sortCol === i ? "#7B4FB5" : "#aaa",
+                  padding: "6px 10px",
+                  background: "#0c0c0c",
+                  color: sortCol === i ? "#e8e8e8" : "#444",
                   textAlign: c.align || "left",
-                  borderBottom: "1px solid #333",
+                  borderBottom: "1px solid #1a1a1a",
                   whiteSpace: "nowrap",
                   cursor: c.noSort ? "default" : "pointer",
-                  userSelect: "none"
+                  userSelect: "none",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  letterSpacing: "0.05em"
                 }}
               >
                 {c.label}
@@ -56,20 +59,20 @@ export const Table = ({ cols, rows, onDelete, max = 999 }) => {
               </th>
             ))}
             {onDelete && (
-              <th style={{ padding: "5px", background: "#1f1f3d" }}></th>
+              <th style={{ padding: "5px", background: "#0c0c0c", borderBottom: "1px solid #1a1a1a" }}></th>
             )}
           </tr>
         </thead>
         <tbody>
           {sorted.map((r, ri) => (
-            <tr key={ri} style={{ background: ri % 2 === 0 ? "#14142b" : "#1a1a3e" }}>
+            <tr key={ri} style={{ background: "transparent" }}>
               {cols.map((c, ci) => (
                 <td
                   key={ci}
                   style={{
-                    padding: "4px 7px",
-                    color: c.color ? c.color(r) : "#ddd",
-                    borderBottom: "1px solid #222",
+                    padding: "6px 10px",
+                    color: c.color ? c.color(r) : "#ccc",
+                    borderBottom: "1px solid #111",
                     whiteSpace: "nowrap",
                     textAlign: c.align || "left"
                   }}
@@ -78,13 +81,18 @@ export const Table = ({ cols, rows, onDelete, max = 999 }) => {
                 </td>
               ))}
               {onDelete && (
-                <td style={{ padding: "4px", borderBottom: "1px solid #222" }}>
+                <td style={{ padding: "4px 8px", borderBottom: "1px solid #111" }}>
                   <button
-                    onClick={() => onDelete(r.id)}
+                    type="button"
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete(r.id);
+                    }}
                     style={{
                       background: "none",
                       border: "none",
-                      color: "#E94560",
+                      color: "#333",
                       cursor: "pointer",
                       fontSize: 13
                     }}
@@ -98,7 +106,7 @@ export const Table = ({ cols, rows, onDelete, max = 999 }) => {
         </tbody>
       </table>
       {sorted.length > 0 && (
-        <div style={{ fontSize: 10, color: "#555", marginTop: 4 }}>
+        <div style={{ fontSize: 10, color: "#333", marginTop: 4 }}>
           {sorted.length} registros
           {sortCol !== null ? ` (ordenado por ${cols[sortCol].label})` : ""}
         </div>

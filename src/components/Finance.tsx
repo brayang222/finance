@@ -6,6 +6,16 @@ import { SEED_STOCKS, SEED_CRYPTO, SEED_PRICES, SEED_HYS, SEED_FINANCES, SEED_CA
 import { COP, PCT, uid, today, uniqueTickers } from "../utils/formatters";
 import { fetchPricesFromAPI, fetchTRM, load, save } from "../utils/api";
 import {
+  isSupported as fsSupported,
+  pickFile,
+  createFile,
+  readFile,
+  writeFile,
+  persistHandle,
+  getPersistedHandle,
+  requestPermission
+} from "../utils/fileStorage";
+import {
   computeStockMetrics,
   computeCryptoMetrics,
   computeHysBalance,
@@ -13,7 +23,7 @@ import {
   computeMonthlyFinances,
   computeExpenseByCategory
 } from "../utils/calculations";
-import { Tab, Card, Input, Select, Btn, Section } from "./UI/UIComponents";
+import { Tab, Card, Input, Select, Btn, Section, Modal } from "./UI/UIComponents";
 import { Table } from "./UI/Table";
 import { PriceInput } from "./UI/PriceInput";
 import { StockForm } from "./Forms/StockForm";
@@ -24,17 +34,18 @@ import { PriceEditor } from "./Forms/PriceEditor";
 export default function Finance() {
   // ── STATE ──
   const [tab, setTab] = useState("dashboard");
-  const [stocks, setStocks] = useState([]);
-  const [crypto, setCrypto] = useState([]);
-  const [finances, setFinances] = useState([]);
-  const [hys, setHys] = useState({ rate: 9.25, movements: [] });
-  const [prices, setPrices] = useState({});
-  const [targets, setTargets] = useState({});
+  const [stocks, setStocks] = useState<any[]>([]);
+  const [crypto, setCrypto] = useState<any[]>([]);
+  const [finances, setFinances] = useState<any[]>([]);
+  const [hys, setHys] = useState<any>({ rate: 9.25, movements: [] });
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [targets, setTargets] = useState<Record<string, number>>({});
   const [cash, setCash] = useState({ banco: 0 });
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
-  const [trm, setTrm] = useState(null);
-  const [lastFetch, setLastFetch] = useState(null);
+  const [fileHandle, setFileHandle] = useState<any>(null);
+  const [trm, setTrm] = useState<number | null>(null);
+  const [lastFetch, setLastFetch] = useState<string | null>(null);
   const [finFilter, setFinFilter] = useState({
     dateFrom: "",
     dateTo: "",
@@ -42,42 +53,68 @@ export default function Finance() {
     category: "",
     search: ""
   });
+  const [editingFin, setEditingFin] = useState<any>(null);
+
+  // ── FILE SYNC ──
+  const syncToFile = useCallback(
+    (handle: any, data: any) => {
+      if (!handle) return;
+      writeFile(handle, data).catch(console.error);
+    },
+    []
+  );
+
+  const applyFileData = useCallback((data: any, handle: any) => {
+    const st = data.stocks ?? SEED_STOCKS;
+    const cr = data.crypto ?? SEED_CRYPTO;
+    const fi = data.finances ?? SEED_FINANCES;
+    const hy = data.hys ?? SEED_HYS;
+    const pr = data.prices ?? SEED_PRICES;
+    const tg = data.targets ?? {};
+    const cs = data.cash ?? SEED_CASH;
+    setStocks(st); save(STORAGE_KEYS.STOCKS, st);
+    setCrypto(cr); save(STORAGE_KEYS.CRYPTO, cr);
+    setFinances(fi); save(STORAGE_KEYS.FINANCES, fi);
+    setHys(hy); save(STORAGE_KEYS.HYS, hy);
+    setPrices(pr); save(STORAGE_KEYS.PRICES, pr);
+    setTargets(tg); save(STORAGE_KEYS.TARGETS, tg);
+    setCash(cs); save(STORAGE_KEYS.CASH, cs);
+    setFileHandle(handle);
+    persistHandle(handle).catch(console.error);
+  }, []);
+
+  const openFileAction = useCallback(async () => {
+    try {
+      const handle = await pickFile();
+      const granted = await requestPermission(handle);
+      if (!granted) return;
+      const data = await readFile(handle);
+      applyFileData(data, handle);
+    } catch (e: any) {
+      if (e.name !== "AbortError") console.error(e);
+    }
+  }, [applyFileData]);
+
+  const newFileAction = useCallback(async () => {
+    try {
+      const handle = await createFile();
+      const granted = await requestPermission(handle);
+      if (!granted) return;
+      setFileHandle(handle);
+      persistHandle(handle).catch(console.error);
+    } catch (e: any) {
+      if (e.name !== "AbortError") console.error(e);
+    }
+  }, []);
 
   // ── SAVE CALLBACKS ──
-  const saveStocks = useCallback(v => {
-    setStocks(v);
-    save(STORAGE_KEYS.STOCKS, v);
-  }, []);
-
-  const saveCrypto = useCallback(v => {
-    setCrypto(v);
-    save(STORAGE_KEYS.CRYPTO, v);
-  }, []);
-
-  const saveFinances = useCallback(v => {
-    setFinances(v);
-    save(STORAGE_KEYS.FINANCES, v);
-  }, []);
-
-  const saveHys = useCallback(v => {
-    setHys(v);
-    save(STORAGE_KEYS.HYS, v);
-  }, []);
-
-  const savePrices = useCallback(v => {
-    setPrices(v);
-    save(STORAGE_KEYS.PRICES, v);
-  }, []);
-
-  const saveTargets = useCallback(v => {
-    setTargets(v);
-    save(STORAGE_KEYS.TARGETS, v);
-  }, []);
-
-  const saveCash = useCallback(v => {
-    setCash(v);
-    save(STORAGE_KEYS.CASH, v);
-  }, []);
+  const saveStocks = useCallback((v: any) => { setStocks(v); save(STORAGE_KEYS.STOCKS, v); }, []);
+  const saveCrypto = useCallback((v: any) => { setCrypto(v); save(STORAGE_KEYS.CRYPTO, v); }, []);
+  const saveFinances = useCallback((v: any) => { setFinances(v); save(STORAGE_KEYS.FINANCES, v); }, []);
+  const saveHys = useCallback((v: any) => { setHys(v); save(STORAGE_KEYS.HYS, v); }, []);
+  const savePrices = useCallback((v: any) => { setPrices(v); save(STORAGE_KEYS.PRICES, v); }, []);
+  const saveTargets = useCallback((v: any) => { setTargets(v); save(STORAGE_KEYS.TARGETS, v); }, []);
+  const saveCash = useCallback((v: any) => { setCash(v); save(STORAGE_KEYS.CASH, v); }, []);
 
   // ── LOAD DATA ──
   useEffect(() => {
@@ -117,9 +154,27 @@ export default function Finance() {
 
       const trm2 = await load(STORAGE_KEYS.TRM, null);
       if (trm2) setTrm(trm2);
+
+      // Recuperar handle de sesión anterior si hay uno guardado
+      if (fsSupported()) {
+        try {
+          const saved = await getPersistedHandle() as any;
+          if (saved) {
+            const perm = await saved.queryPermission({ mode: "readwrite" });
+            if (perm === "granted") setFileHandle(saved);
+          }
+        } catch { /* ignorar */ }
+      }
+
       setLoading(false);
     })();
   }, []);
+
+  // Sync automático al archivo cada vez que los datos cambian
+  useEffect(() => {
+    if (!fileHandle || loading) return;
+    syncToFile(fileHandle, { stocks, crypto, finances, hys, prices, targets, cash });
+  }, [stocks, crypto, finances, hys, prices, targets, cash, fileHandle, loading, syncToFile]);
 
   // ── FETCH PRICES ──
   const fetchAllPrices = useCallback(async () => {
@@ -131,15 +186,15 @@ export default function Finance() {
       ]);
       const t = nt || trm || 4200;
       setTrm(t);
-      const merged = { ...prices };
-      for (const [k, v] of Object.entries(np)) {
+      const merged: Record<string, number> = { ...prices };
+      for (const [k, v] of Object.entries(np as Record<string, number>)) {
         merged[k] = k.startsWith("C_") && v < 1000000 ? Math.round(v * t) : v;
       }
       setPrices(merged);
       save(STORAGE_KEYS.PRICES, merged);
       save(STORAGE_KEYS.TRM, t);
       setLastFetch(new Date().toLocaleTimeString("es-CO"));
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
     }
     setFetching(false);
@@ -155,7 +210,7 @@ export default function Finance() {
   // ── HYS ──
   const hysState = computeHysBalance(hys);
   const hysBalance = hysState.balance;
-  const hysPj = computeHysProjection(hysBalance, hysState.dailyRate);
+  const hysPj = computeHysProjection(hysBalance, hysState.dailyRate) as any[];
   const hysFinal = hysPj.length ? hysPj[11].fin : hysBalance;
 
   // ── FINANCES ──
@@ -193,6 +248,15 @@ export default function Finance() {
   );
 
   const allCategories = [...new Set(finances.map(f => f.category))].sort();
+
+  const handleFinanceSubmit = (entry: any) => {
+    const nextFinances = editingFin
+      ? finances.map(f => (f.id === editingFin.id ? { ...f, ...entry } : f))
+      : [...finances, entry];
+
+    saveFinances(nextFinances);
+    setEditingFin(null);
+  };
 
   const dineroReal = (cash.banco || 0) + hysBalance;
   const totalPortafolio = totalStocks + totalCrypto;
@@ -241,14 +305,28 @@ export default function Finance() {
           gap: 6
         }}
       >
-        <Btn
-          onClick={fetchAllPrices}
-          color={fetching ? "#555" : "#2D9CDB"}
-          small
-          disabled={fetching}
-        >
-          {fetching ? "⏳ Buscando precios..." : "🔄 Actualizar precios"}
-        </Btn>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Btn
+            onClick={fetchAllPrices}
+            color={fetching ? "#555" : "#2D9CDB"}
+            small
+            disabled={fetching}
+          >
+            {fetching ? "⏳ Buscando precios..." : "🔄 Actualizar precios"}
+          </Btn>
+          {fsSupported() && (
+            fileHandle ? (
+              <span style={{ fontSize: 10, color: "#27AE60", alignSelf: "center" }}>
+                💾 {fileHandle.name}
+              </span>
+            ) : (
+              <>
+                <Btn onClick={openFileAction} color="#27AE60" small>📂 Abrir archivo</Btn>
+                <Btn onClick={newFileAction} color="#555" small>➕ Nuevo archivo</Btn>
+              </>
+            )
+          )}
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           {trm && (
             <span style={{ fontSize: 10, color: "#888" }}>
@@ -309,7 +387,7 @@ export default function Finance() {
                   innerRadius={40}
                   outerRadius={72}
                   dataKey="value"
-                  label={({ name, percent }) =>
+                  label={({ name, percent = 0 }: { name?: string; percent?: number }) =>
                     `${name} ${(percent * 100).toFixed(0)}%`
                   }
                   labelLine={false}
@@ -334,7 +412,7 @@ export default function Finance() {
                   innerRadius={40}
                   outerRadius={72}
                   dataKey="value"
-                  label={({ name, percent }) =>
+                  label={({ name, percent = 0 }: { name?: string; percent?: number }) =>
                     `${name} ${(percent * 100).toFixed(0)}%`
                   }
                   labelLine={false}
@@ -685,8 +763,26 @@ export default function Finance() {
   const Finanzas = () => (
     <div>
       <Section title="Registrar ingreso o gasto">
-        <FinForm saveFinances={saveFinances} finances={finances} />
+        <FinForm
+          key="new"
+          saveFinances={saveFinances}
+          finances={finances}
+          editingItem={null}
+          onSave={handleFinanceSubmit}
+        />
       </Section>
+      <Modal
+        open={!!editingFin}
+        onClose={() => setEditingFin(null)}
+        title={`Editar movimiento #${editingFin?.id || ""}`}
+      >
+        <FinForm
+          key={editingFin?.id || "edit"}
+          editingItem={editingFin}
+          onSave={handleFinanceSubmit}
+          onCancel={() => setEditingFin(null)}
+        />
+      </Modal>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
         <Card
           title="INGRESOS"
@@ -856,6 +952,23 @@ export default function Finance() {
             {
               key: "desc",
               label: "Descripción",
+              noSort: true
+            },
+            {
+              label: "",
+              render: r => (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setEditingFin(r);
+                  }}
+                  style={{ background: "none", border: "none", color: "#7B4FB5", cursor: "pointer", fontSize: 12 }}
+                >
+                  ✎
+                </button>
+              ),
               noSort: true
             }
           ]}
