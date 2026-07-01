@@ -30,10 +30,18 @@ export async function loadAll() {
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
   const targetsMap = Object.fromEntries(targets.map(t => [t.ticker, t.value]));
   const hysData = hys
-    ? { rate: hys.rate, movements: hysMovements }
+    ? { rate: hys.rate, movements: hysMovements.map(m => ({ ...m, note: m.note ?? undefined })) }
     : null;
 
-  return { stocks, crypto, finances, hys: hysData, prices: pricesMap, targets: targetsMap, cash, config: config ? { theme: config.theme as "dark" | "light" } : null };
+  const typedFinances = finances.map(f => ({
+    ...f,
+    type: f.type as "ingreso" | "egreso",
+    desc: f.desc ?? undefined,
+  }));
+
+  const typedCash = cash ? { banco: cash.banco, note: cash.note ?? undefined } : null;
+
+  return { stocks, crypto, finances: typedFinances, hys: hysData, prices: pricesMap, targets: targetsMap, cash: typedCash, config: config ? { theme: config.theme as "dark" | "light" } : null };
 }
 
 // ── STOCKS ──

@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
-  ACCOUNTS,
-  HOLDINGS,
-  CRYPTO,
+  Asset,
+  Account,
   Transaction,
   COP,
   COPSHORT,
@@ -52,26 +51,36 @@ export default function ViewResumen({
   privacy,
   onNav,
   transactions,
+  holdings,
+  cryptoAssets,
+  accounts,
 }: {
   privacy: boolean;
   onNav: (v: View) => void;
   transactions: Transaction[];
+  holdings: Asset[];
+  cryptoAssets: Asset[];
+  accounts: Account[];
 }) {
   const [range, setRange] = useState<"1M" | "6M" | "1A" | "Todo">("1A");
 
-  const stockValue = HOLDINGS.reduce((s, h) => s + valueOf(h), 0);
-  const stockCost = HOLDINGS.reduce((s, h) => s + costOf(h), 0);
+  const stockValue = holdings.reduce((s, h) => s + valueOf(h), 0);
+  const stockCost = holdings.reduce((s, h) => s + costOf(h), 0);
   const stockPL = stockValue - stockCost;
 
-  const cryptoValue = CRYPTO.reduce((s, c) => s + valueOf(c), 0);
-  const cryptoCost = CRYPTO.reduce((s, c) => s + costOf(c), 0);
+  const cryptoValue = cryptoAssets.reduce((s, c) => s + valueOf(c), 0);
+  const cryptoCost = cryptoAssets.reduce((s, c) => s + costOf(c), 0);
   const cryptoPL = cryptoValue - cryptoCost;
 
-  const cash = ACCOUNTS.reduce((s, a) => s + a.balance, 0);
+  const cash = accounts.reduce((s, a) => s + a.balance, 0);
   const total = stockValue + cryptoValue + cash;
 
-  const income = transactions.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
-  const expense = transactions.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
+  // Filter transactions to current month
+  const nowYM = new Date().toISOString().slice(0, 7);
+  const monthTx = transactions.filter((t) => t.dateISO.startsWith(nowYM));
+
+  const income = monthTx.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
+  const expense = monthTx.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const monthBalance = income - expense;
 
   // Net-worth series (12 months) ending at total
@@ -88,6 +97,8 @@ export default function ViewResumen({
   }, [total]);
 
   const heroSpark = useMemo(() => series.slice(), [series]);
+
+  const monthLabel = new Date().toLocaleDateString("es-CO", { month: "long" });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -159,10 +170,10 @@ export default function ViewResumen({
         <KpiCard
           label="Efectivo y bancos"
           value={<Bal n={cash} privacy={privacy} />}
-          sub={<span style={{ color: "var(--dim)" }}>{ACCOUNTS.length} cuentas</span>}
+          sub={<span style={{ color: "var(--dim)" }}>{accounts.length} cuenta{accounts.length !== 1 ? "s" : ""}</span>}
         />
         <KpiCard
-          label="Ingresos · junio"
+          label={`Ingresos · ${monthLabel}`}
           value={<span style={{ color: "var(--pos)" }}><Bal n={income} privacy={privacy} /></span>}
           sub={
             <span style={{ color: "var(--dim)" }}>
@@ -171,11 +182,11 @@ export default function ViewResumen({
           }
         />
         <KpiCard
-          label="Egresos · junio"
+          label={`Egresos · ${monthLabel}`}
           value={<span style={{ color: "var(--neg)" }}><Bal n={expense} privacy={privacy} /></span>}
           sub={
             <span style={{ color: "var(--dim)" }}>
-              {transactions.filter((t) => t.type === "egreso").length} movimientos
+              {monthTx.filter((t) => t.type === "egreso").length} movimientos
             </span>
           }
         />
@@ -212,8 +223,8 @@ export default function ViewResumen({
           gap: 14,
         }}
       >
-        <PortfolioDonut privacy={privacy} total={stockValue + cryptoValue} />
-        <IncomeExpenseBars privacy={privacy} income={income} expense={expense} />
+        <PortfolioDonut privacy={privacy} total={stockValue + cryptoValue} holdings={holdings} cryptoAssets={cryptoAssets} />
+        <IncomeExpenseBars privacy={privacy} transactions={transactions} />
       </div>
 
       {/* D. Recent transactions */}
@@ -375,8 +386,8 @@ function NetWorthChart({ values, privacy }: { values: number[]; privacy: boolean
   );
 }
 
-function PortfolioDonut({ privacy, total }: { privacy: boolean; total: number }) {
-  const assets = [...HOLDINGS, ...CRYPTO];
+function PortfolioDonut({ privacy, total, holdings, cryptoAssets }: { privacy: boolean; total: number; holdings: Asset[]; cryptoAssets: Asset[] }) {
+  const assets = [...holdings, ...cryptoAssets];
   const R = 58;
   const CIRC = 2 * Math.PI * R;
   const totalVal = assets.reduce((s, a) => s + valueOf(a), 0);
@@ -454,23 +465,27 @@ function PortfolioDonut({ privacy, total }: { privacy: boolean; total: number })
 
 function IncomeExpenseBars({
   privacy,
-  income,
-  expense,
+  transactions,
 }: {
   privacy: boolean;
-  income: number;
-  expense: number;
+  transactions: Transaction[];
 }) {
-  // last 6 months, current = actual totals
-  const data = [
-    { m: "Ene", inc: income * 0.9, exp: expense * 0.95 },
-    { m: "Feb", inc: income * 0.94, exp: expense * 1.05 },
-    { m: "Mar", inc: income * 1.02, exp: expense * 0.88 },
-    { m: "Abr", inc: income * 0.97, exp: expense * 1.1 },
-    { m: "May", inc: income * 1.05, exp: expense * 0.92 },
-    { m: "Jun", inc: income, exp: expense },
-  ];
-  const maxV = Math.max(...data.flatMap((d) => [d.inc, d.exp]));
+  // Build last-6-months data from real transactions
+  const data = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      const ym = d.toISOString().slice(0, 7);
+      const monthTxs = transactions.filter((t) => t.dateISO.startsWith(ym));
+      const m = d.toLocaleDateString("es-CO", { month: "short" });
+      return {
+        m: m.charAt(0).toUpperCase() + m.slice(1, 3),
+        inc: monthTxs.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0),
+        exp: monthTxs.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0),
+      };
+    });
+  }, [transactions]);
+  const maxV = Math.max(...data.flatMap((d) => [d.inc, d.exp]), 1);
 
   return (
     <div style={{ ...cardBase, borderRadius: 18, padding: 22 }}>
@@ -513,7 +528,7 @@ function IncomeExpenseBars({
         ))}
       </div>
       {privacy && (
-        <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 6 }}>Valores ocultos</div>
+        <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 6, textAlign: "center" }}>Valores ocultos</div>
       )}
     </div>
   );

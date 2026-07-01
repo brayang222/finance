@@ -1,6 +1,7 @@
 import { auth } from "../auth";
 import LoginPage from "../src/components/LoginPage";
 import Layout from "../src/components/patrimonio/Layout";
+import { loadAll } from "../lib/actions";
 
 export default async function Home() {
   const session = await auth();
@@ -9,5 +10,6 @@ export default async function Home() {
     return <LoginPage />;
   }
 
-  return <Layout user={session.user} />;
+  const data = await loadAll();
+  return <Layout user={session.user} initialData={data} />;
 }
