@@ -2,12 +2,24 @@
 
 @layer base {
   :root {
-    --bg: #0c0c0c;
+    --bg: #0e0f13;
+    --panel: #15171c;
+    --panel2: #1b1e25;
+    --line: #262a33;
+    --fg: #eceef1;
+    --muted: #9ba1ab;
+    --dim: #5f6672;
+    --pos: #5cae87;
+    --neg: #d67c78;
+    --accent: #eceef1;
+    --accentFg: #0e0f13;
+    --chip: #20242c;
+    --line-accent: #eceef1;
+
+    /* legacy tokens (kept for compatibility with older components) */
     --surface: #111111;
     --border: #1e1e1e;
     --text: #f0f0f0;
-    --muted: #555555;
-    --dim: #333333;
     --btn: #1a1a1a;
     --btn-bd: #2a2a2a;
     --accent-green: #4ade80;
@@ -15,12 +27,24 @@
   }
 
   [data-theme="light"] {
-    --bg: #f4f4f5;
+    --bg: #f5f4f1;
+    --panel: #ffffff;
+    --panel2: #efeeea;
+    --line: #e6e4de;
+    --fg: #1b1d20;
+    --muted: #6c727a;
+    --dim: #a2a7ad;
+    --pos: #2f8f6a;
+    --neg: #c05a54;
+    --accent: #1b1d20;
+    --accentFg: #f5f4f1;
+    --chip: #f0efeb;
+    --line-accent: #1b1d20;
+
+    /* legacy tokens */
     --surface: #ffffff;
     --border: #e4e4e7;
     --text: #111111;
-    --muted: #71717a;
-    --dim: #a1a1aa;
     --btn: #f4f4f5;
     --btn-bd: #d4d4d8;
     --accent-green: #16a34a;
@@ -28,23 +52,41 @@
   }
 
   *, *::before, *::after { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  [data-theme="light"] { color-scheme: light; }
+
   body {
     background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--fg);
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
     -webkit-font-smoothing: antialiased;
+    margin: 0;
   }
   input, select, button, textarea { font-family: inherit; }
-  * { scrollbar-width: thin; scrollbar-color: #222 transparent; }
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-accent: var(--accent);
+  --color-accentFg: var(--accentFg);
+  --color-chip: var(--chip);
   --color-surface: var(--surface);
   --color-border: var(--border);
   --color-text: var(--text);
-  --color-muted: var(--muted);
-  --color-dim: var(--dim);
   --color-btn: var(--btn);
   --color-btn-bd: var(--btn-bd);
   --color-accent-green: var(--accent-green);

@@ -1,8 +1,6 @@
 import { auth } from "../auth";
-import { loadAll } from "../lib/actions";
-import FinanceApp from "../src/components/FinanceApp";
 import LoginPage from "../src/components/LoginPage";
-import type { AllData } from "../src/types";
+import Layout from "../src/components/patrimonio/Layout";
 
 export default async function Home() {
   const session = await auth();
@@ -11,8 +9,5 @@ export default async function Home() {
     return <LoginPage />;
   }
 
-  const data = await loadAll() as unknown as AllData;
-
-  // @ts-ignore
-  return <FinanceApp initialData={data} user={session.user} />;
+  return <Layout user={session.user} />;
 }
