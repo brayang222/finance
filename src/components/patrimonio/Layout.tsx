@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import type { AllData, Stock, Crypto as CryptoType, Finance } from "../../types";
-import { Asset, Account, Transaction, TxType, ACCOUNTS as MOCK_ACCOUNTS } from "../../data/mock";
+import { Asset, Account, Transaction, TxType } from "../../data/mock";
 import { View } from "./utils";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
@@ -86,10 +86,8 @@ function toTransactions(finances: Finance[]): Transaction[] {
 
 function toAccounts(data: AllData): Account[] {
   const cashTotal = data.cash?.banco ?? 0;
-  if (cashTotal > 0) {
-    return [{ id: "efectivo", name: "Efectivo y bancos", type: "Cuenta", kind: "Efectivo", mono: "$", balance: cashTotal }];
-  }
-  return MOCK_ACCOUNTS;
+  if (cashTotal <= 0) return [];
+  return [{ id: "efectivo", name: "Efectivo y bancos", type: "Cuenta", kind: "Efectivo", mono: "$", balance: cashTotal }];
 }
 
 // ── PAGE_META ───────────────────────────────────────────────────────────────
@@ -129,7 +127,7 @@ export default function Layout({
     [initialData]
   );
   const accounts = useMemo(
-    () => initialData ? toAccounts(initialData) : MOCK_ACCOUNTS,
+    () => initialData ? toAccounts(initialData) : [],
     [initialData]
   );
 

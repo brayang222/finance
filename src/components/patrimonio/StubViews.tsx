@@ -244,6 +244,9 @@ export function ViewDetalle({
   );
 }
 
+type SortCol = "fecha" | "categoria" | "cuenta" | "monto";
+type SortDir = "asc" | "desc";
+
 export function ViewTransacciones({
   privacy,
   transactions,
@@ -253,35 +256,68 @@ export function ViewTransacciones({
   transactions: Transaction[];
   onAdd?: () => void;
 }) {
-  const nowYM = new Date().toISOString().slice(0, 7);
-  const monthTx = transactions.filter((t) => t.dateISO.startsWith(nowYM));
-  const income  = monthTx.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
-  const expense = monthTx.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
-  const balance = income - expense;
-  const monthLabel = new Date().toLocaleDateString("es-CO", { month: "long", year: "numeric" });
-
   const [filter, setFilter] = React.useState<"todos" | "ingresos" | "egresos">("todos");
-  const filtered = transactions.filter((t) =>
+  const [sort, setSort]     = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
+
+  // KPIs: totals of the type-filtered set (all time)
+  const typeFiltered = transactions.filter((t) =>
     filter === "todos" ? true : filter === "ingresos" ? t.type === "ingreso" : t.type === "egreso"
   );
+  const totalIncome  = typeFiltered.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = typeFiltered.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
+  const totalBalance = totalIncome - totalExpense;
+
+  const toggleSort = (col: SortCol) =>
+    setSort((prev) => ({ col, dir: prev.col === col && prev.dir === "asc" ? "desc" : "asc" }));
+
+  const sorted = [...typeFiltered].sort((a, b) => {
+    let cmp = 0;
+    if (sort.col === "fecha")     cmp = a.dateISO.localeCompare(b.dateISO);
+    if (sort.col === "categoria") cmp = a.category.localeCompare(b.category);
+    if (sort.col === "cuenta")    cmp = a.account.localeCompare(b.account);
+    if (sort.col === "monto")     cmp = a.amount - b.amount;
+    return sort.dir === "asc" ? cmp : -cmp;
+  });
+
+  const SortBtn = ({ col, label, right }: { col: SortCol; label: string; right?: boolean }) => (
+    <th
+      className={`${thClass} cursor-pointer select-none${right ? " text-right" : ""}`}
+      onClick={() => toggleSort(col)}
+    >
+      {label}{" "}
+      <span className="text-dim">
+        {sort.col === col ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}
+      </span>
+    </th>
+  );
+
+  const filterLabel = filter === "ingresos" ? "Ingresos" : filter === "egresos" ? "Egresos" : "Total";
 
   return (
     <div className="flex flex-col gap-3.5">
+      {/* KPIs — totals of the current filter selection */}
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-        <SummaryCard label={`Ingresos · ${monthLabel}`}
-          value={<span className="text-pos"><Bal n={income} privacy={privacy} /></span>} />
-        <SummaryCard label={`Egresos · ${monthLabel}`}
-          value={<span className="text-neg"><Bal n={expense} privacy={privacy} /></span>} />
-        <SummaryCard label="Balance neto"
-          value={<span className={balance >= 0 ? "text-pos" : "text-neg"}><Bal n={Math.abs(balance)} privacy={privacy} /></span>}
-          sub={<span className="text-dim">{balance >= 0 ? "Superávit" : "Déficit"}</span>}
+        <SummaryCard
+          label={`${filterLabel === "Egresos" ? "Egresos" : "Ingresos"} · total`}
+          value={<span className="text-pos"><Bal n={totalIncome} privacy={privacy} /></span>}
+          sub={<span className="text-dim">{typeFiltered.filter(t => t.type === "ingreso").length} movimientos</span>}
+        />
+        <SummaryCard
+          label="Egresos · total"
+          value={<span className="text-neg"><Bal n={totalExpense} privacy={privacy} /></span>}
+          sub={<span className="text-dim">{typeFiltered.filter(t => t.type === "egreso").length} movimientos</span>}
+        />
+        <SummaryCard
+          label="Balance neto"
+          value={<span className={totalBalance >= 0 ? "text-pos" : "text-neg"}><Bal n={Math.abs(totalBalance)} privacy={privacy} /></span>}
+          sub={<span className="text-dim">{totalBalance >= 0 ? "Superávit" : "Déficit"}</span>}
         />
       </div>
 
       <div className={cardClass}>
         <div className="flex items-center justify-between mb-3.5 flex-wrap gap-[10px]">
           <div className="text-[14px] font-medium">Movimientos</div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {(["todos", "ingresos", "egresos"] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)} className={[
                 "border-none cursor-pointer px-3 py-[5px] rounded-lg text-[12px] font-medium",
@@ -301,14 +337,14 @@ export function ViewTransacciones({
           <table className="w-full border-collapse min-w-[480px]">
             <thead>
               <tr>
-                <th className={thClass}>Fecha</th>
+                <SortBtn col="fecha"     label="Fecha" />
                 <th className={thClass}>Descripción</th>
-                <th className={thClass}>Categoría</th>
-                <th className={`${thClass} text-right`}>Monto</th>
+                <SortBtn col="categoria" label="Categoría" />
+                <SortBtn col="monto"     label="Monto" right />
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t) => {
+              {sorted.map((t) => {
                 const pos = t.type === "ingreso";
                 return (
                   <tr key={t.id}>
@@ -321,7 +357,7 @@ export function ViewTransacciones({
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {sorted.length === 0 && (
                 <tr>
                   <td colSpan={4} className={`${tdClass} text-dim text-center`}>Sin movimientos</td>
                 </tr>

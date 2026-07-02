@@ -28,3 +28,6 @@ dist-ssr
 .env.local
 src/data/seed.js
 .next/
+
+.claude
+Patrimonio.dc.html
