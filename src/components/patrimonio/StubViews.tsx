@@ -2,33 +2,15 @@ import React from "react";
 import { Asset, Account, Transaction, COP, PCT } from "../../data/mock";
 import { Bal } from "./utils";
 
-const card: React.CSSProperties = {
-  border: "1px solid var(--line)",
-  background: "var(--panel)",
-  borderRadius: 18,
-  padding: 22,
-};
+// ponytail: shared style objects replaced with className strings
+const cardClass = "border border-line bg-panel rounded-[18px] p-[22px]";
 
-const th: React.CSSProperties = {
-  fontSize: 11.5,
-  letterSpacing: "0.04em",
-  textTransform: "uppercase",
-  color: "var(--dim)",
-  fontWeight: 500,
-  textAlign: "left",
-  padding: "0 0 10px",
-};
+const thClass =
+  "text-[11.5px] tracking-[0.04em] uppercase text-dim font-medium text-left pb-[10px]";
 
-const td: React.CSSProperties = {
-  padding: "12px 0",
-  borderTop: "1px solid var(--line)",
-  fontSize: 13.5,
-};
+const tdClass = "py-3 border-t border-line text-[13.5px]";
 
-const mono: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontVariantNumeric: "tabular-nums",
-};
+const monoStyle = { fontFamily: "'IBM Plex Mono', monospace" };
 
 function AssetTable({
   assets,
@@ -41,22 +23,22 @@ function AssetTable({
 }) {
   if (assets.length === 0) {
     return (
-      <div style={{ ...card, color: "var(--muted)", fontSize: 13 }}>
+      <div className={`${cardClass} text-muted text-[13px]`}>
         No hay posiciones registradas.
       </div>
     );
   }
   return (
-    <div style={card}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+    <div className={cardClass}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse min-w-[560px]">
           <thead>
             <tr>
-              <th style={th}>Activo</th>
-              <th style={{ ...th, textAlign: "right" }}>Cantidad</th>
-              <th style={{ ...th, textAlign: "right" }}>Precio</th>
-              <th style={{ ...th, textAlign: "right" }}>Valor</th>
-              <th style={{ ...th, textAlign: "right" }}>P/G</th>
+              <th className={thClass}>Activo</th>
+              <th className={`${thClass} text-right`}>Cantidad</th>
+              <th className={`${thClass} text-right`}>Precio</th>
+              <th className={`${thClass} text-right`}>Valor</th>
+              <th className={`${thClass} text-right`}>P/G</th>
             </tr>
           </thead>
           <tbody>
@@ -67,38 +49,33 @@ function AssetTable({
               const plPct = cost > 0 ? pl / cost : 0;
               const pos   = pl >= 0;
               return (
-                <tr key={a.ticker} onClick={() => onSelect(a.ticker)} style={{ cursor: "pointer" }}>
-                  <td style={td}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <tr key={a.ticker} onClick={() => onSelect(a.ticker)} className="cursor-pointer">
+                  <td className={tdClass}>
+                    <div className="flex items-center gap-[10px]">
                       <span
-                        style={{
-                          width: 30, height: 30, borderRadius: 8,
-                          background: "var(--panel2)", border: "1px solid var(--line)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 11, fontFamily: "'IBM Plex Mono', monospace",
-                          color: "var(--muted)",
-                        }}
+                        className="w-[30px] h-[30px] rounded-lg bg-panel2 border border-line flex items-center justify-center text-[11px] text-muted"
+                        style={monoStyle}
                       >
                         {a.mono}
                       </span>
                       <div>
-                        <div style={{ ...mono, fontSize: 13 }}>{a.ticker}</div>
-                        <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{a.name}</div>
+                        <div className="text-[13px]" style={monoStyle}>{a.ticker}</div>
+                        <div className="text-[11.5px] text-dim">{a.name}</div>
                       </div>
                     </div>
                   </td>
-                  <td style={{ ...td, ...mono, textAlign: "right" }}>
+                  <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
                     {a.qty % 1 === 0 ? a.qty.toLocaleString("es-CO") : a.qty.toFixed(4)}
                   </td>
-                  <td style={{ ...td, ...mono, textAlign: "right" }}>
+                  <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
                     {privacy ? "••••" : COP(a.price)}
                   </td>
-                  <td style={{ ...td, ...mono, textAlign: "right" }}>
+                  <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
                     <Bal n={value} privacy={privacy} />
                   </td>
-                  <td style={{ ...td, ...mono, textAlign: "right", color: pos ? "var(--pos)" : "var(--neg)" }}>
+                  <td className={`${tdClass} text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
                     <div>{PCT(plPct)}</div>
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    <div className="text-[12px] opacity-80">
                       {privacy ? "••••" : `${pos ? "+" : "−"}${COP(Math.abs(pl))}`}
                     </div>
                   </td>
@@ -126,20 +103,20 @@ export function ViewInversiones({
   const totalPL    = totalValue - totalCost;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <SummaryCard label="Valor del portafolio" value={<Bal n={totalValue} privacy={privacy} />} />
         <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
         <SummaryCard
           label="Rendimiento P/G"
           value={
-            <span style={{ color: totalPL >= 0 ? "var(--pos)" : "var(--neg)" }}>
+            <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
               <Bal n={Math.abs(totalPL)} privacy={privacy} />
             </span>
           }
           sub={
             totalCost > 0 ? (
-              <span style={{ color: totalPL >= 0 ? "var(--pos)" : "var(--neg)" }}>
+              <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
                 {PCT(totalPL / totalCost)}
               </span>
             ) : undefined
@@ -165,20 +142,20 @@ export function ViewCripto({
   const totalPL    = totalValue - totalCost;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <SummaryCard label="Valor en cripto" value={<Bal n={totalValue} privacy={privacy} />} />
         <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
         <SummaryCard
           label="Rendimiento P/G"
           value={
-            <span style={{ color: totalPL >= 0 ? "var(--pos)" : "var(--neg)" }}>
+            <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
               <Bal n={Math.abs(totalPL)} privacy={privacy} />
             </span>
           }
           sub={
             totalCost > 0 ? (
-              <span style={{ color: totalPL >= 0 ? "var(--pos)" : "var(--neg)" }}>
+              <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
                 {PCT(totalPL / totalCost)}
               </span>
             ) : undefined
@@ -213,39 +190,38 @@ export function ViewDetalle({
     <div>
       <button
         onClick={onBack}
-        style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 13, marginBottom: 14 }}
+        className="bg-transparent border-none text-muted cursor-pointer text-[13px] mb-3.5"
       >
         ← Volver a {selFrom === "inversiones" ? "Inversiones" : "Cripto"}
       </button>
       {asset ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="flex flex-col gap-3.5">
           {/* Header */}
-          <div style={{ ...card, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <span style={{
-                width: 42, height: 42, borderRadius: 11, background: "var(--panel2)",
-                border: "1px solid var(--line)", display: "flex", alignItems: "center",
-                justifyContent: "center", fontSize: 14, fontFamily: "'IBM Plex Mono', monospace", color: "var(--muted)",
-              }}>
+          <div className={`${cardClass} flex items-center justify-between flex-wrap gap-4`}>
+            <div className="flex items-center gap-[14px]">
+              <span
+                className="w-[42px] h-[42px] rounded-[11px] bg-panel2 border border-line flex items-center justify-center text-[14px] text-muted"
+                style={monoStyle}
+              >
                 {asset.mono}
               </span>
               <div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, fontWeight: 500 }}>{asset.ticker}</div>
-                <div style={{ color: "var(--muted)", fontSize: 13 }}>{asset.name}</div>
+                <div className="text-[15px] font-medium" style={monoStyle}>{asset.ticker}</div>
+                <div className="text-muted text-[13px]">{asset.name}</div>
               </div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: "Spectral, serif", fontSize: 28, fontWeight: 500 }}>
+            <div className="text-right">
+              <div className="text-[28px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
                 {privacy ? "••••••" : COP(asset.price)}
               </div>
-              <div style={{ fontSize: 13, color: asset.dayPct >= 0 ? "var(--pos)" : "var(--neg)" }}>
+              <div className={`text-[13px] ${asset.dayPct >= 0 ? "text-pos" : "text-neg"}`}>
                 {PCT(asset.dayPct)} hoy
               </div>
             </div>
           </div>
 
           {/* Stats grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14 }}>
+          <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
             <SummaryCard label="Cantidad"       value={<>{asset.qty % 1 === 0 ? asset.qty.toLocaleString("es-CO") : asset.qty.toFixed(4)}</>} />
             <SummaryCard label="Precio actual"  value={<Bal n={asset.price} privacy={privacy} />} />
             <SummaryCard label="Costo promedio" value={<Bal n={asset.avg} privacy={privacy} />} />
@@ -253,16 +229,16 @@ export function ViewDetalle({
             <SummaryCard
               label="P/G no realizada"
               value={
-                <span style={{ color: pl >= 0 ? "var(--pos)" : "var(--neg)" }}>
+                <span className={pl >= 0 ? "text-pos" : "text-neg"}>
                   <Bal n={Math.abs(pl)} privacy={privacy} />
                 </span>
               }
-              sub={<span style={{ color: pl >= 0 ? "var(--pos)" : "var(--neg)" }}>{PCT(plPct)}</span>}
+              sub={<span className={pl >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
             />
           </div>
         </div>
       ) : (
-        <div style={{ ...card, color: "var(--muted)" }}>Activo no encontrado.</div>
+        <div className={`${cardClass} text-muted`}>Activo no encontrado.</div>
       )}
     </div>
   );
@@ -290,51 +266,45 @@ export function ViewTransacciones({
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <SummaryCard label={`Ingresos · ${monthLabel}`}
-          value={<span style={{ color: "var(--pos)" }}><Bal n={income} privacy={privacy} /></span>} />
+          value={<span className="text-pos"><Bal n={income} privacy={privacy} /></span>} />
         <SummaryCard label={`Egresos · ${monthLabel}`}
-          value={<span style={{ color: "var(--neg)" }}><Bal n={expense} privacy={privacy} /></span>} />
+          value={<span className="text-neg"><Bal n={expense} privacy={privacy} /></span>} />
         <SummaryCard label="Balance neto"
-          value={<span style={{ color: balance >= 0 ? "var(--pos)" : "var(--neg)" }}><Bal n={Math.abs(balance)} privacy={privacy} /></span>}
-          sub={<span style={{ color: "var(--dim)" }}>{balance >= 0 ? "Superávit" : "Déficit"}</span>}
+          value={<span className={balance >= 0 ? "text-pos" : "text-neg"}><Bal n={Math.abs(balance)} privacy={privacy} /></span>}
+          sub={<span className="text-dim">{balance >= 0 ? "Superávit" : "Déficit"}</span>}
         />
       </div>
 
-      <div style={card}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 500 }}>Movimientos</div>
-          <div style={{ display: "flex", gap: 8 }}>
+      <div className={cardClass}>
+        <div className="flex items-center justify-between mb-3.5 flex-wrap gap-[10px]">
+          <div className="text-[14px] font-medium">Movimientos</div>
+          <div className="flex gap-2">
             {(["todos", "ingresos", "egresos"] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)} style={{
-                border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 8,
-                fontSize: 12, fontWeight: 500,
-                background: filter === f ? "var(--accent)" : "var(--panel2)",
-                color: filter === f ? "var(--accentFg)" : "var(--muted)",
-              }}>
+              <button key={f} onClick={() => setFilter(f)} className={[
+                "border-none cursor-pointer px-3 py-[5px] rounded-lg text-[12px] font-medium",
+                filter === f ? "bg-accent text-accentFg" : "bg-panel2 text-muted",
+              ].join(" ")}>
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
             {onAdd && (
-              <button onClick={onAdd} style={{
-                border: "1px solid var(--line)", cursor: "pointer", padding: "5px 12px",
-                borderRadius: 8, fontSize: 12, fontWeight: 500,
-                background: "var(--panel2)", color: "var(--fg)",
-              }}>
+              <button onClick={onAdd} className="border border-line cursor-pointer px-3 py-[5px] rounded-lg text-[12px] font-medium bg-panel2 text-fg">
                 + Registrar
               </button>
             )}
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse min-w-[480px]">
             <thead>
               <tr>
-                <th style={th}>Fecha</th>
-                <th style={th}>Descripción</th>
-                <th style={th}>Categoría</th>
-                <th style={{ ...th, textAlign: "right" }}>Monto</th>
+                <th className={thClass}>Fecha</th>
+                <th className={thClass}>Descripción</th>
+                <th className={thClass}>Categoría</th>
+                <th className={`${thClass} text-right`}>Monto</th>
               </tr>
             </thead>
             <tbody>
@@ -342,10 +312,10 @@ export function ViewTransacciones({
                 const pos = t.type === "ingreso";
                 return (
                   <tr key={t.id}>
-                    <td style={{ ...td, ...mono, color: "var(--muted)", whiteSpace: "nowrap" }}>{t.dateISO}</td>
-                    <td style={{ ...td, fontWeight: 500 }}>{t.desc}</td>
-                    <td style={{ ...td, color: "var(--muted)" }}>{t.category}</td>
-                    <td style={{ ...td, ...mono, textAlign: "right", color: pos ? "var(--pos)" : "var(--neg)" }}>
+                    <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.dateISO}</td>
+                    <td className={`${tdClass} font-medium`}>{t.desc}</td>
+                    <td className={`${tdClass} text-muted`}>{t.category}</td>
+                    <td className={`${tdClass} text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
                       {privacy ? "••••••" : `${pos ? "+" : "−"}${COP(t.amount)}`}
                     </td>
                   </tr>
@@ -353,7 +323,7 @@ export function ViewTransacciones({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} style={{ ...td, color: "var(--dim)", textAlign: "center" }}>Sin movimientos</td>
+                  <td colSpan={4} className={`${tdClass} text-dim text-center`}>Sin movimientos</td>
                 </tr>
               )}
             </tbody>
@@ -387,30 +357,30 @@ export function ViewCuentas({
   ].filter((p) => p.value > 0);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="flex flex-col gap-3.5">
       {/* Hero */}
-      <div style={{ ...card }}>
-        <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--dim)", fontWeight: 500, marginBottom: 6 }}>
+      <div className={cardClass}>
+        <div className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-1.5">
           Patrimonio total
         </div>
-        <div style={{ fontFamily: "Spectral, serif", fontSize: 38, fontWeight: 500, letterSpacing: "-0.02em", marginBottom: 16 }}>
+        <div className="text-[38px] font-medium tracking-[-0.02em] mb-4" style={{ fontFamily: "Spectral, serif" }}>
           <Bal n={total} privacy={privacy} />
         </div>
 
         {/* Composition bar */}
         {total > 0 && (
           <>
-            <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", gap: 2, marginBottom: 12 }}>
+            <div className="flex h-2 rounded-full overflow-hidden gap-0.5 mb-3">
               {barParts.map((p) => (
-                <div key={p.label} style={{ flex: p.value / total, background: p.color, minWidth: 2 }} />
+                <div key={p.label} className="min-w-[2px]" style={{ flex: p.value / total, background: p.color }} />
               ))}
             </div>
-            <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <div className="flex gap-5 flex-wrap">
               {barParts.map((p) => (
-                <div key={p.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color }} />
-                  <span style={{ color: "var(--muted)" }}>{p.label}</span>
-                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: "var(--fg)" }}>
+                <div key={p.label} className="flex items-center gap-1.5 text-[12px]">
+                  <span className="w-2 h-2 rounded-[2px]" style={{ background: p.color }} />
+                  <span className="text-muted">{p.label}</span>
+                  <span className="text-fg" style={monoStyle}>
                     {privacy ? "••••" : COP(p.value)}
                   </span>
                 </div>
@@ -423,29 +393,28 @@ export function ViewCuentas({
       {/* Account cards */}
       {accounts.length > 0 && (
         <div>
-          <div style={{ fontSize: 11.5, color: "var(--dim)", marginBottom: 10, fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          <div className="text-[11.5px] text-dim mb-[10px] font-medium tracking-[0.04em] uppercase">
             Efectivo y bancos
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+          <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
             {accounts.map((a) => (
-              <div key={a.id} style={card}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                  <span style={{
-                    width: 34, height: 34, borderRadius: 9, background: "var(--panel2)",
-                    border: "1px solid var(--line)", display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: "var(--muted)",
-                  }}>
+              <div key={a.id} className={cardClass}>
+                <div className="flex items-center gap-[10px] mb-3.5">
+                  <span
+                    className="w-[34px] h-[34px] rounded-[9px] bg-panel2 border border-line flex items-center justify-center text-[12px] text-muted"
+                    style={monoStyle}
+                  >
                     {a.mono}
                   </span>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{a.type}</div>
+                    <div className="text-[14px] font-medium">{a.name}</div>
+                    <div className="text-[11.5px] text-dim">{a.type}</div>
                   </div>
                 </div>
-                <div style={{ fontFamily: "Spectral, serif", fontSize: 22, fontWeight: 500 }}>
+                <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
                   <Bal n={a.balance} privacy={privacy} />
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 4 }}>{a.kind}</div>
+                <div className="text-[11.5px] text-dim mt-1">{a.kind}</div>
               </div>
             ))}
           </div>
@@ -458,14 +427,14 @@ export function ViewCuentas({
 // ── Shared sub-components ───────────────────────────────────────────────────
 function SummaryCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <div style={{ ...card, borderRadius: 16, padding: "18px 20px" }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--dim)", fontWeight: 500, marginBottom: 10 }}>
+    <div className="border border-line bg-panel rounded-2xl px-5 py-[18px]">
+      <div className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-2.5">
         {label}
       </div>
-      <div style={{ fontFamily: "Spectral, serif", fontSize: 24, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+      <div className="text-[24px] font-medium tabular-nums" style={{ fontFamily: "Spectral, serif" }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: 12.5, marginTop: 6 }}>{sub}</div>}
+      {sub && <div className="text-[12.5px] mt-1.5">{sub}</div>}
     </div>
   );
 }

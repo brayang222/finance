@@ -16,27 +16,11 @@ import {
   DONUT_COLORS,
 } from "./utils";
 
-const cardBase: React.CSSProperties = {
-  border: "1px solid var(--line)",
-  background: "var(--panel)",
-};
-
-const microLabel: React.CSSProperties = {
-  fontSize: 11,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "var(--dim)",
-  fontWeight: 500,
-};
-
-const kpiValue: React.CSSProperties = {
-  fontFamily: "Spectral, serif",
-  fontSize: 27,
-  fontWeight: 500,
-  fontVariantNumeric: "tabular-nums",
-};
-
-const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 500 };
+// ponytail: shared style objects replaced with className strings; kept as consts for readability
+const cardBase = "border border-line bg-panel";
+const microLabel = "text-[11px] tracking-[0.08em] uppercase text-dim font-medium";
+const kpiValueClass = "text-[27px] font-medium tabular-nums";
+const sectionTitle = "text-[14px] font-medium";
 
 function valueOf(asset: { qty: number; price: number }) {
   return asset.qty * asset.price;
@@ -101,45 +85,26 @@ export default function ViewResumen({
   const monthLabel = new Date().toLocaleDateString("es-CO", { month: "long" });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <div className="flex flex-col gap-[18px]">
       {/* A. Hero + KPI grid */}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
-          gap: 14,
-        }}
+        className="grid gap-3.5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}
       >
         {/* Hero */}
         <div
-          style={{
-            ...cardBase,
-            gridColumn: "1 / -1",
-            borderRadius: 18,
-            padding: 24,
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 20,
-          }}
+          className={`${cardBase} [grid-column:1/-1] rounded-[18px] p-6 flex flex-wrap items-center justify-between gap-5`}
         >
           <div>
-            <div style={{ ...microLabel, letterSpacing: "0.04em" }}>Patrimonio total</div>
+            <div className={`${microLabel} tracking-[0.04em]`}>Patrimonio total</div>
             <div
-              style={{
-                fontFamily: "Spectral, serif",
-                fontSize: "clamp(34px,5vw,52px)",
-                fontWeight: 500,
-                letterSpacing: "-0.02em",
-                lineHeight: 1.05,
-                margin: "6px 0 8px",
-              }}
+              className="font-medium tracking-[-0.02em] leading-[1.05] my-1.5 mb-2"
+              style={{ fontFamily: "Spectral, serif", fontSize: "clamp(34px,5vw,52px)" }}
             >
               <Bal n={total} privacy={privacy} />
             </div>
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>
-              <span style={{ color: "var(--pos)", fontWeight: 500 }}>▲ {PCT(0.084)}</span>
+            <div className="text-[13px] text-muted">
+              <span className="text-pos font-medium">▲ {PCT(0.084)}</span>
               {" · últimos 12 meses"}
             </div>
           </div>
@@ -151,7 +116,7 @@ export default function ViewResumen({
           label="Inversiones · bolsa"
           value={<Bal n={stockValue} privacy={privacy} />}
           sub={
-            <span style={{ color: stockPL >= 0 ? "var(--pos)" : "var(--neg)" }}>
+            <span className={stockPL >= 0 ? "text-pos" : "text-neg"}>
               {stockPL >= 0 ? "↑ " : "↓ "}
               {privacy ? "••••" : COP(Math.abs(stockPL))} P/G sin realizar
             </span>
@@ -161,7 +126,7 @@ export default function ViewResumen({
           label="Cripto"
           value={<Bal n={cryptoValue} privacy={privacy} />}
           sub={
-            <span style={{ color: cryptoPL >= 0 ? "var(--pos)" : "var(--neg)" }}>
+            <span className={cryptoPL >= 0 ? "text-pos" : "text-neg"}>
               {cryptoPL >= 0 ? "↑ " : "↓ "}
               {privacy ? "••••" : COP(Math.abs(cryptoPL))} P/G sin realizar
             </span>
@@ -170,22 +135,22 @@ export default function ViewResumen({
         <KpiCard
           label="Efectivo y bancos"
           value={<Bal n={cash} privacy={privacy} />}
-          sub={<span style={{ color: "var(--dim)" }}>{accounts.length} cuenta{accounts.length !== 1 ? "s" : ""}</span>}
+          sub={<span className="text-dim">{accounts.length} cuenta{accounts.length !== 1 ? "s" : ""}</span>}
         />
         <KpiCard
           label={`Ingresos · ${monthLabel}`}
-          value={<span style={{ color: "var(--pos)" }}><Bal n={income} privacy={privacy} /></span>}
+          value={<span className="text-pos"><Bal n={income} privacy={privacy} /></span>}
           sub={
-            <span style={{ color: "var(--dim)" }}>
+            <span className="text-dim">
               Balance {privacy ? "••••" : COP(monthBalance)}
             </span>
           }
         />
         <KpiCard
           label={`Egresos · ${monthLabel}`}
-          value={<span style={{ color: "var(--neg)" }}><Bal n={expense} privacy={privacy} /></span>}
+          value={<span className="text-neg"><Bal n={expense} privacy={privacy} /></span>}
           sub={
-            <span style={{ color: "var(--dim)" }}>
+            <span className="text-dim">
               {monthTx.filter((t) => t.type === "egreso").length} movimientos
             </span>
           }
@@ -193,20 +158,11 @@ export default function ViewResumen({
       </div>
 
       {/* B. Net worth chart */}
-      <div style={{ ...cardBase, borderRadius: 18, padding: 24 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 12,
-            marginBottom: 8,
-          }}
-        >
+      <div className={`${cardBase} rounded-[18px] p-6`}>
+        <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
           <div>
-            <div style={sectionTitle}>Evolución del patrimonio</div>
-            <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
+            <div className={sectionTitle}>Evolución del patrimonio</div>
+            <div className="text-[12.5px] text-muted mt-0.5">
               Valor neto consolidado
             </div>
           </div>
@@ -217,34 +173,25 @@ export default function ViewResumen({
 
       {/* C. Donut + bars */}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-          gap: 14,
-        }}
+        className="grid gap-3.5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}
       >
         <PortfolioDonut privacy={privacy} total={stockValue + cryptoValue} holdings={holdings} cryptoAssets={cryptoAssets} />
         <IncomeExpenseBars privacy={privacy} transactions={transactions} />
       </div>
 
       {/* D. Recent transactions */}
-      <div style={{ ...cardBase, borderRadius: 18, padding: 22 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div style={sectionTitle}>Movimientos recientes</div>
+      <div className={`${cardBase} rounded-[18px] p-[22px]`}>
+        <div className="flex items-center justify-between mb-3.5">
+          <div className={sectionTitle}>Movimientos recientes</div>
           <button
             onClick={() => onNav("transacciones")}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--muted)",
-              cursor: "pointer",
-              fontSize: 13,
-            }}
+            className="bg-transparent border-none text-muted cursor-pointer text-[13px]"
           >
             Ver todas →
           </button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div className="flex flex-col">
           {transactions.slice(0, 6).map((t, i) => (
             <TxRow key={t.id} tx={t} privacy={privacy} first={i === 0} />
           ))}
@@ -264,10 +211,10 @@ function KpiCard({
   sub: React.ReactNode;
 }) {
   return (
-    <div style={{ ...cardBase, borderRadius: 16, padding: "18px 20px" }}>
-      <div style={{ ...microLabel, marginBottom: 10 }}>{label}</div>
-      <div style={kpiValue}>{value}</div>
-      <div style={{ fontSize: 12.5, marginTop: 6 }}>{sub}</div>
+    <div className="border border-line bg-panel rounded-2xl px-5 py-[18px]">
+      <div className={`${microLabel} mb-2.5`}>{label}</div>
+      <div className={kpiValueClass} style={{ fontFamily: "Spectral, serif" }}>{value}</div>
+      <div className="text-[12.5px] mt-1.5">{sub}</div>
     </div>
   );
 }
@@ -282,21 +229,15 @@ function Segmented({
   onChange: (v: string) => void;
 }) {
   return (
-    <div style={{ display: "flex", background: "var(--panel2)", borderRadius: 10, padding: 3, gap: 2 }}>
+    <div className="flex bg-panel2 rounded-[10px] p-[3px] gap-0.5">
       {options.map((o) => (
         <button
           key={o}
           onClick={() => onChange(o)}
-          style={{
-            border: "none",
-            cursor: "pointer",
-            padding: "5px 11px",
-            borderRadius: 7,
-            fontSize: 12,
-            fontWeight: 500,
-            background: value === o ? "var(--accent)" : "transparent",
-            color: value === o ? "var(--accentFg)" : "var(--muted)",
-          }}
+          className={[
+            "border-none cursor-pointer px-[11px] py-[5px] rounded-[7px] text-[12px] font-medium",
+            value === o ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+          ].join(" ")}
         >
           {o}
         </button>
@@ -403,10 +344,10 @@ function PortfolioDonut({ privacy, total, holdings, cryptoAssets }: { privacy: b
     .slice(0, 7);
 
   return (
-    <div style={{ ...cardBase, borderRadius: 18, padding: 22 }}>
-      <div style={{ ...sectionTitle, marginBottom: 16 }}>Asignación del portafolio</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
-        <div style={{ position: "relative", width: 150, height: 150, flexShrink: 0 }}>
+    <div className="border border-line bg-panel rounded-[18px] p-[22px]">
+      <div className={`${sectionTitle} mb-4`}>Asignación del portafolio</div>
+      <div className="flex items-center gap-[22px] flex-wrap">
+        <div className="relative w-[150px] h-[150px] shrink-0">
           <svg width={150} height={150} viewBox="0 0 150 150">
             <circle cx={75} cy={75} r={R} fill="none" stroke="var(--line)" strokeWidth={16} />
             {segs.map((s) => (
@@ -424,35 +365,19 @@ function PortfolioDonut({ privacy, total, holdings, cryptoAssets }: { privacy: b
               />
             ))}
           </svg>
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <div style={{ fontSize: 11, color: "var(--dim)" }}>Total</div>
-            <div style={{ fontFamily: "Spectral, serif", fontSize: 17, fontWeight: 500 }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="text-[11px] text-dim">Total</div>
+            <div className="text-[17px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
               {privacy ? "••••" : COPSHORT(total)}
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0, flex: 1 }}>
+        <div className="flex flex-col gap-1.5 min-w-0 flex-1">
           {segs.map((s) => (
-            <div key={s.ticker} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color, flexShrink: 0 }} />
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }}>{s.ticker}</span>
-              <span
-                style={{
-                  marginLeft: "auto",
-                  fontSize: 12,
-                  color: "var(--muted)",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
+            <div key={s.ticker} className="flex items-center gap-2">
+              <span className="w-[9px] h-[9px] rounded-[3px] shrink-0" style={{ background: s.color }} />
+              <span className="text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{s.ticker}</span>
+              <span className="ml-auto text-[12px] text-muted tabular-nums">
                 {(s.pct * 100).toFixed(1)}%
               </span>
             </div>
@@ -488,47 +413,37 @@ function IncomeExpenseBars({
   const maxV = Math.max(...data.flatMap((d) => [d.inc, d.exp]), 1);
 
   return (
-    <div style={{ ...cardBase, borderRadius: 18, padding: 22 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={sectionTitle}>Ingresos vs. egresos</div>
-        <div style={{ display: "flex", gap: 14, fontSize: 12, color: "var(--muted)" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--pos)" }} /> Ingresos
+    <div className="border border-line bg-panel rounded-[18px] p-[22px]">
+      <div className="flex items-center justify-between mb-4">
+        <div className={sectionTitle}>Ingresos vs. egresos</div>
+        <div className="flex gap-3.5 text-[12px] text-muted">
+          <span className="flex items-center gap-[5px]">
+            <span className="w-2 h-2 rounded-[2px] bg-pos" /> Ingresos
           </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--neg)" }} /> Egresos
+          <span className="flex items-center gap-[5px]">
+            <span className="w-2 h-2 rounded-[2px] bg-neg" /> Egresos
           </span>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", height: 150, gap: 14 }}>
+      <div className="flex items-end justify-between h-[150px] gap-3.5">
         {data.map((d) => (
-          <div key={d.m} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 130, width: "100%", justifyContent: "center" }}>
+          <div key={d.m} className="flex-1 flex flex-col items-center gap-1.5">
+            <div className="flex items-end gap-1 h-[130px] w-full justify-center">
               <div
-                style={{
-                  width: "42%",
-                  maxWidth: 22,
-                  height: `${(d.inc / maxV) * 100}%`,
-                  background: "var(--pos)",
-                  borderRadius: "3px 3px 0 0",
-                }}
+                className="w-[42%] max-w-[22px] bg-pos rounded-t-[3px]"
+                style={{ height: `${(d.inc / maxV) * 100}%` }}
               />
               <div
-                style={{
-                  width: "42%",
-                  maxWidth: 22,
-                  height: `${(d.exp / maxV) * 100}%`,
-                  background: "var(--neg)",
-                  borderRadius: "3px 3px 0 0",
-                }}
+                className="w-[42%] max-w-[22px] bg-neg rounded-t-[3px]"
+                style={{ height: `${(d.exp / maxV) * 100}%` }}
               />
             </div>
-            <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono', monospace" }}>{d.m}</div>
+            <div className="text-[11px] text-dim" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{d.m}</div>
           </div>
         ))}
       </div>
       {privacy && (
-        <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 6, textAlign: "center" }}>Valores ocultos</div>
+        <div className="text-[11.5px] text-dim mt-1.5 text-center">Valores ocultos</div>
       )}
     </div>
   );
@@ -540,53 +455,27 @@ function TxRow({ tx, privacy, first }: { tx: Transaction; privacy: boolean; firs
   const dateLabel = d.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "11px 0",
-        borderTop: first ? "none" : "1px solid var(--line)",
-      }}
+      className={`flex items-center gap-3 py-[11px] ${first ? "" : "border-t border-line"}`}
     >
       <div
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 9,
-          background: "var(--panel2)",
-          border: "1px solid var(--line)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: pos ? "var(--pos)" : "var(--neg)",
-          flexShrink: 0,
-          fontSize: 15,
-        }}
+        className={`w-[34px] h-[34px] rounded-[9px] bg-panel2 border border-line flex items-center justify-center shrink-0 text-[15px] ${pos ? "text-pos" : "text-neg"}`}
       >
         {pos ? "↓" : "↑"}
       </div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13.5px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
           {tx.desc}
         </div>
-        <div style={{ fontSize: 12, color: "var(--dim)" }}>
+        <div className="text-[12px] text-dim">
           {tx.category} · {tx.account}
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--dim)", whiteSpace: "nowrap", fontFamily: "'IBM Plex Mono', monospace" }}>
+      <div className="text-[12px] text-dim whitespace-nowrap" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
         {dateLabel}
       </div>
       <div
-        style={{
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontVariantNumeric: "tabular-nums",
-          fontSize: 13,
-          fontWeight: 500,
-          color: pos ? "var(--pos)" : "var(--neg)",
-          whiteSpace: "nowrap",
-          minWidth: 90,
-          textAlign: "right",
-        }}
+        className={`tabular-nums text-[13px] font-medium whitespace-nowrap min-w-[90px] text-right ${pos ? "text-pos" : "text-neg"}`}
+        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
       >
         {privacy ? "••••••" : `${pos ? "+" : "−"}${COP(tx.amount)}`}
       </div>

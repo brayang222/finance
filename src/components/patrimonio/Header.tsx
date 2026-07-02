@@ -1,18 +1,8 @@
 import React from "react";
 import { IconEye, IconEyeOff, IconSun, IconMoon } from "./utils";
 
-const iconBtn: React.CSSProperties = {
-  width: 38,
-  height: 38,
-  border: "1px solid var(--line)",
-  background: "var(--panel)",
-  borderRadius: 10,
-  color: "var(--muted)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-};
+const iconBtnClass =
+  "w-[38px] h-[38px] border border-line bg-panel rounded-[10px] text-muted flex items-center justify-center cursor-pointer";
 
 export default function Header({
   pageTitle,
@@ -33,62 +23,34 @@ export default function Header({
 }) {
   return (
     <header
+      className="sticky top-0 z-[5] border-b border-line"
       style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 5,
         backdropFilter: "blur(10px)",
         WebkitBackdropFilter: "blur(10px)",
         background: "color-mix(in srgb, var(--bg) 82%, transparent)",
-        borderBottom: "1px solid var(--line)",
       }}
     >
-      <div
-        style={{
-          maxWidth: 1180,
-          margin: "0 auto",
-          padding: "16px 28px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
+      <div className="max-w-[1180px] mx-auto px-7 py-4 flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1
-            style={{
-              fontFamily: "Spectral, serif",
-              fontSize: 22,
-              fontWeight: 500,
-              margin: 0,
-              letterSpacing: "-0.01em",
-            }}
+            className="text-[22px] font-medium m-0 tracking-[-0.01em]"
+            style={{ fontFamily: "Spectral, serif" }}
           >
             {pageTitle}
           </h1>
-          <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 2 }}>{pageSub}</div>
+          <div className="text-[12.5px] text-dim mt-0.5">{pageSub}</div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button style={iconBtn} onClick={onTogglePrivacy} aria-label="Privacidad" title="Privacidad">
+        <div className="flex items-center gap-2">
+          <button className={iconBtnClass} onClick={onTogglePrivacy} aria-label="Privacidad" title="Privacidad">
             {privacy ? <IconEyeOff /> : <IconEye />}
           </button>
-          <button style={iconBtn} onClick={onToggleTheme} aria-label="Tema" title="Tema">
+          <button className={iconBtnClass} onClick={onToggleTheme} aria-label="Tema" title="Tema">
             {theme === "dark" ? <IconSun /> : <IconMoon />}
           </button>
           <button
             onClick={onOpenModal}
-            style={{
-              height: 38,
-              padding: "0 15px",
-              borderRadius: 10,
-              border: "none",
-              cursor: "pointer",
-              background: "var(--accent)",
-              color: "var(--accentFg)",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
+            className="h-[38px] px-[15px] rounded-[10px] border-none cursor-pointer bg-accent text-accentFg text-[13px] font-medium"
           >
             Registrar
           </button>

@@ -36,95 +36,39 @@ export default function Sidebar({
   user?: { name?: string | null; email?: string | null } | null;
 }) {
   return (
-    <aside
-      style={{
-        width: 250,
-        flexShrink: 0,
-        position: "sticky",
-        top: 0,
-        height: "100vh",
-        borderRight: "1px solid var(--line)",
-        background: "var(--panel)",
-        display: "flex",
-        flexDirection: "column",
-        padding: "18px 16px",
-      }}
-    >
+    <aside className="w-[250px] shrink-0 sticky top-0 h-screen border-r border-line bg-panel flex flex-col px-4 py-[18px]">
       {/* Brand */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px 20px" }}>
+      <div className="flex items-center gap-[10px] px-[6px] pt-1 pb-5">
         <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            background: "var(--accent)",
-            color: "var(--accentFg)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 600,
-            fontSize: 15,
-            fontFamily: "Spectral, serif",
-          }}
+          className="w-[30px] h-[30px] rounded-lg bg-accent text-accentFg flex items-center justify-center font-semibold text-[15px]"
+          style={{ fontFamily: "Spectral, serif" }}
         >
           P
         </div>
-        <span style={{ fontFamily: "Spectral, serif", fontSize: 18, fontWeight: 500, letterSpacing: "-0.01em" }}>
+        <span style={{ fontFamily: "Spectral, serif" }} className="text-[18px] font-medium tracking-[-0.01em]">
           Patrimonio
         </span>
       </div>
 
       {/* Nav */}
-      <div
-        style={{
-          fontSize: 11,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: "var(--dim)",
-          padding: "0 8px 8px",
-          fontWeight: 500,
-        }}
-      >
+      <div className="text-[11px] tracking-[0.08em] uppercase text-dim px-2 pb-2 font-medium">
         General
       </div>
 
-      <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <nav className="flex flex-col gap-0.5">
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
           const active = view === id || (id === "inversiones" && view === "detalle");
           return (
             <button
               key={id}
               onClick={() => onNav(id)}
-              style={{
-                position: "relative",
-                display: "flex",
-                alignItems: "center",
-                gap: 11,
-                width: "100%",
-                padding: "9px 10px",
-                border: "none",
-                cursor: "pointer",
-                borderRadius: 10,
-                textAlign: "left",
-                fontSize: 13.5,
-                fontWeight: active ? 500 : 400,
-                background: active ? "var(--panel2)" : "transparent",
-                color: active ? "var(--fg)" : "var(--muted)",
-              }}
+              className={[
+                "relative flex items-center gap-[11px] w-full py-[9px] px-[10px] border-none cursor-pointer rounded-[10px] text-left text-[13.5px]",
+                active ? "font-medium bg-panel2 text-fg" : "font-normal bg-transparent text-muted",
+              ].join(" ")}
             >
               {active && (
-                <span
-                  style={{
-                    position: "absolute",
-                    left: -16,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 2.5,
-                    height: 20,
-                    borderRadius: 2,
-                    background: "var(--accent)",
-                  }}
-                />
+                <span className="absolute left-[-16px] top-1/2 -translate-y-1/2 w-[2.5px] h-5 rounded-[2px] bg-accent" />
               )}
               <Icon size={18} />
               {label}
@@ -134,38 +78,15 @@ export default function Sidebar({
       </nav>
 
       {/* User */}
-      <div
-        style={{
-          marginTop: "auto",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "12px 8px 4px",
-          borderTop: "1px solid var(--line)",
-        }}
-      >
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 10,
-            background: "var(--panel2)",
-            border: "1px solid var(--line)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12.5,
-            fontWeight: 600,
-            color: "var(--muted)",
-          }}
-        >
+      <div className="mt-auto flex items-center gap-[10px] px-2 pt-3 pb-1 border-t border-line">
+        <div className="w-[34px] h-[34px] rounded-[10px] bg-panel2 border border-line flex items-center justify-center text-[12.5px] font-semibold text-muted">
           {initials(user?.name)}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
             {user?.name || "Usuario"}
           </div>
-          <div style={{ fontSize: 11.5, color: "var(--dim)" }}>Cuenta personal</div>
+          <div className="text-[11.5px] text-dim">Cuenta personal</div>
         </div>
       </div>
     </aside>

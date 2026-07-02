@@ -178,10 +178,10 @@ export default function Layout({
   };
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg)" }}>
+    <div className="flex min-h-screen bg-bg">
       {!isMobile && <Sidebar view={view} onNav={setView} user={user} />}
 
-      <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      <main className="flex-1 min-w-0 flex flex-col">
         <Header
           pageTitle={meta.title}
           pageSub={meta.sub}
@@ -193,12 +193,8 @@ export default function Layout({
         />
 
         <div
-          style={{
-            padding: isMobile ? "22px 16px 90px" : "26px 28px 40px",
-            maxWidth: 1180,
-            margin: "0 auto",
-            width: "100%",
-          }}
+          className="max-w-[1180px] mx-auto w-full"
+          style={{ padding: isMobile ? "22px 16px 90px" : "26px 28px 40px" }}
         >
           {view === "resumen" && (
             <ViewResumen

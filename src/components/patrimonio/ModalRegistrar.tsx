@@ -1,27 +1,11 @@
 import React, { useState } from "react";
 import { ACCOUNTS, CATEGORIES, Transaction, TxType, today } from "../../data/mock";
 
-const fieldStyle: React.CSSProperties = {
-  width: "100%",
-  height: 42,
-  padding: "0 12px",
-  borderRadius: 12,
-  border: "1px solid var(--line)",
-  background: "var(--panel2)",
-  color: "var(--fg)",
-  fontSize: 14,
-  outline: "none",
-};
+const fieldClass =
+  "w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none";
 
-const labelStyle: React.CSSProperties = {
-  fontSize: 11,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "var(--dim)",
-  fontWeight: 500,
-  marginBottom: 6,
-  display: "block",
-};
+const labelClass =
+  "text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-1.5 block";
 
 export default function ModalRegistrar({
   initialType,
@@ -50,37 +34,31 @@ export default function ModalRegistrar({
   return (
     <div
       onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
         background: "rgba(0,0,0,0.55)",
         backdropFilter: "blur(5px)",
         WebkitBackdropFilter: "blur(5px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="bg-panel rounded-[20px] p-6 border border-line"
         style={{
           width: "min(460px, 94vw)",
-          background: "var(--panel)",
-          borderRadius: 20,
-          padding: 24,
-          border: "1px solid var(--line)",
           boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-          <h2 style={{ fontFamily: "Spectral, serif", fontSize: 20, fontWeight: 500, margin: 0 }}>
+        <div className="flex items-center justify-between mb-[18px]">
+          <h2
+            className="text-[20px] font-medium m-0"
+            style={{ fontFamily: "Spectral, serif" }}
+          >
             Registrar movimiento
           </h2>
           <button
             onClick={onClose}
-            style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 20, lineHeight: 1 }}
+            className="bg-transparent border-none text-muted cursor-pointer text-[20px] leading-none"
             aria-label="Cerrar"
           >
             ×
@@ -88,50 +66,28 @@ export default function ModalRegistrar({
         </div>
 
         {/* Type toggle */}
-        <div
-          style={{
-            display: "flex",
-            background: "var(--panel2)",
-            borderRadius: 12,
-            padding: 3,
-            marginBottom: 16,
-          }}
-        >
+        <div className="flex bg-panel2 rounded-xl p-[3px] mb-4">
           {(["ingreso", "egreso"] as TxType[]).map((t) => (
             <button
               key={t}
               onClick={() => switchType(t)}
-              style={{
-                flex: 1,
-                height: 34,
-                borderRadius: 9,
-                border: "none",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 500,
-                textTransform: "capitalize",
-                background: type === t ? "var(--accent)" : "transparent",
-                color: type === t ? "var(--accentFg)" : "var(--muted)",
-              }}
+              className={[
+                "flex-1 h-[34px] rounded-[9px] border-none cursor-pointer text-[13px] font-medium capitalize",
+                type === t ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+              ].join(" ")}
             >
               {t}
             </button>
           ))}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="flex flex-col gap-3.5">
           <div>
-            <label style={labelStyle}>Monto</label>
-            <div style={{ position: "relative" }}>
+            <label className={labelClass}>Monto</label>
+            <div className="relative">
               <span
-                style={{
-                  position: "absolute",
-                  left: 12,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "var(--dim)",
-                  fontFamily: "'IBM Plex Mono', monospace",
-                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-dim"
+                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               >
                 $
               </span>
@@ -143,30 +99,26 @@ export default function ModalRegistrar({
                   setAmount(digits ? Number(digits).toLocaleString("es-CO") : "");
                 }}
                 placeholder="0"
-                style={{
-                  ...fieldStyle,
-                  paddingLeft: 26,
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontVariantNumeric: "tabular-nums",
-                }}
+                className={`${fieldClass} pl-[26px] tabular-nums`}
+                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               />
             </div>
           </div>
 
           <div>
-            <label style={labelStyle}>Descripción</label>
+            <label className={labelClass}>Descripción</label>
             <input
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               placeholder="Ej. Salario, Mercado…"
-              style={fieldStyle}
+              className={fieldClass}
             />
           </div>
 
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Categoría</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={fieldStyle}>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className={labelClass}>Categoría</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={fieldClass}>
                 {CATEGORIES[type].map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -174,9 +126,9 @@ export default function ModalRegistrar({
                 ))}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Cuenta</label>
-              <select value={account} onChange={(e) => setAccount(e.target.value)} style={fieldStyle}>
+            <div className="flex-1">
+              <label className={labelClass}>Cuenta</label>
+              <select value={account} onChange={(e) => setAccount(e.target.value)} className={fieldClass}>
                 {ACCOUNTS.map((a) => (
                   <option key={a.id} value={a.name}>
                     {a.name}
@@ -187,25 +139,15 @@ export default function ModalRegistrar({
           </div>
 
           <div>
-            <label style={labelStyle}>Fecha</label>
-            <input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} style={fieldStyle} />
+            <label className={labelClass}>Fecha</label>
+            <input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className={fieldClass} />
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+        <div className="flex gap-2.5 mt-[22px]">
           <button
             onClick={onClose}
-            style={{
-              flex: 1,
-              height: 42,
-              borderRadius: 12,
-              border: "1px solid var(--line)",
-              background: "var(--panel)",
-              color: "var(--fg)",
-              cursor: "pointer",
-              fontSize: 13.5,
-              fontWeight: 500,
-            }}
+            className="flex-1 h-[42px] rounded-xl border border-line bg-panel text-fg cursor-pointer text-[13.5px] font-medium"
           >
             Cancelar
           </button>
@@ -214,18 +156,10 @@ export default function ModalRegistrar({
             onClick={() =>
               onSave({ type, amount: monto, desc: desc.trim(), category, account, dateISO })
             }
-            style={{
-              flex: 1,
-              height: 42,
-              borderRadius: 12,
-              border: "none",
-              background: "var(--accent)",
-              color: "var(--accentFg)",
-              cursor: canSave ? "pointer" : "not-allowed",
-              opacity: canSave ? 1 : 0.45,
-              fontSize: 13.5,
-              fontWeight: 500,
-            }}
+            className={[
+              "flex-1 h-[42px] rounded-xl border-none bg-accent text-accentFg text-[13.5px] font-medium",
+              canSave ? "cursor-pointer opacity-100" : "cursor-not-allowed opacity-[0.45]",
+            ].join(" ")}
           >
             Guardar
           </button>
