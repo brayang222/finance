@@ -9,6 +9,7 @@ export default function Header({
   pageSub,
   privacy,
   theme,
+  showRegistrar = true,
   onTogglePrivacy,
   onToggleTheme,
   onOpenModal,
@@ -17,6 +18,7 @@ export default function Header({
   pageSub: string;
   privacy: boolean;
   theme: "dark" | "light";
+  showRegistrar?: boolean;
   onTogglePrivacy: () => void;
   onToggleTheme: () => void;
   onOpenModal: () => void;
@@ -48,12 +50,14 @@ export default function Header({
           <button className={iconBtnClass} onClick={onToggleTheme} aria-label="Tema" title="Tema">
             {theme === "dark" ? <IconSun /> : <IconMoon />}
           </button>
-          <button
-            onClick={onOpenModal}
-            className="h-[38px] px-[15px] rounded-[10px] border-none cursor-pointer bg-accent text-accentFg text-[13px] font-medium"
-          >
-            Registrar
-          </button>
+          {showRegistrar && (
+            <button
+              onClick={onOpenModal}
+              className="h-[38px] px-[15px] rounded-[10px] border-none cursor-pointer bg-accent text-accentFg text-[13px] font-medium"
+            >
+              Registrar
+            </button>
+          )}
         </div>
       </div>
     </header>

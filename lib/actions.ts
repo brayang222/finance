@@ -44,6 +44,23 @@ export async function loadAll() {
   return { stocks, crypto, finances: typedFinances, hys: hysData, prices: pricesMap, targets: targetsMap, cash: typedCash, config: config ? { theme: config.theme as "dark" | "light" } : null };
 }
 
+// ── ADD SINGLE ENTRIES ──
+export async function addFinance(item: Omit<Finance, "id">) {
+  const userId = await getUserId();
+  await prisma.finance.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+}
+
+export async function addStock(item: Omit<Stock, "id">) {
+  const userId = await getUserId();
+  const { source, ...rest } = item;
+  await prisma.stock.create({ data: { ...rest, id: crypto.randomUUID(), userId } });
+}
+
+export async function addCrypto(item: Omit<Crypto, "id">) {
+  const userId = await getUserId();
+  await prisma.crypto.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+}
+
 // ── STOCKS ──
 export async function saveStocks(items: Stock[]) {
   const userId = await getUserId();

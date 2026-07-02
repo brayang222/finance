@@ -1,0 +1,98 @@
+"use client";
+
+import React from "react";
+
+export const fieldClass =
+  "w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none";
+export const labelClass =
+  "text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-1.5 block";
+
+/** Backdrop + card. Card uses inline var(--panel) so the backdrop's blur/filter
+ *  context can't leave it transparent. */
+export default function ModalShell({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 flex items-center justify-center p-4"
+      style={{
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(5px)",
+        WebkitBackdropFilter: "blur(5px)",
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-[20px] p-6"
+        style={{
+          position: "relative",
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          width: "min(480px, 94vw)",
+          boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+          zIndex: 51,
+        }}
+      >
+        <div className="flex items-center justify-between mb-[18px]">
+          <h2 className="text-[20px] font-medium m-0" style={{ fontFamily: "Spectral, serif" }}>
+            {title}
+          </h2>
+          <button
+            onClick={onClose}
+            className="bg-transparent border-none text-muted cursor-pointer text-[20px] leading-none"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3.5">{children}</div>
+
+        <div className="flex gap-2.5 mt-[22px]">{footer}</div>
+      </div>
+    </div>
+  );
+}
+
+export function CancelSave({
+  onClose,
+  onSave,
+  canSave,
+  saving,
+}: {
+  onClose: () => void;
+  onSave: () => void;
+  canSave: boolean;
+  saving?: boolean;
+}) {
+  return (
+    <>
+      <button
+        onClick={onClose}
+        className="flex-1 h-[42px] rounded-xl border border-line bg-panel text-fg cursor-pointer text-[13.5px] font-medium"
+      >
+        Cancelar
+      </button>
+      <button
+        disabled={!canSave || saving}
+        onClick={onSave}
+        className={[
+          "flex-1 h-[42px] rounded-xl border-none bg-accent text-accentFg text-[13.5px] font-medium",
+          canSave && !saving ? "cursor-pointer opacity-100" : "cursor-not-allowed opacity-[0.45]",
+        ].join(" ")}
+      >
+        {saving ? "Guardando…" : "Guardar"}
+      </button>
+    </>
+  );
+}

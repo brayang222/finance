@@ -1,20 +1,24 @@
+"use client";
+
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Asset,
-  Account,
   Transaction,
   COP,
   COPSHORT,
   PCT,
 } from "../../data/mock";
+import type { AllData } from "../../types";
 import {
-  View,
   Bal,
   catmullRomPath,
   areaPath,
   scalePoints,
   DONUT_COLORS,
 } from "./utils";
+import { usePrivacy } from "./PrivacyContext";
+import { toAssets, toTransactions, toAccounts } from "./transforms";
 
 // ponytail: shared style objects replaced with className strings; kept as consts for readability
 const cardBase = "border border-line bg-panel";
@@ -31,21 +35,14 @@ function costOf(asset: { qty: number; avg: number }) {
 
 const MONTHS = ["Jul", "Ago", "Sep", "Oct", "Nov", "Dic", "Ene", "Feb", "Mar", "Abr", "May", "Jun"];
 
-export default function ViewResumen({
-  privacy,
-  onNav,
-  transactions,
-  holdings,
-  cryptoAssets,
-  accounts,
-}: {
-  privacy: boolean;
-  onNav: (v: View) => void;
-  transactions: Transaction[];
-  holdings: Asset[];
-  cryptoAssets: Asset[];
-  accounts: Account[];
-}) {
+export default function ViewResumen({ initialData }: { initialData: AllData }) {
+  const privacy = usePrivacy();
+  const router = useRouter();
+  const onNav = (v: string) => router.push(`/${v}`);
+  const transactions = toTransactions(initialData.finances);
+  const holdings = toAssets(initialData.stocks, initialData.prices);
+  const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
+  const accounts = toAccounts(initialData);
   const [range, setRange] = useState<"1M" | "6M" | "1A" | "Todo">("1A");
 
   const stockValue = holdings.reduce((s, h) => s + valueOf(h), 0);

@@ -1,6 +1,12 @@
+"use client";
+
 import React from "react";
-import { Asset, Account, Transaction, COP, PCT } from "../../data/mock";
+import { useRouter } from "next/navigation";
+import { Asset, Account, COP, PCT, today } from "../../data/mock";
+import type { AllData } from "../../types";
 import { Bal } from "./utils";
+import { usePrivacy } from "./PrivacyContext";
+import { toAssets, toTransactions, toAccounts } from "./transforms";
 
 // ponytail: shared style objects replaced with className strings
 const cardClass = "border border-line bg-panel rounded-[18px] p-[22px]";
@@ -89,15 +95,11 @@ function AssetTable({
   );
 }
 
-export function ViewInversiones({
-  privacy,
-  assets,
-  onSelect,
-}: {
-  privacy: boolean;
-  assets: Asset[];
-  onSelect: (t: string) => void;
-}) {
+export function ViewInversiones({ initialData }: { initialData: AllData }) {
+  const privacy = usePrivacy();
+  const router = useRouter();
+  const assets = toAssets(initialData.stocks, initialData.prices);
+  const onSelect = (t: string) => router.push(`/detalle/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
@@ -128,15 +130,11 @@ export function ViewInversiones({
   );
 }
 
-export function ViewCripto({
-  privacy,
-  assets,
-  onSelect,
-}: {
-  privacy: boolean;
-  assets: Asset[];
-  onSelect: (t: string) => void;
-}) {
+export function ViewCripto({ initialData }: { initialData: AllData }) {
+  const privacy = usePrivacy();
+  const router = useRouter();
+  const assets = toAssets(initialData.crypto, initialData.prices);
+  const onSelect = (t: string) => router.push(`/detalle/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
@@ -167,21 +165,15 @@ export function ViewCripto({
   );
 }
 
-export function ViewDetalle({
-  privacy,
-  selected,
-  selFrom,
-  holdings,
-  cryptoAssets,
-  onBack,
-}: {
-  privacy: boolean;
-  selected: string;
-  selFrom: "inversiones" | "cripto";
-  holdings: Asset[];
-  cryptoAssets: Asset[];
-  onBack: () => void;
-}) {
+export function ViewDetalle({ initialData, ticker }: { initialData: AllData; ticker: string }) {
+  const privacy = usePrivacy();
+  const router = useRouter();
+  const holdings = toAssets(initialData.stocks, initialData.prices);
+  const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
+  const selected = ticker.toUpperCase();
+  const isCrypto = cryptoAssets.some((a) => a.ticker === selected);
+  const selFrom: "inversiones" | "cripto" = isCrypto ? "cripto" : "inversiones";
+  const onBack = () => router.push(isCrypto ? "/cripto" : "/inversiones");
   const asset = [...holdings, ...cryptoAssets].find((a) => a.ticker === selected);
   const pl = asset ? asset.qty * asset.price - asset.qty * asset.avg : 0;
   const plPct = asset && asset.avg > 0 ? pl / (asset.qty * asset.avg) : 0;
@@ -247,24 +239,23 @@ export function ViewDetalle({
 type SortCol = "fecha" | "categoria" | "cuenta" | "monto";
 type SortDir = "asc" | "desc";
 
-export function ViewTransacciones({
-  privacy,
-  transactions,
-  onAdd,
-}: {
-  privacy: boolean;
-  transactions: Transaction[];
-  onAdd?: () => void;
-}) {
+export function ViewTransacciones({ initialData }: { initialData: AllData }) {
+  const privacy = usePrivacy();
+  const transactions = toTransactions(initialData.finances);
+
+  const yearStart = `${new Date().getFullYear()}-01-01`;
+  const [from, setFrom] = React.useState(yearStart);
+  const [to, setTo]     = React.useState(today());
   const [filter, setFilter] = React.useState<"todos" | "ingresos" | "egresos">("todos");
   const [sort, setSort]     = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
 
-  // KPIs: totals of the type-filtered set (all time)
-  const typeFiltered = transactions.filter((t) =>
+  // Date-range + type filter. KPIs reflect the date-filtered set.
+  const dateFiltered = transactions.filter((t) => t.dateISO >= from && t.dateISO <= to);
+  const typeFiltered = dateFiltered.filter((t) =>
     filter === "todos" ? true : filter === "ingresos" ? t.type === "ingreso" : t.type === "egreso"
   );
-  const totalIncome  = typeFiltered.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = typeFiltered.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
+  const totalIncome  = dateFiltered.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = dateFiltered.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const totalBalance = totalIncome - totalExpense;
 
   const toggleSort = (col: SortCol) =>
@@ -291,21 +282,33 @@ export function ViewTransacciones({
     </th>
   );
 
-  const filterLabel = filter === "ingresos" ? "Ingresos" : filter === "egresos" ? "Egresos" : "Total";
+  const inputCls = "h-[34px] px-2 rounded-lg border border-line bg-panel2 text-fg text-[12.5px] outline-none";
 
   return (
     <div className="flex flex-col gap-3.5">
-      {/* KPIs — totals of the current filter selection */}
+      {/* Date range filter */}
+      <div className="flex items-end gap-3 flex-wrap">
+        <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
+          Desde
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
+          Hasta
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+        </label>
+      </div>
+
+      {/* KPIs — totals of the date-filtered selection */}
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <SummaryCard
-          label={`${filterLabel === "Egresos" ? "Egresos" : "Ingresos"} · total`}
+          label="Ingresos · total"
           value={<span className="text-pos"><Bal n={totalIncome} privacy={privacy} /></span>}
-          sub={<span className="text-dim">{typeFiltered.filter(t => t.type === "ingreso").length} movimientos</span>}
+          sub={<span className="text-dim">{dateFiltered.filter(t => t.type === "ingreso").length} movimientos</span>}
         />
         <SummaryCard
           label="Egresos · total"
           value={<span className="text-neg"><Bal n={totalExpense} privacy={privacy} /></span>}
-          sub={<span className="text-dim">{typeFiltered.filter(t => t.type === "egreso").length} movimientos</span>}
+          sub={<span className="text-dim">{dateFiltered.filter(t => t.type === "egreso").length} movimientos</span>}
         />
         <SummaryCard
           label="Balance neto"
@@ -326,11 +329,6 @@ export function ViewTransacciones({
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
-            {onAdd && (
-              <button onClick={onAdd} className="border border-line cursor-pointer px-3 py-[5px] rounded-lg text-[12px] font-medium bg-panel2 text-fg">
-                + Registrar
-              </button>
-            )}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -370,17 +368,11 @@ export function ViewTransacciones({
   );
 }
 
-export function ViewCuentas({
-  privacy,
-  accounts,
-  holdings,
-  cryptoAssets,
-}: {
-  privacy: boolean;
-  accounts: Account[];
-  holdings: Asset[];
-  cryptoAssets: Asset[];
-}) {
+export function ViewCuentas({ initialData }: { initialData: AllData }) {
+  const privacy = usePrivacy();
+  const accounts = toAccounts(initialData);
+  const holdings = toAssets(initialData.stocks, initialData.prices);
+  const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
   const cashTotal  = accounts.reduce((s, a) => s + a.balance, 0);
   const stockTotal = holdings.reduce((s, a) => s + a.qty * a.price, 0);
   const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
