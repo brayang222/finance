@@ -8,6 +8,7 @@ import {
   IconCrypto,
   IconArrows,
   IconCard,
+  IconClock,
 } from "./utils";
 
 export const NAV_ITEMS: { href: string; label: string; icon: React.FC<{ size?: number }> }[] = [
@@ -16,6 +17,7 @@ export const NAV_ITEMS: { href: string; label: string; icon: React.FC<{ size?: n
   { href: "/crypto", label: "Cripto", icon: IconCrypto },
   { href: "/transactions", label: "Transacciones", icon: IconArrows },
   { href: "/accounts", label: "Cuentas", icon: IconCard },
+  { href: "/history", label: "Historial", icon: IconClock },
 ];
 
 export function isActive(pathname: string, href: string) {
@@ -86,17 +88,20 @@ export default function Sidebar({
       </nav>
 
       {/* User */}
-      <div className="mt-auto flex items-center gap-[10px] px-2 pt-3 pb-1 border-t border-line">
-        <div className="w-[34px] h-[34px] rounded-[10px] bg-panel2 border border-line flex items-center justify-center text-[12.5px] font-semibold text-muted">
+      <button
+        onClick={() => router.push("/profile")}
+        className="mt-auto flex items-center gap-[10px] px-2 pt-3 pb-1 border-t border-line bg-transparent border-x-0 border-b-0 cursor-pointer w-full text-left hover:opacity-75 transition-opacity"
+      >
+        <div className="w-[34px] h-[34px] rounded-[10px] bg-panel2 border border-line flex items-center justify-center text-[12.5px] font-semibold text-muted shrink-0">
           {initials(user?.name)}
         </div>
         <div className="min-w-0">
-          <div className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis text-fg">
             {user?.name || "Usuario"}
           </div>
-          <div className="text-[11.5px] text-dim">Cuenta personal</div>
+          <div className="text-[11.5px] text-dim">Ver perfil →</div>
         </div>
-      </div>
+      </button>
     </aside>
   );
 }

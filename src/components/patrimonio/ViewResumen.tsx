@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Asset,
@@ -64,20 +64,47 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const expense = monthTx.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const monthBalance = income - expense;
 
-  // Net-worth series (12 months) ending at total
-  const series = useMemo(() => {
-    const start = total * 0.72;
-    const pts: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      const base = start + (total - start) * (i / 11);
-      const wobble = Math.sin(i * 1.7) * total * 0.012;
-      pts.push(Math.round(base + wobble));
+  // Real net-worth series from actual transaction dates
+  const allSeries = useMemo(() => {
+    type Ev = { date: string; delta: number };
+    const events: Ev[] = [];
+    for (const s of initialData.stocks)
+      events.push({ date: s.date, delta: s.priceCOP * s.qty + (s.commission ?? 0) });
+    for (const c of initialData.crypto)
+      events.push({ date: c.date, delta: c.priceCOP * c.qty + (c.commission ?? 0) });
+    for (const f of initialData.finances)
+      events.push({ date: f.date, delta: f.type === "ingreso" ? f.amount : -f.amount });
+    if (events.length === 0) return [{ ym: new Date().toISOString().slice(0, 7), value: total }];
+    events.sort((a, b) => a.date.localeCompare(b.date));
+    const minYM = events[0].date.slice(0, 7);
+    const maxYM = new Date().toISOString().slice(0, 7);
+    const months: string[] = [];
+    let cur = new Date(minYM + "-01");
+    const end = new Date(maxYM + "-01");
+    while (cur <= end) {
+      months.push(cur.toISOString().slice(0, 7));
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
     }
-    pts[11] = total;
-    return pts;
-  }, [total]);
+    let running = 0;
+    const result = months.map((ym) => {
+      events.filter(e => e.date.slice(0, 7) === ym).forEach(e => { running += e.delta; });
+      return { ym, value: running };
+    });
+    result[result.length - 1].value = total;
+    return result;
+  }, [initialData, total]);
 
-  const heroSpark = useMemo(() => series.slice(), [series]);
+  const rangeMonths: Record<string, number> = { "1M": 1, "6M": 6, "1A": 12, "Todo": 9999 };
+  const series = useMemo(() => {
+    const n = rangeMonths[range];
+    return allSeries.slice(-n);
+  }, [allSeries, range]);
+
+  // Real 12-month change
+  const val12mAgo = allSeries.length > 12 ? allSeries[allSeries.length - 13].value : allSeries[0].value;
+  const change12m = val12mAgo > 0 ? (total - val12mAgo) / val12mAgo : 0;
+
+  const heroSpark = useMemo(() => allSeries.slice(-12).map(s => s.value), [allSeries]);
 
   const monthLabel = new Date().toLocaleDateString("es-CO", { month: "long" });
 
@@ -101,7 +128,9 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
               <Bal n={total} privacy={privacy} />
             </div>
             <div className="text-[13px] text-muted">
-              <span className="text-pos font-medium">▲ {PCT(0.084)}</span>
+              <span className={change12m >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
+                {change12m >= 0 ? "▲" : "▼"} {PCT(Math.abs(change12m))}
+              </span>
               {" · últimos 12 meses"}
             </div>
           </div>
@@ -165,7 +194,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
           </div>
           <Segmented options={["1M", "6M", "1A", "Todo"]} value={range} onChange={(v) => setRange(v as typeof range)} />
         </div>
-        <NetWorthChart values={series} privacy={privacy} />
+        <NetWorthChart points={series} privacy={privacy} />
       </div>
 
       {/* C. Donut + bars */}
@@ -182,7 +211,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
         <div className="flex items-center justify-between mb-3.5">
           <div className={sectionTitle}>Movimientos recientes</div>
           <button
-            onClick={() => onNav("transacciones")}
+            onClick={() => onNav("transactions")}
             className="bg-transparent border-none text-muted cursor-pointer text-[13px]"
           >
             Ver todas →
@@ -264,28 +293,76 @@ function HeroSpark({ values, privacy }: { values: number[]; privacy: boolean }) 
   );
 }
 
-function NetWorthChart({ values, privacy }: { values: number[]; privacy: boolean }) {
+const MO = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+function ymLabel(ym: string) {
+  const [yr, mo] = ym.split("-");
+  return `${MO[+mo - 1]} '${yr.slice(2)}`;
+}
+
+function NetWorthChart({ points, privacy }: { points: { ym: string; value: number }[]; privacy: boolean }) {
+  const values = points.map(p => p.value);
   const W = 800;
-  const H = 250;
-  const pts = scalePoints(values, W, H, 30, 40);
+  const H = 260;
+  const PAD_B = 28; // space for x-axis labels
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  const pts = scalePoints(values, W, H - PAD_B, 30, 36);
   const line = catmullRomPath(pts);
-  const area = areaPath(line, W, H - 40);
+  const area = areaPath(line, W, H - PAD_B);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const gridVals = [max, (max + min) / 2, min];
   const last = pts[pts.length - 1];
 
+  // Pick ~6 evenly spaced x-axis labels, never overlapping (min 80px apart)
+  const MIN_PX = 90;
+  const labelIdxs = useMemo(() => {
+    if (points.length <= 1) return [0];
+    const step = Math.max(1, Math.ceil((points.length - 1) / Math.floor(W / MIN_PX)));
+    const idxs: number[] = [];
+    for (let i = 0; i < points.length; i += step) idxs.push(i);
+    if (idxs[idxs.length - 1] !== points.length - 1) idxs.push(points.length - 1);
+    return idxs;
+  }, [points.length]);
+
+  const onMouseMove = (e: React.MouseEvent<SVGRectElement>) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const svgX = ratio * W;
+    // find nearest point
+    let best = 0;
+    let bestDist = Infinity;
+    pts.forEach(([px], i) => {
+      const d = Math.abs(px - svgX);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    setHoverIdx(best);
+  };
+
+  const hov = hoverIdx !== null ? hoverIdx : null;
+  const hovPt = hov !== null ? pts[hov] : null;
+  const hovVal = hov !== null ? values[hov] : null;
+  const hovYM  = hov !== null ? points[hov].ym : null;
+
+  // Tooltip box: keep it inside the SVG
+  const TT_W = 130; const TT_H = 42;
+  const ttX = hovPt ? Math.min(Math.max(hovPt[0] - TT_W / 2, 2), W - TT_W - 2) : 0;
+  const ttY = hovPt ? Math.max(hovPt[1] - TT_H - 12, 4) : 0;
+
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
+    <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
       <defs>
         <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--line-accent)" stopOpacity="0.18" />
+          <stop offset="0%" stopColor="var(--line-accent)" stopOpacity="0.15" />
           <stop offset="100%" stopColor="var(--line-accent)" stopOpacity="0" />
         </linearGradient>
       </defs>
 
+      {/* Grid lines */}
       {gridVals.map((gv, i) => {
-        const y = 30 + (i / 2) * (H - 70);
+        const y = 30 + (i / 2) * (H - PAD_B - 66);
         return (
           <g key={i}>
             <line x1={0} y1={y} x2={W} y2={y} stroke="var(--line)" strokeDasharray="2 5" />
@@ -300,26 +377,51 @@ function NetWorthChart({ values, privacy }: { values: number[]; privacy: boolean
 
       <path d={area} fill="url(#nwGrad)" />
       <path d={line} fill="none" stroke="var(--line-accent)" strokeWidth={2.4} />
-      <circle cx={last[0]} cy={last[1]} r={8} fill="var(--line-accent)" opacity={0.18} />
-      <circle cx={last[0]} cy={last[1]} r={4} fill="var(--line-accent)" />
 
-      {MONTHS.map((m, i) => {
-        const x = (i / (MONTHS.length - 1)) * W;
-        const anchor = i === 0 ? "start" : i === MONTHS.length - 1 ? "end" : "middle";
+      {/* Hover crosshair */}
+      {hovPt && (
+        <>
+          <line x1={hovPt[0]} y1={30} x2={hovPt[0]} y2={H - PAD_B} stroke="var(--dim)" strokeWidth={1} strokeDasharray="3 3" />
+          <circle cx={hovPt[0]} cy={hovPt[1]} r={9} fill="var(--line-accent)" opacity={0.15} />
+          <circle cx={hovPt[0]} cy={hovPt[1]} r={4} fill="var(--line-accent)" />
+          {/* Tooltip */}
+          <rect x={ttX} y={ttY} width={TT_W} height={TT_H} rx={8} fill="var(--panel)" stroke="var(--line)" strokeWidth={1} />
+          <text x={ttX + TT_W / 2} y={ttY + 15} textAnchor="middle" fill="var(--dim)" fontSize={11} fontFamily="'IBM Plex Mono', monospace">
+            {hovYM ? ymLabel(hovYM) : ""}
+          </text>
+          <text x={ttX + TT_W / 2} y={ttY + 32} textAnchor="middle" fill="var(--fg)" fontSize={13} fontFamily="'IBM Plex Mono', monospace" fontWeight="500">
+            {privacy ? "••••••" : (hovVal !== null ? COPSHORT(hovVal) : "")}
+          </text>
+        </>
+      )}
+
+      {/* Default end-dot when not hovering */}
+      {hov === null && (
+        <>
+          <circle cx={last[0]} cy={last[1]} r={8} fill="var(--line-accent)" opacity={0.18} />
+          <circle cx={last[0]} cy={last[1]} r={4} fill="var(--line-accent)" />
+        </>
+      )}
+
+      {/* X-axis labels */}
+      {labelIdxs.map((idx) => {
+        const x = pts[idx][0];
+        const anchor = idx === 0 ? "start" : idx === points.length - 1 ? "end" : "middle";
         return (
-          <text
-            key={m}
-            x={x}
-            y={H - 8}
-            fill="var(--dim)"
-            fontSize={11}
-            fontFamily="'IBM Plex Mono', monospace"
-            textAnchor={anchor as "start" | "middle" | "end"}
-          >
-            {m}
+          <text key={idx} x={x} y={H - 6} fill="var(--dim)" fontSize={11} fontFamily="'IBM Plex Mono', monospace" textAnchor={anchor as "start" | "middle" | "end"}>
+            {ymLabel(points[idx].ym)}
           </text>
         );
       })}
+
+      {/* Invisible hover capture rect */}
+      <rect
+        x={0} y={0} width={W} height={H - PAD_B}
+        fill="transparent"
+        onMouseMove={onMouseMove}
+        onMouseLeave={() => setHoverIdx(null)}
+        style={{ cursor: "crosshair" }}
+      />
     </svg>
   );
 }

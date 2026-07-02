@@ -2,7 +2,7 @@
 
 import { auth } from "../auth";
 import { prisma } from "./prisma";
-import type { Stock, Crypto, Finance, Hys, Cash } from '../src/types';
+import type { Stock, Crypto, Finance, Hys, Cash, BankAccount } from '../src/types';
 
 async function getUserId() {
   const session = await auth();
@@ -10,11 +10,22 @@ async function getUserId() {
   return session.user.id;
 }
 
+async function logActivity(
+  userId: string,
+  type: string,
+  description: string,
+  extras?: { amount?: number; ticker?: string; accountName?: string }
+) {
+  await prisma.activityLog.create({
+    data: { userId, type, description, ...extras },
+  });
+}
+
 // ── LOAD ALL ──
 export async function loadAll() {
   const userId = await getUserId();
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config] =
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId } }),
       prisma.crypto.findMany({ where: { userId } }),
@@ -25,6 +36,8 @@ export async function loadAll() {
       prisma.target.findMany({ where: { userId } }),
       prisma.cash.findUnique({ where: { userId } }),
       prisma.userConfig.findUnique({ where: { userId } }),
+      prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
@@ -37,28 +50,85 @@ export async function loadAll() {
     ...f,
     type: f.type as "ingreso" | "egreso",
     desc: f.desc ?? undefined,
+    accountId: f.accountId ?? undefined,
+    accountName: f.accountName ?? undefined,
   }));
 
   const typedCash = cash ? { banco: cash.banco, note: cash.note ?? undefined } : null;
 
-  return { stocks, crypto, finances: typedFinances, hys: hysData, prices: pricesMap, targets: targetsMap, cash: typedCash, config: config ? { theme: config.theme as "dark" | "light" } : null };
+  const typedBankAccounts = bankAccounts.map(b => ({
+    id: b.id,
+    name: b.name,
+    bank: b.bank ?? undefined,
+    balance: b.balance,
+    color: b.color ?? undefined,
+  }));
+
+  const typedActivityLogs = activityLogs.map(a => ({
+    id: a.id,
+    type: a.type,
+    description: a.description,
+    amount: a.amount ?? undefined,
+    ticker: a.ticker ?? undefined,
+    accountName: a.accountName ?? undefined,
+    createdAt: a.createdAt.toISOString(),
+  }));
+
+  const typedStocks = stocks.map(s => ({
+    ...s,
+    accountId: s.accountId ?? undefined,
+    accountName: s.accountName ?? undefined,
+  }));
+
+  const typedCrypto = crypto.map(c => ({
+    ...c,
+    accountId: c.accountId ?? undefined,
+    accountName: c.accountName ?? undefined,
+  }));
+
+  return {
+    stocks: typedStocks,
+    crypto: typedCrypto,
+    finances: typedFinances,
+    hys: hysData,
+    prices: pricesMap,
+    targets: targetsMap,
+    cash: typedCash,
+    config: config ? { theme: config.theme as "dark" | "light" } : null,
+    bankAccounts: typedBankAccounts,
+    activityLogs: typedActivityLogs,
+  };
 }
 
 // ── ADD SINGLE ENTRIES ──
 export async function addFinance(item: Omit<Finance, "id">) {
   const userId = await getUserId();
   await prisma.finance.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+  await logActivity(userId, item.type, `${item.type === "ingreso" ? "Ingreso" : "Egreso"}: ${item.desc ?? item.category}`, {
+    amount: item.amount,
+    accountName: item.accountName,
+  });
 }
 
 export async function addStock(item: Omit<Stock, "id">) {
   const userId = await getUserId();
   const { source, ...rest } = item;
   await prisma.stock.create({ data: { ...rest, id: crypto.randomUUID(), userId } });
+  await logActivity(userId, "stock_buy", `Compra acción: ${item.ticker}`, {
+    amount: item.priceCOP * item.qty,
+    ticker: item.ticker,
+    accountName: item.accountName,
+  });
 }
 
 export async function addCrypto(item: Omit<Crypto, "id">) {
   const userId = await getUserId();
   await prisma.crypto.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+  await logActivity(userId, "crypto_buy", `Compra cripto: ${item.ticker}`, {
+    amount: item.priceCOP * item.qty,
+    ticker: item.ticker,
+    accountName: item.accountName,
+  });
 }
 
 // ── UPDATE / DELETE SINGLE ENTRIES ──
@@ -66,21 +136,47 @@ export async function updateStock(id: string, item: Omit<Stock, "id">) {
   const userId = await getUserId();
   const { source, ...rest } = item;
   await prisma.stock.update({ where: { id, userId }, data: rest });
+  await logActivity(userId, "stock_edit", `Edición acción: ${item.ticker}`, { ticker: item.ticker });
 }
 
 export async function deleteStock(id: string) {
   const userId = await getUserId();
+  const row = await prisma.stock.findUnique({ where: { id } });
   await prisma.stock.delete({ where: { id, userId } });
+  await logActivity(userId, "stock_delete", `Eliminación acción: ${row?.ticker ?? id}`, { ticker: row?.ticker });
 }
 
 export async function updateCrypto(id: string, item: Omit<Crypto, "id">) {
   const userId = await getUserId();
   await prisma.crypto.update({ where: { id, userId }, data: item });
+  await logActivity(userId, "crypto_edit", `Edición cripto: ${item.ticker}`, { ticker: item.ticker });
 }
 
 export async function deleteCrypto(id: string) {
   const userId = await getUserId();
+  const row = await prisma.crypto.findUnique({ where: { id } });
   await prisma.crypto.delete({ where: { id, userId } });
+  await logActivity(userId, "crypto_delete", `Eliminación cripto: ${row?.ticker ?? id}`, { ticker: row?.ticker });
+}
+
+// ── BANK ACCOUNTS ──
+export async function createBankAccount(item: Omit<BankAccount, "id">) {
+  const userId = await getUserId();
+  await prisma.bankAccount.create({ data: { ...item, userId } });
+  await logActivity(userId, "account_create", `Nueva cuenta: ${item.name}`, { accountName: item.name });
+}
+
+export async function updateBankAccount(id: string, item: Omit<BankAccount, "id">) {
+  const userId = await getUserId();
+  await prisma.bankAccount.update({ where: { id, userId }, data: item });
+  await logActivity(userId, "account_edit", `Cuenta editada: ${item.name}`, { accountName: item.name });
+}
+
+export async function deleteBankAccount(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.bankAccount.findUnique({ where: { id } });
+  await prisma.bankAccount.delete({ where: { id, userId } });
+  await logActivity(userId, "account_delete", `Cuenta eliminada: ${row?.name ?? id}`, { accountName: row?.name });
 }
 
 // ── REFRESH MARKET PRICES ──
@@ -223,7 +319,6 @@ export async function saveConfig(theme: string) {
 export async function seedUserData(data: any) { // TODO: type
   const userId = await getUserId();
 
-  // Solo semilla si no tiene datos
   const existing = await prisma.stock.count({ where: { userId } });
   if (existing > 0) return { seeded: false };
 

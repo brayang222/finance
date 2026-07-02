@@ -6,10 +6,11 @@ import { today } from "../../data/mock";
 import { CATS_IN, CATS_OUT } from "../../data/constants";
 import { addFinance } from "../../../lib/actions";
 import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
+import type { BankAccount } from "../../types";
 
 type TxType = "ingreso" | "egreso";
 
-export default function ModalMovimiento({ onClose }: { onClose: () => void }) {
+export default function ModalMovimiento({ onClose, bankAccounts = [] }: { onClose: () => void; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
   const [type, setType] = useState<TxType>("egreso");
   const [amount, setAmount] = useState("");
@@ -17,6 +18,7 @@ export default function ModalMovimiento({ onClose }: { onClose: () => void }) {
   const cats = type === "ingreso" ? CATS_IN : CATS_OUT;
   const [category, setCategory] = useState(cats[0]);
   const [dateISO, setDateISO] = useState(today());
+  const [accountId, setAccountId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const monto = Number(amount.replace(/[^\d]/g, "")) || 0;
@@ -30,7 +32,16 @@ export default function ModalMovimiento({ onClose }: { onClose: () => void }) {
   const save = async () => {
     setSaving(true);
     try {
-      await addFinance({ type, amount: monto, desc: desc.trim(), category, date: dateISO });
+      const acct = bankAccounts.find(b => b.id === accountId);
+      await addFinance({
+        type,
+        amount: monto,
+        desc: desc.trim(),
+        category,
+        date: dateISO,
+        accountId: acct?.id,
+        accountName: acct?.name,
+      });
       router.refresh();
       onClose();
     } finally {
@@ -44,7 +55,6 @@ export default function ModalMovimiento({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={<CancelSave onClose={onClose} onSave={save} canSave={canSave} saving={saving} />}
     >
-      {/* Type toggle */}
       <div className="flex bg-panel2 rounded-xl p-[3px]">
         {(["ingreso", "egreso"] as TxType[]).map((t) => (
           <button
@@ -97,9 +107,7 @@ export default function ModalMovimiento({ onClose }: { onClose: () => void }) {
         <label className={labelClass}>Categoría</label>
         <select value={category} onChange={(e) => setCategory(e.target.value)} className={fieldClass}>
           {cats.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
       </div>
@@ -108,6 +116,18 @@ export default function ModalMovimiento({ onClose }: { onClose: () => void }) {
         <label className={labelClass}>Fecha</label>
         <input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className={fieldClass} />
       </div>
+
+      {bankAccounts.length > 0 && (
+        <div>
+          <label className={labelClass}>Cuenta (opcional)</label>
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={fieldClass}>
+            <option value="">— Sin cuenta —</option>
+            {bankAccounts.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </ModalShell>
   );
 }

@@ -5,16 +5,17 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { addCrypto, updateCrypto } from "../../../lib/actions";
 import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
-import type { Crypto } from "../../types";
+import type { Crypto, BankAccount } from "../../types";
 
 const num = (s: string) => Number(s.replace(",", ".")) || 0;
 
-export default function ModalCripto({ onClose, editItem }: { onClose: () => void; editItem?: Crypto }) {
+export default function ModalCripto({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Crypto; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
   const [ticker, setTicker] = useState(editItem?.ticker ?? "");
   const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
   const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
   const [dateISO, setDateISO] = useState(editItem?.date ?? today());
+  const [accountId, setAccountId] = useState(editItem?.accountId ?? "");
   const [saving, setSaving] = useState(false);
 
   const canSave = ticker.trim().length > 0 && num(qty) > 0 && num(priceCOP) > 0;
@@ -23,6 +24,7 @@ export default function ModalCripto({ onClose, editItem }: { onClose: () => void
     setSaving(true);
     try {
       const price = num(priceCOP);
+      const acct = bankAccounts.find(b => b.id === accountId);
       const data = {
         ticker: ticker.trim().toUpperCase(),
         qty: num(qty),
@@ -32,6 +34,8 @@ export default function ModalCripto({ onClose, editItem }: { onClose: () => void
         priceCOP: price,
         commission: 0,
         date: dateISO,
+        accountId: acct?.id,
+        accountName: acct?.name,
       };
       if (editItem) {
         await updateCrypto(editItem.id, data);
@@ -77,6 +81,18 @@ export default function ModalCripto({ onClose, editItem }: { onClose: () => void
         <label className={labelClass}>Fecha</label>
         <input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className={fieldClass} />
       </div>
+
+      {bankAccounts.length > 0 && (
+        <div>
+          <label className={labelClass}>Cuenta (opcional)</label>
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={fieldClass}>
+            <option value="">— Sin cuenta —</option>
+            {bankAccounts.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </ModalShell>
   );
 }

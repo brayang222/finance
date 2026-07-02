@@ -9,14 +9,14 @@ import BottomNav from "./BottomNav";
 import ModalMovimiento from "./ModalMovimiento";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
-import ModalEfectivo from "./ModalEfectivo";
+import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
 
-type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile";
 
 function sectionFromPath(path: string): Section {
   const seg = path.split("/")[1] || "transactions";
-  if (["summary", "investments", "crypto", "transactions", "accounts", "detail"].includes(seg)) {
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile"].includes(seg)) {
     return seg as Section;
   }
   return "transactions";
@@ -29,6 +29,8 @@ const PAGE_META: Record<Section, { title: string; sub: string }> = {
   detail:       { title: "Detalle del activo", sub: "Posición individual" },
   transactions: { title: "Transacciones",      sub: "Ingresos y egresos" },
   accounts:     { title: "Cuentas",            sub: "Efectivo y bancos" },
+  history:      { title: "Historial",          sub: "Registro de actividad" },
+  profile:      { title: "Perfil",             sub: "Tu cuenta y preferencias" },
 };
 
 // Sections where the "Registrar" button is shown
@@ -81,13 +83,13 @@ export default function AppShell({
     if (!showModal) return null;
     const close = () => setShowModal(false);
     switch (section) {
-      case "transactions": return <ModalMovimiento onClose={close} />;
-      case "investments":  return <ModalAccion onClose={close} />;
-      case "crypto":       return <ModalCripto onClose={close} />;
-      case "accounts":     return <ModalEfectivo current={data.cash?.banco ?? 0} onClose={close} />;
+      case "transactions": return <ModalMovimiento bankAccounts={data.bankAccounts} onClose={close} />;
+      case "investments":  return <ModalAccion bankAccounts={data.bankAccounts} onClose={close} />;
+      case "crypto":       return <ModalCripto bankAccounts={data.bankAccounts} onClose={close} />;
+      case "accounts":     return <ModalCuenta onClose={close} />;
       default:              return null;
     }
-  }, [showModal, section, data.cash?.banco]);
+  }, [showModal, section, data.bankAccounts]);
 
   return (
     <PrivacyContext.Provider value={privacy}>

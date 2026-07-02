@@ -5,19 +5,18 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { addStock, updateStock } from "../../../lib/actions";
 import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
-import type { Stock } from "../../types";
+import type { Stock, BankAccount } from "../../types";
 
 const num = (s: string) => Number(s.replace(",", ".")) || 0;
 
-type EditItem = Stock;
-
-export default function ModalAccion({ onClose, editItem }: { onClose: () => void; editItem?: EditItem }) {
+export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Stock; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
   const [ticker, setTicker] = useState(editItem?.ticker ?? "");
   const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
   const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
   const [dateISO, setDateISO] = useState(editItem?.date ?? today());
   const [commission, setCommission] = useState(editItem ? String(editItem.commission) : "0");
+  const [accountId, setAccountId] = useState(editItem?.accountId ?? "");
   const [saving, setSaving] = useState(false);
 
   const canSave = ticker.trim().length > 0 && num(qty) > 0 && num(priceCOP) > 0;
@@ -26,6 +25,7 @@ export default function ModalAccion({ onClose, editItem }: { onClose: () => void
     setSaving(true);
     try {
       const price = num(priceCOP);
+      const acct = bankAccounts.find(b => b.id === accountId);
       const data = {
         ticker: ticker.trim().toUpperCase(),
         qty: num(qty),
@@ -35,6 +35,8 @@ export default function ModalAccion({ onClose, editItem }: { onClose: () => void
         priceCOP: price,
         commission: num(commission),
         date: dateISO,
+        accountId: acct?.id,
+        accountName: acct?.name,
       };
       if (editItem) {
         await updateStock(editItem.id, data);
@@ -86,6 +88,18 @@ export default function ModalAccion({ onClose, editItem }: { onClose: () => void
           <input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className={fieldClass} />
         </div>
       </div>
+
+      {bankAccounts.length > 0 && (
+        <div>
+          <label className={labelClass}>Cuenta (opcional)</label>
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={fieldClass}>
+            <option value="">— Sin cuenta —</option>
+            {bankAccounts.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </ModalShell>
   );
 }

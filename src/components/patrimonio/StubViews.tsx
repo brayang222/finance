@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Asset, Account, COP, PCT, today } from "../../data/mock";
 import type { AllData, Stock, Crypto } from "../../types";
 import { Bal } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount } from "../../../lib/actions";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
+import ModalCuenta from "./ModalCuenta";
 
 // ponytail: shared style objects replaced with className strings
 const cardClass = "border border-line bg-panel rounded-[18px] p-[22px]";
@@ -47,7 +48,8 @@ function AssetTable({
             <tr>
               <th className={thClass}>Activo</th>
               <th className={`${thClass} text-right`}>Cantidad</th>
-              <th className={`${thClass} text-right`}>Precio</th>
+              <th className={`${thClass} text-right`}>Precio Mkt</th>
+              <th className={`${thClass} text-right`}>PPA</th>
               <th className={`${thClass} text-right`}>Valor</th>
               <th className={`${thClass} text-right`}>P/G</th>
             </tr>
@@ -80,6 +82,9 @@ function AssetTable({
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
                     {privacy ? "••••" : COP(a.price)}
+                  </td>
+                  <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
+                    {privacy ? "••••" : COP(a.avg)}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
                     <Bal n={value} privacy={privacy} />
@@ -120,6 +125,8 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => { handleRefresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -174,6 +181,8 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => { handleRefresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -489,19 +498,27 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
 
 export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
-  const accounts = toAccounts(initialData);
+  const router = useRouter();
   const holdings = toAssets(initialData.stocks, initialData.prices);
   const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
-  const cashTotal  = accounts.reduce((s, a) => s + a.balance, 0);
+  const bankTotal  = initialData.bankAccounts.reduce((s, a) => s + a.balance, 0);
   const stockTotal = holdings.reduce((s, a) => s + a.qty * a.price, 0);
   const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
-  const total      = cashTotal + stockTotal + cryptoTotal;
+  const total      = bankTotal + stockTotal + cryptoTotal;
+  const [editItem, setEditItem] = useState<typeof initialData.bankAccounts[0] | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const barParts = [
     { label: "Bolsa",   value: stockTotal,  color: "var(--accent)" },
     { label: "Cripto",  value: cryptoTotal, color: "#8a8f98" },
-    { label: "Efectivo",value: cashTotal,   color: "var(--dim)" },
+    { label: "Bancos",  value: bankTotal,   color: "var(--dim)" },
   ].filter((p) => p.value > 0);
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("¿Eliminar esta cuenta?")) return;
+    await deleteBankAccount(id);
+    router.refresh();
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -514,7 +531,6 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
           <Bal n={total} privacy={privacy} />
         </div>
 
-        {/* Composition bar */}
         {total > 0 && (
           <>
             <div className="flex h-2 rounded-full overflow-hidden gap-0.5 mb-3">
@@ -537,36 +553,120 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         )}
       </div>
 
-      {/* Account cards */}
-      {accounts.length > 0 && (
-        <div>
-          <div className="text-[11.5px] text-dim mb-[10px] font-medium tracking-[0.04em] uppercase">
-            Efectivo y bancos
+      {/* Bank account cards */}
+      <div>
+        <div className="flex items-center justify-between mb-[10px]">
+          <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase">
+            Cuentas bancarias
           </div>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer"
+          >
+            + Agregar cuenta
+          </button>
+        </div>
+        {initialData.bankAccounts.length === 0 ? (
+          <div className={`${cardClass} text-muted text-[13px]`}>
+            No hay cuentas registradas. Agrega una cuenta bancaria para comenzar.
+          </div>
+        ) : (
           <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-            {accounts.map((a) => (
+            {initialData.bankAccounts.map((a) => (
               <div key={a.id} className={cardClass}>
-                <div className="flex items-center gap-[10px] mb-3.5">
-                  <span
-                    className="w-[34px] h-[34px] rounded-[9px] bg-panel2 border border-line flex items-center justify-center text-[12px] text-muted"
-                    style={monoStyle}
-                  >
-                    {a.mono}
-                  </span>
+                <div className="flex items-center justify-between mb-3.5">
                   <div>
                     <div className="text-[14px] font-medium">{a.name}</div>
-                    <div className="text-[11.5px] text-dim">{a.type}</div>
+                    {a.bank && <div className="text-[11.5px] text-dim">{a.bank}</div>}
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setEditItem(a)}
+                      className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg"
+                      title="Editar"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => handleDelete(a.id)}
+                      className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg"
+                      title="Eliminar"
+                    >
+                      🗑
+                    </button>
                   </div>
                 </div>
                 <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
                   <Bal n={a.balance} privacy={privacy} />
                 </div>
-                <div className="text-[11.5px] text-dim mt-1">{a.kind}</div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {showAdd && <ModalCuenta onClose={() => setShowAdd(false)} />}
+      {editItem && <ModalCuenta editItem={editItem} onClose={() => setEditItem(null)} />}
+    </div>
+  );
+}
+
+export function ViewHistorico({ initialData }: { initialData: AllData }) {
+  const logs = initialData.activityLogs;
+
+  const typeLabel: Record<string, string> = {
+    ingreso: "Ingreso", egreso: "Egreso",
+    stock_buy: "Compra acción", stock_edit: "Edición acción", stock_delete: "Eliminación acción",
+    crypto_buy: "Compra cripto", crypto_edit: "Edición cripto", crypto_delete: "Eliminación cripto",
+    account_create: "Cuenta creada", account_edit: "Cuenta editada", account_delete: "Cuenta eliminada",
+  };
+
+  const typeColor: Record<string, string> = {
+    ingreso: "var(--pos)", egreso: "var(--neg)",
+    stock_buy: "var(--accent)", stock_edit: "var(--muted)", stock_delete: "var(--neg)",
+    crypto_buy: "var(--accent)", crypto_edit: "var(--muted)", crypto_delete: "var(--neg)",
+    account_create: "var(--pos)", account_edit: "var(--muted)", account_delete: "var(--neg)",
+  };
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className="border border-line bg-panel rounded-[18px] p-[22px]">
+        <div className="text-[14px] font-medium mb-3.5">Actividad reciente</div>
+        {logs.length === 0 ? (
+          <div className="text-muted text-[13px]">Sin actividad registrada.</div>
+        ) : (
+          <div className="flex flex-col divide-y divide-line">
+            {logs.map((log) => {
+              const d = new Date(log.createdAt);
+              const dateStr = d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
+              const timeStr = d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+              return (
+                <div key={log.id} className="flex items-center gap-3.5 py-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ background: typeColor[log.type] ?? "var(--dim)" }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px]">{log.description}</div>
+                    <div className="text-[11.5px] text-dim">
+                      {typeLabel[log.type] ?? log.type}
+                      {log.accountName && ` · ${log.accountName}`}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {log.amount != null && (
+                      <div className="text-[13px] tabular-nums" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {COP(log.amount)}
+                      </div>
+                    )}
+                    <div className="text-[11px] text-dim">{dateStr} {timeStr}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
