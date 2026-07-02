@@ -1,12 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Asset, Account, COP, PCT, today } from "../../data/mock";
-import type { AllData } from "../../types";
+import type { AllData, Stock, Crypto } from "../../types";
 import { Bal } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
+import { deleteStock, deleteCrypto, refreshPrices } from "../../../lib/actions";
+import ModalAccion from "./ModalAccion";
+import ModalCripto from "./ModalCripto";
 
 // ponytail: shared style objects replaced with className strings
 const cardClass = "border border-line bg-panel rounded-[18px] p-[22px]";
@@ -17,6 +20,8 @@ const thClass =
 const tdClass = "py-3 border-t border-line text-[13.5px]";
 
 const monoStyle = { fontFamily: "'IBM Plex Mono', monospace" };
+
+const refreshBtnClass = "border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer";
 
 function AssetTable({
   assets,
@@ -103,27 +108,46 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const tickers = [...new Set(initialData.stocks.map(s => s.ticker.toUpperCase()))];
+      await refreshPrices(tickers, []);
+      router.refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-        <SummaryCard label="Valor del portafolio" value={<Bal n={totalValue} privacy={privacy} />} />
-        <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
-        <SummaryCard
-          label="Rendimiento P/G"
-          value={
-            <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-              <Bal n={Math.abs(totalPL)} privacy={privacy} />
-            </span>
-          }
-          sub={
-            totalCost > 0 ? (
+      <div className="flex items-center justify-between">
+        <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          <SummaryCard label="Valor del portafolio" value={<Bal n={totalValue} privacy={privacy} />} />
+          <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
+          <SummaryCard
+            label="Rendimiento P/G"
+            value={
               <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-                {PCT(totalPL / totalCost)}
+                <Bal n={Math.abs(totalPL)} privacy={privacy} />
               </span>
-            ) : undefined
-          }
-        />
+            }
+            sub={
+              totalCost > 0 ? (
+                <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
+                  {PCT(totalPL / totalCost)}
+                </span>
+              ) : undefined
+            }
+          />
+        </div>
+        <div className="ml-3 shrink-0">
+          <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
+            {refreshing ? "Actualizando…" : "Actualizar precios"}
+          </button>
+        </div>
       </div>
       <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
     </div>
@@ -138,27 +162,46 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const tickers = [...new Set(initialData.crypto.map(c => c.ticker.toUpperCase()))];
+      await refreshPrices([], tickers);
+      router.refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-        <SummaryCard label="Valor en cripto" value={<Bal n={totalValue} privacy={privacy} />} />
-        <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
-        <SummaryCard
-          label="Rendimiento P/G"
-          value={
-            <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-              <Bal n={Math.abs(totalPL)} privacy={privacy} />
-            </span>
-          }
-          sub={
-            totalCost > 0 ? (
+      <div className="flex items-center justify-between">
+        <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          <SummaryCard label="Valor en cripto" value={<Bal n={totalValue} privacy={privacy} />} />
+          <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
+          <SummaryCard
+            label="Rendimiento P/G"
+            value={
               <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-                {PCT(totalPL / totalCost)}
+                <Bal n={Math.abs(totalPL)} privacy={privacy} />
               </span>
-            ) : undefined
-          }
-        />
+            }
+            sub={
+              totalCost > 0 ? (
+                <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
+                  {PCT(totalPL / totalCost)}
+                </span>
+              ) : undefined
+            }
+          />
+        </div>
+        <div className="ml-3 shrink-0">
+          <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
+            {refreshing ? "Actualizando…" : "Actualizar precios"}
+          </button>
+        </div>
       </div>
       <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
     </div>
@@ -177,6 +220,19 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const asset = [...holdings, ...cryptoAssets].find((a) => a.ticker === selected);
   const pl = asset ? asset.qty * asset.price - asset.qty * asset.avg : 0;
   const plPct = asset && asset.avg > 0 ? pl / (asset.qty * asset.avg) : 0;
+
+  const rawTrades = isCrypto
+    ? initialData.crypto.filter(t => t.ticker.toUpperCase() === selected)
+    : initialData.stocks.filter(t => t.ticker.toUpperCase() === selected);
+
+  const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("¿Eliminar esta operación?")) return;
+    if (isCrypto) await deleteCrypto(id);
+    else await deleteStock(id);
+    router.refresh();
+  };
 
   return (
     <div>
@@ -228,9 +284,72 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               sub={<span className={pl >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
             />
           </div>
+
+          {/* Trade history */}
+          <div className={cardClass}>
+            <div className="text-[13px] font-medium mb-3.5">Historial de operaciones</div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-[480px]">
+                <thead>
+                  <tr>
+                    <th className={thClass}>Fecha</th>
+                    <th className={`${thClass} text-right`}>Cantidad</th>
+                    <th className={`${thClass} text-right`}>Precio COP</th>
+                    <th className={`${thClass} text-right`}>Comisión</th>
+                    <th className={thClass}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rawTrades.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className={`${tdClass} text-dim text-center`}>Sin operaciones</td>
+                    </tr>
+                  ) : rawTrades.map((t) => (
+                    <tr key={t.id}>
+                      <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.date}</td>
+                      <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
+                        {t.qty % 1 === 0 ? t.qty.toLocaleString("es-CO") : t.qty.toFixed(8)}
+                      </td>
+                      <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
+                        {privacy ? "••••" : COP(t.priceCOP)}
+                      </td>
+                      <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
+                        {privacy ? "••" : COP(t.commission)}
+                      </td>
+                      <td className={`${tdClass} text-right`}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setEditItem(t)}
+                            className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg"
+                            title="Editar"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDelete(t.id)}
+                            className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg"
+                            title="Eliminar"
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       ) : (
         <div className={`${cardClass} text-muted`}>Activo no encontrado.</div>
+      )}
+
+      {editItem && isCrypto && (
+        <ModalCripto editItem={editItem as Crypto} onClose={() => setEditItem(null)} />
+      )}
+      {editItem && !isCrypto && (
+        <ModalAccion editItem={editItem as Stock} onClose={() => setEditItem(null)} />
       )}
     </div>
   );

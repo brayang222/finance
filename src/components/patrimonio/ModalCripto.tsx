@@ -3,17 +3,18 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
-import { addCrypto } from "../../../lib/actions";
+import { addCrypto, updateCrypto } from "../../../lib/actions";
 import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
+import type { Crypto } from "../../types";
 
 const num = (s: string) => Number(s.replace(",", ".")) || 0;
 
-export default function ModalCripto({ onClose }: { onClose: () => void }) {
+export default function ModalCripto({ onClose, editItem }: { onClose: () => void; editItem?: Crypto }) {
   const router = useRouter();
-  const [ticker, setTicker] = useState("");
-  const [qty, setQty] = useState("");
-  const [priceCOP, setPriceCOP] = useState("");
-  const [dateISO, setDateISO] = useState(today());
+  const [ticker, setTicker] = useState(editItem?.ticker ?? "");
+  const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
+  const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
+  const [dateISO, setDateISO] = useState(editItem?.date ?? today());
   const [saving, setSaving] = useState(false);
 
   const canSave = ticker.trim().length > 0 && num(qty) > 0 && num(priceCOP) > 0;
@@ -22,7 +23,7 @@ export default function ModalCripto({ onClose }: { onClose: () => void }) {
     setSaving(true);
     try {
       const price = num(priceCOP);
-      await addCrypto({
+      const data = {
         ticker: ticker.trim().toUpperCase(),
         qty: num(qty),
         price,
@@ -31,7 +32,12 @@ export default function ModalCripto({ onClose }: { onClose: () => void }) {
         priceCOP: price,
         commission: 0,
         date: dateISO,
-      });
+      };
+      if (editItem) {
+        await updateCrypto(editItem.id, data);
+      } else {
+        await addCrypto(data);
+      }
       router.refresh();
       onClose();
     } finally {
@@ -41,7 +47,7 @@ export default function ModalCripto({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
-      title="Registrar cripto"
+      title={editItem ? "Editar operación" : "Registrar cripto"}
       onClose={onClose}
       footer={<CancelSave onClose={onClose} onSave={save} canSave={canSave} saving={saving} />}
     >

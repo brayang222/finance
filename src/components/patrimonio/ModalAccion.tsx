@@ -3,18 +3,21 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
-import { addStock } from "../../../lib/actions";
+import { addStock, updateStock } from "../../../lib/actions";
 import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
+import type { Stock } from "../../types";
 
 const num = (s: string) => Number(s.replace(",", ".")) || 0;
 
-export default function ModalAccion({ onClose }: { onClose: () => void }) {
+type EditItem = Stock;
+
+export default function ModalAccion({ onClose, editItem }: { onClose: () => void; editItem?: EditItem }) {
   const router = useRouter();
-  const [ticker, setTicker] = useState("");
-  const [qty, setQty] = useState("");
-  const [priceCOP, setPriceCOP] = useState("");
-  const [dateISO, setDateISO] = useState(today());
-  const [commission, setCommission] = useState("0");
+  const [ticker, setTicker] = useState(editItem?.ticker ?? "");
+  const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
+  const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
+  const [dateISO, setDateISO] = useState(editItem?.date ?? today());
+  const [commission, setCommission] = useState(editItem ? String(editItem.commission) : "0");
   const [saving, setSaving] = useState(false);
 
   const canSave = ticker.trim().length > 0 && num(qty) > 0 && num(priceCOP) > 0;
@@ -23,7 +26,7 @@ export default function ModalAccion({ onClose }: { onClose: () => void }) {
     setSaving(true);
     try {
       const price = num(priceCOP);
-      await addStock({
+      const data = {
         ticker: ticker.trim().toUpperCase(),
         qty: num(qty),
         price,
@@ -32,7 +35,12 @@ export default function ModalAccion({ onClose }: { onClose: () => void }) {
         priceCOP: price,
         commission: num(commission),
         date: dateISO,
-      });
+      };
+      if (editItem) {
+        await updateStock(editItem.id, data);
+      } else {
+        await addStock(data);
+      }
       router.refresh();
       onClose();
     } finally {
@@ -42,7 +50,7 @@ export default function ModalAccion({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
-      title="Registrar acción"
+      title={editItem ? "Editar operación" : "Registrar acción"}
       onClose={onClose}
       footer={<CancelSave onClose={onClose} onSave={save} canSave={canSave} saving={saving} />}
     >

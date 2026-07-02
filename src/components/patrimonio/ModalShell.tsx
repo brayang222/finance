@@ -35,9 +35,8 @@ export default function ModalShell({
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div
           onClick={(e) => e.stopPropagation()}
-          className="rounded-[20px] p-6 pointer-events-auto relative"
+          className="rounded-[20px] p-6 pointer-events-auto relative bg-white"
           style={{
-            background: "var(--panel)",
             border: "1px solid var(--line)",
             width: "min(480px, 94vw)",
             boxShadow: "0 30px 80px rgba(0,0,0,0.45)",

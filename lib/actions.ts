@@ -61,6 +61,77 @@ export async function addCrypto(item: Omit<Crypto, "id">) {
   await prisma.crypto.create({ data: { ...item, id: crypto.randomUUID(), userId } });
 }
 
+// ── UPDATE / DELETE SINGLE ENTRIES ──
+export async function updateStock(id: string, item: Omit<Stock, "id">) {
+  const userId = await getUserId();
+  const { source, ...rest } = item;
+  await prisma.stock.update({ where: { id, userId }, data: rest });
+}
+
+export async function deleteStock(id: string) {
+  const userId = await getUserId();
+  await prisma.stock.delete({ where: { id, userId } });
+}
+
+export async function updateCrypto(id: string, item: Omit<Crypto, "id">) {
+  const userId = await getUserId();
+  await prisma.crypto.update({ where: { id, userId }, data: item });
+}
+
+export async function deleteCrypto(id: string) {
+  const userId = await getUserId();
+  await prisma.crypto.delete({ where: { id, userId } });
+}
+
+// ── REFRESH MARKET PRICES ──
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: "bitcoin", ETH: "ethereum", SOL: "solana", ADA: "cardano",
+  USDT: "tether", BNB: "binancecoin", XRP: "ripple", DOT: "polkadot",
+  MATIC: "matic-network", AVAX: "avalanche-2", DOGE: "dogecoin",
+  LINK: "chainlink", LTC: "litecoin", UNI: "uniswap", ATOM: "cosmos",
+};
+
+export async function refreshPrices(stockTickers: string[], cryptoTickers: string[]) {
+  const userId = await getUserId();
+  const pricesMap: Record<string, number> = {};
+
+  for (const ticker of stockTickers) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.CL?range=1d&interval=1d`;
+      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 0 } });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price && price > 0) pricesMap[ticker] = price;
+    } catch { /* skip */ }
+  }
+
+  const ids = cryptoTickers.map(t => COINGECKO_IDS[t.toUpperCase()]).filter(Boolean);
+  if (ids.length > 0) {
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=cop`;
+      const res = await fetch(url, { next: { revalidate: 0 } });
+      if (res.ok) {
+        const json = await res.json();
+        for (const ticker of cryptoTickers) {
+          const coinId = COINGECKO_IDS[ticker.toUpperCase()];
+          if (coinId && json[coinId]?.cop) pricesMap[ticker.toUpperCase()] = json[coinId].cop;
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (Object.keys(pricesMap).length === 0) return { updated: 0 };
+
+  const existing = await prisma.price.findMany({ where: { userId } });
+  const merged = { ...Object.fromEntries(existing.map(p => [p.ticker, p.value])), ...pricesMap };
+  await prisma.$transaction([
+    prisma.price.deleteMany({ where: { userId } }),
+    prisma.price.createMany({ data: Object.entries(merged).map(([ticker, value]) => ({ userId, ticker, value })) }),
+  ]);
+  return { updated: Object.keys(pricesMap).length };
+}
+
 // ── STOCKS ──
 export async function saveStocks(items: Stock[]) {
   const userId = await getUserId();

@@ -12,27 +12,27 @@ import ModalCripto from "./ModalCripto";
 import ModalEfectivo from "./ModalEfectivo";
 import { PrivacyContext } from "./PrivacyContext";
 
-type Section = "resumen" | "inversiones" | "cripto" | "transacciones" | "cuentas" | "detalle";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail";
 
 function sectionFromPath(path: string): Section {
-  const seg = path.split("/")[1] || "transacciones";
-  if (["resumen", "inversiones", "cripto", "transacciones", "cuentas", "detalle"].includes(seg)) {
+  const seg = path.split("/")[1] || "transactions";
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail"].includes(seg)) {
     return seg as Section;
   }
-  return "transacciones";
+  return "transactions";
 }
 
 const PAGE_META: Record<Section, { title: string; sub: string }> = {
-  resumen:       { title: "Resumen",            sub: "Tu patrimonio de un vistazo" },
-  inversiones:   { title: "Inversiones",        sub: "Portafolio en bolsa (BVC)" },
-  cripto:        { title: "Cripto",             sub: "Activos digitales" },
-  detalle:       { title: "Detalle del activo", sub: "Posición individual" },
-  transacciones: { title: "Transacciones",      sub: "Ingresos y egresos" },
-  cuentas:       { title: "Cuentas",            sub: "Efectivo y bancos" },
+  summary:      { title: "Resumen",            sub: "Tu patrimonio de un vistazo" },
+  investments:  { title: "Inversiones",        sub: "Portafolio en bolsa (BVC)" },
+  crypto:       { title: "Cripto",             sub: "Activos digitales" },
+  detail:       { title: "Detalle del activo", sub: "Posición individual" },
+  transactions: { title: "Transacciones",      sub: "Ingresos y egresos" },
+  accounts:     { title: "Cuentas",            sub: "Efectivo y bancos" },
 };
 
 // Sections where the "Registrar" button is shown
-const REGISTRAR_SECTIONS: Section[] = ["transacciones", "inversiones", "cripto", "cuentas"];
+const REGISTRAR_SECTIONS: Section[] = ["transactions", "investments", "crypto", "accounts"];
 
 export default function AppShell({
   data,
@@ -81,10 +81,10 @@ export default function AppShell({
     if (!showModal) return null;
     const close = () => setShowModal(false);
     switch (section) {
-      case "transacciones": return <ModalMovimiento onClose={close} />;
-      case "inversiones":   return <ModalAccion onClose={close} />;
-      case "cripto":        return <ModalCripto onClose={close} />;
-      case "cuentas":       return <ModalEfectivo current={data.cash?.banco ?? 0} onClose={close} />;
+      case "transactions": return <ModalMovimiento onClose={close} />;
+      case "investments":  return <ModalAccion onClose={close} />;
+      case "crypto":       return <ModalCripto onClose={close} />;
+      case "accounts":     return <ModalEfectivo current={data.cash?.banco ?? 0} onClose={close} />;
       default:              return null;
     }
   }, [showModal, section, data.cash?.banco]);
