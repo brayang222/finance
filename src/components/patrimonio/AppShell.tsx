@@ -43,7 +43,7 @@ export default function AppShell({
   user?: { name?: string | null; email?: string | null } | null;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname() || "/transacciones";
+  const pathname = usePathname() || "/transactions";
   const section = sectionFromPath(pathname);
 
   const [theme, setTheme]       = useState<"dark" | "light">("dark");

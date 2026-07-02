@@ -99,7 +99,7 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
   const assets = toAssets(initialData.stocks, initialData.prices);
-  const onSelect = (t: string) => router.push(`/detalle/${t}`);
+  const onSelect = (t: string) => router.push(`/detail/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
@@ -134,7 +134,7 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
   const assets = toAssets(initialData.crypto, initialData.prices);
-  const onSelect = (t: string) => router.push(`/detalle/${t}`);
+  const onSelect = (t: string) => router.push(`/detail/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
@@ -173,7 +173,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const selected = ticker.toUpperCase();
   const isCrypto = cryptoAssets.some((a) => a.ticker === selected);
   const selFrom: "inversiones" | "cripto" = isCrypto ? "cripto" : "inversiones";
-  const onBack = () => router.push(isCrypto ? "/cripto" : "/inversiones");
+  const onBack = () => router.push(isCrypto ? "/crypto" : "/investments");
   const asset = [...holdings, ...cryptoAssets].find((a) => a.ticker === selected);
   const pl = asset ? asset.qty * asset.price - asset.qty * asset.avg : 0;
   const plPct = asset && asset.avg > 0 ? pl / (asset.qty * asset.avg) : 0;

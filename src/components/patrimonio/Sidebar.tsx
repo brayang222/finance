@@ -11,17 +11,17 @@ import {
 } from "./utils";
 
 export const NAV_ITEMS: { href: string; label: string; icon: React.FC<{ size?: number }> }[] = [
-  { href: "/resumen", label: "Resumen", icon: IconGrid },
-  { href: "/inversiones", label: "Inversiones", icon: IconTrending },
-  { href: "/cripto", label: "Cripto", icon: IconCrypto },
-  { href: "/transacciones", label: "Transacciones", icon: IconArrows },
-  { href: "/cuentas", label: "Cuentas", icon: IconCard },
+  { href: "/summary", label: "Resumen", icon: IconGrid },
+  { href: "/investments", label: "Inversiones", icon: IconTrending },
+  { href: "/crypto", label: "Cripto", icon: IconCrypto },
+  { href: "/transactions", label: "Transacciones", icon: IconArrows },
+  { href: "/accounts", label: "Cuentas", icon: IconCard },
 ];
 
 export function isActive(pathname: string, href: string) {
   if (pathname.startsWith(href)) return true;
   // Detalle pages belong to Inversiones
-  if (href === "/inversiones" && pathname.startsWith("/detalle")) return true;
+  if (href === "/investments" && pathname.startsWith("/detail")) return true;
   return false;
 }
 
