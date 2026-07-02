@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export const fieldClass =
   "w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none";
@@ -20,50 +21,42 @@ export default function ModalShell({
   children: React.ReactNode;
   footer: React.ReactNode;
 }) {
-  return (
-    <div className="fixed inset-0" style={{ zIndex: 50 }}>
-      {/* backdrop — sibling of card so blur doesn't affect card's bg */}
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0" style={{ zIndex: 9999 }}>
       <div
         onClick={onClose}
         className="absolute inset-0"
-        style={{
-          background: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(5px)",
-          WebkitBackdropFilter: "blur(5px)",
-        }}
+        style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
       />
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="rounded-[20px] p-6 pointer-events-auto"
-        style={{
-          background: "var(--panel)",
-          border: "1px solid var(--line)",
-          width: "min(480px, 94vw)",
-          boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div className="flex items-center justify-between mb-[18px]">
-          <h2 className="text-[20px] font-medium m-0" style={{ fontFamily: "Spectral, serif" }}>
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="bg-transparent border-none text-muted cursor-pointer text-[20px] leading-none"
-            aria-label="Cerrar"
-          >
-            ×
-          </button>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="rounded-[20px] p-6 pointer-events-auto relative"
+          style={{
+            background: "var(--panel)",
+            border: "1px solid var(--line)",
+            width: "min(480px, 94vw)",
+            boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+          }}
+        >
+          <div className="flex items-center justify-between mb-[18px]">
+            <h2 className="text-[20px] font-medium m-0" style={{ fontFamily: "Spectral, serif" }}>
+              {title}
+            </h2>
+            <button onClick={onClose} className="bg-transparent border-none text-muted cursor-pointer text-[20px] leading-none" aria-label="Cerrar">
+              ×
+            </button>
+          </div>
+          <div className="flex flex-col gap-3.5">{children}</div>
+          <div className="flex gap-2.5 mt-[22px]">{footer}</div>
         </div>
-
-        <div className="flex flex-col gap-3.5">{children}</div>
-
-        <div className="flex gap-2.5 mt-[22px]">{footer}</div>
       </div>
-      </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
