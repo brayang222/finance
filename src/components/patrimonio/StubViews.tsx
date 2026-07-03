@@ -13,7 +13,7 @@ import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
 
 // ponytail: shared style objects replaced with className strings
-const cardClass = "border border-line bg-panel rounded-[18px] p-[22px]";
+const cardClass = "border border-line bg-panel rounded-[18px] p-5.5";
 
 const thClass =
   "text-[11.5px] tracking-[0.04em] uppercase text-dim font-medium text-left pb-[10px]";
@@ -43,7 +43,7 @@ function AssetTable({
   return (
     <div className={cardClass}>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse min-w-[560px]">
+        <table className="w-full border-collapse min-w-140">
           <thead>
             <tr>
               <th className={thClass}>Activo</th>
@@ -64,9 +64,9 @@ function AssetTable({
               return (
                 <tr key={a.ticker} onClick={() => onSelect(a.ticker)} className="cursor-pointer">
                   <td className={tdClass}>
-                    <div className="flex items-center gap-[10px]">
+                    <div className="flex items-center gap-2.5">
                       <span
-                        className="w-[30px] h-[30px] rounded-lg bg-panel2 border border-line flex items-center justify-center text-[11px] text-muted"
+                        className="w-7.5 h-7.5 rounded-lg bg-panel2 border border-line flex items-center justify-center text-[11px] text-muted"
                         style={monoStyle}
                       >
                         {a.mono}
@@ -131,6 +131,7 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between">
+        
         <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           <SummaryCard label="Valor del portafolio" value={<Bal n={totalValue} privacy={privacy} />} />
           <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
@@ -150,12 +151,13 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
             }
           />
         </div>
-        <div className="ml-3 shrink-0">
+      </div>
+
+      <div className="shrink-0">
           <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
             {refreshing ? "Actualizando…" : "Actualizar precios"}
           </button>
         </div>
-      </div>
       <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
     </div>
   );
@@ -206,11 +208,12 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
             }
           />
         </div>
-        <div className="ml-3 shrink-0">
+        
+      </div>
+      <div className="shrink-0">
           <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
             {refreshing ? "Actualizando…" : "Actualizar precios"}
           </button>
-        </div>
       </div>
       <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
     </div>
@@ -255,9 +258,9 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
         <div className="flex flex-col gap-3.5">
           {/* Header */}
           <div className={`${cardClass} flex items-center justify-between flex-wrap gap-4`}>
-            <div className="flex items-center gap-[14px]">
+            <div className="flex items-center gap-3.5">
               <span
-                className="w-[42px] h-[42px] rounded-[11px] bg-panel2 border border-line flex items-center justify-center text-[14px] text-muted"
+                className="w-10.5 h-10.5 rounded-[11px] bg-panel2 border border-line flex items-center justify-center text-[14px] text-muted"
                 style={monoStyle}
               >
                 {asset.mono}
@@ -298,7 +301,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
           <div className={cardClass}>
             <div className="text-[13px] font-medium mb-3.5">Historial de operaciones</div>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[480px]">
+              <table className="w-full border-collapse min-w-120">
                 <thead>
                   <tr>
                     <th className={thClass}>Fecha</th>
@@ -367,29 +370,82 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
 type SortCol = "fecha" | "categoria" | "cuenta" | "monto";
 type SortDir = "asc" | "desc";
 
+function exportXlsx(rows: ReturnType<typeof toTransactions>, from: string, to: string) {
+  import("xlsx").then(({ utils, writeFile }) => {
+    const totalIn  = rows.filter(t => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
+    const totalOut = rows.filter(t => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
+    const data = [
+      ...rows.map(t => ({
+        Fecha: t.dateISO,
+        Tipo: t.type,
+        Descripción: t.desc,
+        Categoría: t.category,
+        Cuenta: t.account || "",
+        Monto: t.type === "ingreso" ? t.amount : -t.amount,
+      })),
+      {},
+      { Fecha: "", Tipo: "", Descripción: "Total ingresos",  Categoría: "", Cuenta: "", Monto: totalIn },
+      { Fecha: "", Tipo: "", Descripción: "Total egresos",   Categoría: "", Cuenta: "", Monto: -totalOut },
+      { Fecha: "", Tipo: "", Descripción: "Balance neto",    Categoría: "", Cuenta: "", Monto: totalIn - totalOut },
+    ];
+    const ws = utils.json_to_sheet(data);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, "Transacciones");
+    writeFile(wb, `transacciones_${from}_${to}.xlsx`);
+  });
+}
+
 export function ViewTransacciones({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const transactions = toTransactions(initialData.finances);
 
   const yearStart = `${new Date().getFullYear()}-01-01`;
-  const [from, setFrom] = React.useState(yearStart);
-  const [to, setTo]     = React.useState(today());
-  const [filter, setFilter] = React.useState<"todos" | "ingresos" | "egresos">("todos");
-  const [sort, setSort]     = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
+  const oldestDate = transactions.length
+    ? transactions.map(t => t.dateISO).sort()[0]
+    : yearStart;
+  const [from, setFrom]       = React.useState(yearStart);
+  const [to, setTo]           = React.useState(today());
+  const [filter, setFilter]   = React.useState<"todos" | "ingresos" | "egresos">("todos");
+  const [search, setSearch]   = React.useState("");
+  const [catFilter, setCatFilter] = React.useState("todas");
+  const [pageSize, setPageSize]   = React.useState(20);
+  const [page, setPage]           = React.useState(1);
+  const [sort, setSort]           = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
 
-  // Date-range + type filter. KPIs reflect the date-filtered set.
+  // KPIs: date-filtered only
   const dateFiltered = transactions.filter((t) => t.dateISO >= from && t.dateISO <= to);
-  const typeFiltered = dateFiltered.filter((t) =>
-    filter === "todos" ? true : filter === "ingresos" ? t.type === "ingreso" : t.type === "egreso"
-  );
   const totalIncome  = dateFiltered.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
   const totalExpense = dateFiltered.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const totalBalance = totalIncome - totalExpense;
 
-  const toggleSort = (col: SortCol) =>
-    setSort((prev) => ({ col, dir: prev.col === col && prev.dir === "asc" ? "desc" : "asc" }));
+  // All categories from the date-filtered set
+  const allCats = React.useMemo(() =>
+    ["todas", ...Array.from(new Set(dateFiltered.map(t => t.category))).sort()],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [from, to, transactions.length]
+  );
 
-  const sorted = [...typeFiltered].sort((a, b) => {
+  // Full filter pipeline
+  const q = search.trim().toLowerCase();
+  const filtered = dateFiltered.filter((t) => {
+    if (filter === "ingresos" && t.type !== "ingreso") return false;
+    if (filter === "egresos"  && t.type !== "egreso")  return false;
+    if (catFilter !== "todas" && t.category !== catFilter) return false;
+    if (q) {
+      const amtStr = String(t.amount);
+      return t.desc.toLowerCase().includes(q) ||
+             t.category.toLowerCase().includes(q) ||
+             amtStr.includes(q);
+    }
+    return true;
+  });
+
+  const toggleSort = (col: SortCol) => {
+    setPage(1);
+    setSort((prev) => ({ col, dir: prev.col === col && prev.dir === "asc" ? "desc" : "asc" }));
+  };
+
+  const sorted = [...filtered].sort((a, b) => {
     let cmp = 0;
     if (sort.col === "fecha")     cmp = a.dateISO.localeCompare(b.dateISO);
     if (sort.col === "categoria") cmp = a.category.localeCompare(b.category);
@@ -398,15 +454,13 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
     return sort.dir === "asc" ? cmp : -cmp;
   });
 
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safePage   = Math.min(page, totalPages);
+  const paged      = sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   const SortBtn = ({ col, label, right }: { col: SortCol; label: string; right?: boolean }) => (
-    <th
-      className={`${thClass} cursor-pointer select-none${right ? " text-right" : ""}`}
-      onClick={() => toggleSort(col)}
-    >
-      {label}{" "}
-      <span className="text-dim">
-        {sort.col === col ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}
-      </span>
+    <th className={`${thClass} cursor-pointer select-none${right ? " text-right" : ""}`} onClick={() => toggleSort(col)}>
+      {label} <span className="text-dim">{sort.col === col ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}</span>
     </th>
   );
 
@@ -414,19 +468,44 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
 
   return (
     <div className="flex flex-col gap-3.5">
-      {/* Date range filter */}
+      {/* Filters row */}
       <div className="flex items-end gap-3 flex-wrap">
-        <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
-          Desde
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
-        </label>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium">Desde</span>
+            {from !== oldestDate && (
+              <button
+                onClick={() => { setFrom(oldestDate); setPage(1); }}
+                className="text-[10px] text-accent border-none bg-transparent cursor-pointer p-0 ml-2"
+              >
+                Desde el inicio
+              </button>
+            )}
+          </div>
+          <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className={inputCls} />
+        </div>
         <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
           Hasta
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+          <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className={inputCls} />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium flex-1 min-w-40">
+          Buscar
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Descripción, categoría o monto…"
+            className={`${inputCls} w-full`}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
+          Categoría
+          <select value={catFilter} onChange={(e) => { setCatFilter(e.target.value); setPage(1); }} className={inputCls}>
+            {allCats.map(c => <option key={c} value={c}>{c === "todas" ? "Todas" : c}</option>)}
+          </select>
         </label>
       </div>
 
-      {/* KPIs — totals of the date-filtered selection */}
+      {/* KPIs */}
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <SummaryCard
           label="Ingresos · total"
@@ -446,21 +525,32 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
       </div>
 
       <div className={cardClass}>
-        <div className="flex items-center justify-between mb-3.5 flex-wrap gap-[10px]">
-          <div className="text-[14px] font-medium">Movimientos</div>
-          <div className="flex gap-2 flex-wrap">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between mb-3.5 flex-wrap gap-2.5">
+          <div className="flex items-center gap-3">
+            <div className="text-[14px] font-medium">Movimientos</div>
+            <span className="text-[12px] text-dim">{sorted.length} resultado{sorted.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="flex gap-2 flex-wrap items-center">
             {(["todos", "ingresos", "egresos"] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)} className={[
-                "border-none cursor-pointer px-3 py-[5px] rounded-lg text-[12px] font-medium",
+              <button key={f} onClick={() => { setFilter(f); setPage(1); }} className={[
+                "border-none cursor-pointer px-3 py-1.25 rounded-lg text-[12px] font-medium",
                 filter === f ? "bg-accent text-accentFg" : "bg-panel2 text-muted",
               ].join(" ")}>
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
+            <button
+              onClick={() => exportXlsx(sorted, from, to)}
+              className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.25 rounded-lg cursor-pointer"
+            >
+              ↓ Excel
+            </button>
           </div>
         </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse min-w-[480px]">
+          <table className="w-full border-collapse min-w-120">
             <thead>
               <tr>
                 <SortBtn col="fecha"     label="Fecha" />
@@ -470,7 +560,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((t) => {
+              {paged.map((t) => {
                 const pos = t.type === "ingreso";
                 return (
                   <tr key={t.id}>
@@ -483,14 +573,79 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
                   </tr>
                 );
               })}
-              {sorted.length === 0 && (
-                <tr>
-                  <td colSpan={4} className={`${tdClass} text-dim text-center`}>Sin movimientos</td>
-                </tr>
+              {paged.length === 0 && (
+                <tr><td colSpan={4} className={`${tdClass} text-dim text-center`}>Sin movimientos</td></tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between mt-4 flex-wrap gap-3">
+          <div className="flex items-center gap-1.5 text-[12px] text-muted">
+            <span>Filas:</span>
+            {[20, 50, 100].map(n => (
+              <button key={n} onClick={() => { setPageSize(n); setPage(1); }} className={[
+                "border-none cursor-pointer px-2.5 py-1 rounded-md text-[12px]",
+                pageSize === n ? "bg-accent text-accentFg" : "bg-panel2 text-muted",
+              ].join(" ")}>{n}</button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+              className="border border-line bg-panel2 text-muted text-[12px] w-7 h-7 rounded-md cursor-pointer disabled:opacity-40">‹</button>
+            <span className="text-[12px] text-muted px-1">{safePage} / {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+              className="border border-line bg-panel2 text-muted text-[12px] w-7 h-7 rounded-md cursor-pointer disabled:opacity-40">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountCard({
+  name, subtitle, balance, privacy, tag, tagColor,
+  onEdit, onDelete,
+}: {
+  name: string; subtitle?: string; balance: number; privacy: boolean;
+  tag?: string; tagColor?: string; onEdit?: () => void; onDelete?: () => void;
+}) {
+  return (
+    <div className={cardClass}>
+      <div className="flex items-center justify-between mb-3.5">
+        <div>
+          <div className="text-[14px] font-medium">{name}</div>
+          {subtitle && <div className="text-[11.5px] text-dim">{subtitle}</div>}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {tag && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
+              style={{ background: tagColor ?? "var(--panel2)", color: "var(--dim)" }}>
+              {tag}
+            </span>
+          )}
+          {onEdit && (
+            <button onClick={onEdit} className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg" title="Editar">✏️</button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg" title="Eliminar">🗑</button>
+          )}
+        </div>
+      </div>
+      <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
+        <Bal n={balance} privacy={privacy} />
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase mb-2.5">{title}</div>
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+        {children}
       </div>
     </div>
   );
@@ -499,19 +654,66 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
 export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
-  const holdings = toAssets(initialData.stocks, initialData.prices);
-  const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
-  const bankTotal  = initialData.bankAccounts.reduce((s, a) => s + a.balance, 0);
-  const stockTotal = holdings.reduce((s, a) => s + a.qty * a.price, 0);
-  const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
-  const total      = bankTotal + stockTotal + cryptoTotal;
   const [editItem, setEditItem] = useState<typeof initialData.bankAccounts[0] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
+  // Compute balances
+  const holdings    = toAssets(initialData.stocks, initialData.prices);
+  const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
+  const stockTotal  = holdings.reduce((s, a) => s + a.qty * a.price, 0);
+  const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
+
+  // HYS current balance = last movement's balance compounded to today
+  const hysBalance = (() => {
+    const hys = initialData.hys;
+    if (!hys || hys.movements.length === 0) return 0;
+    const last = hys.movements[hys.movements.length - 1];
+    const days = (Date.now() - new Date(last.date).getTime()) / 86400000;
+    return last.balance * Math.pow(1 + hys.rate / 100, days / 365);
+  })();
+
+  // Group bank accounts by type
+  const bankAccounts   = initialData.bankAccounts.filter(a => a.type === "banco" || a.type === "otro" || !a.type);
+  const bolsaAccounts  = initialData.bankAccounts.filter(a => a.type === "bolsa");
+  const criptoAccounts = initialData.bankAccounts.filter(a => a.type === "cripto");
+
+  // For bolsa/cripto accounts: compute live balance from linked assets
+  const bolsaBalance = (id: string) => {
+    const linked = holdings.filter(a => {
+      const s = initialData.stocks.find(s => s.ticker === a.ticker);
+      return s?.accountId === id;
+    });
+    if (linked.length > 0) return linked.reduce((s, a) => s + a.qty * a.price, 0);
+    return initialData.bankAccounts.find(a => a.id === id)?.balance ?? 0;
+  };
+
+  const criptoBalance = (id: string) => {
+    const linked = cryptoAssets.filter(a => {
+      const c = initialData.crypto.find(c => c.ticker === a.ticker);
+      return c?.accountId === id;
+    });
+    if (linked.length > 0) return linked.reduce((s, a) => s + a.qty * a.price, 0);
+    return initialData.bankAccounts.find(a => a.id === id)?.balance ?? 0;
+  };
+
+  // If no bolsa/cripto accounts exist, show totals as unlinked summary
+  const unlinkedStockTotal  = bolsaAccounts.length === 0 ? stockTotal : 0;
+  const unlinkedCryptoTotal = criptoAccounts.length === 0 ? cryptoTotal : 0;
+
+  const bankTotal  = bankAccounts.reduce((s, a) => s + a.balance, 0);
+  const bolsaVal   = bolsaAccounts.length > 0
+    ? bolsaAccounts.reduce((s, a) => s + bolsaBalance(a.id), 0)
+    : unlinkedStockTotal;
+  const criptoVal  = criptoAccounts.length > 0
+    ? criptoAccounts.reduce((s, a) => s + criptoBalance(a.id), 0)
+    : unlinkedCryptoTotal;
+  const total      = bankTotal + bolsaVal + criptoVal + hysBalance;
+
   const barParts = [
-    { label: "Bolsa",   value: stockTotal,  color: "var(--accent)" },
-    { label: "Cripto",  value: cryptoTotal, color: "#8a8f98" },
-    { label: "Bancos",  value: bankTotal,   color: "var(--dim)" },
+    { label: "Bolsa",            value: bolsaVal,    color: "var(--accent)" },
+    { label: "Cripto",           value: criptoVal,   color: "#8a8f98" },
+    { label: "Alto rendimiento", value: hysBalance,  color: "#f59e0b" },
+    { label: "Bancos",           value: bankTotal,   color: "var(--dim)" },
   ].filter((p) => p.value > 0);
 
   const handleDelete = async (id: string) => {
@@ -521,7 +723,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   };
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-5">
       {/* Hero */}
       <div className={cardClass}>
         <div className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-1.5">
@@ -530,22 +732,19 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         <div className="text-[38px] font-medium tracking-[-0.02em] mb-4" style={{ fontFamily: "Spectral, serif" }}>
           <Bal n={total} privacy={privacy} />
         </div>
-
         {total > 0 && (
           <>
             <div className="flex h-2 rounded-full overflow-hidden gap-0.5 mb-3">
               {barParts.map((p) => (
-                <div key={p.label} className="min-w-[2px]" style={{ flex: p.value / total, background: p.color }} />
+                <div key={p.label} className="min-w-0.5" style={{ flex: p.value / total, background: p.color }} />
               ))}
             </div>
             <div className="flex gap-5 flex-wrap">
               {barParts.map((p) => (
                 <div key={p.label} className="flex items-center gap-1.5 text-[12px]">
-                  <span className="w-2 h-2 rounded-[2px]" style={{ background: p.color }} />
+                  <span className="w-2 h-2 rounded-xs" style={{ background: p.color }} />
                   <span className="text-muted">{p.label}</span>
-                  <span className="text-fg" style={monoStyle}>
-                    {privacy ? "••••" : COP(p.value)}
-                  </span>
+                  <span className="text-fg" style={monoStyle}>{privacy ? "••••" : COP(p.value)}</span>
                 </div>
               ))}
             </div>
@@ -553,53 +752,76 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         )}
       </div>
 
-      {/* Bank account cards */}
-      <div>
-        <div className="flex items-center justify-between mb-[10px]">
-          <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase">
-            Cuentas bancarias
+      {/* Alto rendimiento */}
+      {initialData.hys && (
+        <Section title="Alto rendimiento">
+          <div className={`${cardClass} cursor-pointer`} onClick={() => router.push("/savings")}>
+            <div className="flex items-center justify-between mb-3.5">
+              <div>
+                <div className="text-[14px] font-medium">Alto Rendimiento</div>
+                <div className="text-[11.5px] text-dim">TEA {initialData.hys.rate.toFixed(2)}% · Ver detalle →</div>
+              </div>
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
+                style={{ background: "#f59e0b22", color: "#f59e0b" }}>HYS</span>
+            </div>
+            <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
+              <Bal n={hysBalance} privacy={privacy} />
+            </div>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer"
-          >
+        </Section>
+      )}
+
+      {/* Bolsa accounts */}
+      {bolsaAccounts.length > 0 ? (
+        <Section title="Inversiones / Bolsa">
+          {bolsaAccounts.map((a) => (
+            <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={bolsaBalance(a.id)}
+              privacy={privacy} tag="Bolsa" tagColor="var(--accent)22"
+              onEdit={() => setEditItem(a)} onDelete={() => handleDelete(a.id)} />
+          ))}
+        </Section>
+      ) : stockTotal > 0 ? (
+        <Section title="Inversiones / Bolsa">
+          <AccountCard name="Portafolio en bolsa" subtitle="Sin broker asignado" balance={stockTotal}
+            privacy={privacy} tag="Bolsa" tagColor="var(--accent)22" />
+        </Section>
+      ) : null}
+
+      {/* Cripto accounts */}
+      {criptoAccounts.length > 0 ? (
+        <Section title="Cripto">
+          {criptoAccounts.map((a) => (
+            <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={criptoBalance(a.id)}
+              privacy={privacy} tag="Cripto" tagColor="#8a8f9822"
+              onEdit={() => setEditItem(a)} onDelete={() => handleDelete(a.id)} />
+          ))}
+        </Section>
+      ) : cryptoTotal > 0 ? (
+        <Section title="Cripto">
+          <AccountCard name="Portafolio cripto" subtitle="Sin exchange asignado" balance={cryptoTotal}
+            privacy={privacy} tag="Cripto" tagColor="#8a8f9822" />
+        </Section>
+      ) : null}
+
+      {/* Bank accounts */}
+      <div>
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase">Cuentas bancarias</div>
+          <button onClick={() => setShowAdd(true)}
+            className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer">
             + Agregar cuenta
           </button>
         </div>
-        {initialData.bankAccounts.length === 0 ? (
+        {bankAccounts.length === 0 ? (
           <div className={`${cardClass} text-muted text-[13px]`}>
-            No hay cuentas registradas. Agrega una cuenta bancaria para comenzar.
+            No hay cuentas bancarias. Agrega una para empezar.
           </div>
         ) : (
           <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-            {initialData.bankAccounts.map((a) => (
-              <div key={a.id} className={cardClass}>
-                <div className="flex items-center justify-between mb-3.5">
-                  <div>
-                    <div className="text-[14px] font-medium">{a.name}</div>
-                    {a.bank && <div className="text-[11.5px] text-dim">{a.bank}</div>}
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setEditItem(a)}
-                      className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg"
-                      title="Editar"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => handleDelete(a.id)}
-                      className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg"
-                      title="Eliminar"
-                    >
-                      🗑
-                    </button>
-                  </div>
-                </div>
-                <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
-                  <Bal n={a.balance} privacy={privacy} />
-                </div>
-              </div>
+            {bankAccounts.map((a) => (
+              <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={a.balance}
+                privacy={privacy}
+                onEdit={() => setEditItem(a)} onDelete={() => handleDelete(a.id)} />
             ))}
           </div>
         )}
@@ -630,7 +852,7 @@ export function ViewHistorico({ initialData }: { initialData: AllData }) {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="border border-line bg-panel rounded-[18px] p-[22px]">
+      <div className="border border-line bg-panel rounded-[18px] p-5.5">
         <div className="text-[14px] font-medium mb-3.5">Actividad reciente</div>
         {logs.length === 0 ? (
           <div className="text-muted text-[13px]">Sin actividad registrada.</div>
@@ -674,7 +896,7 @@ export function ViewHistorico({ initialData }: { initialData: AllData }) {
 // ── Shared sub-components ───────────────────────────────────────────────────
 function SummaryCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <div className="border border-line bg-panel rounded-2xl px-5 py-[18px]">
+    <div className="border border-line bg-panel rounded-2xl px-5 py-4.5">
       <div className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-2.5">
         {label}
       </div>

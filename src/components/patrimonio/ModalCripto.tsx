@@ -4,10 +4,10 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { addCrypto, updateCrypto } from "../../../lib/actions";
-import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
+import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
 import type { Crypto, BankAccount } from "../../types";
 
-const num = (s: string) => Number(s.replace(",", ".")) || 0;
+const num = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
 
 export default function ModalCripto({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Crypto; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
@@ -73,7 +73,7 @@ export default function ModalCripto({ onClose, editItem, bankAccounts = [] }: { 
         </div>
         <div className="flex-1">
           <label className={labelClass}>Precio COP</label>
-          <input inputMode="decimal" value={priceCOP} onChange={(e) => setPriceCOP(e.target.value)} placeholder="0" className={fieldClass} />
+          <MoneyInput value={priceCOP} onChange={setPriceCOP} prefix="$" />
         </div>
       </div>
 

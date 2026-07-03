@@ -170,6 +170,7 @@ model BankAccount {
   userId    String
   name      String
   bank      String?
+  type      String   @default("banco")
   balance   Float    @default(0)
   color     String?
   createdAt DateTime @default(now())

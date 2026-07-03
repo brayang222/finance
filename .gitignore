@@ -29,5 +29,9 @@ dist-ssr
 src/data/seed.js
 .next/
 
+tsconfig.tsbuildinfo
+
 .claude
+.claude/
+.claude/launch.json
 Patrimonio.dc.html

@@ -54,6 +54,7 @@ export interface BankAccount {
   id: string
   name: string
   bank?: string
+  type: string
   balance: number
   color?: string
 }

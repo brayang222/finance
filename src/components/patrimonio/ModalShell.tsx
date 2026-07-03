@@ -59,6 +59,47 @@ export default function ModalShell({
   );
 }
 
+/** Formatted money input — displays thousands separator, stores raw number string */
+export function MoneyInput({
+  value,
+  onChange,
+  placeholder = "0",
+  className,
+  prefix,
+}: {
+  value: string;
+  onChange: (raw: string) => void;
+  placeholder?: string;
+  className?: string;
+  prefix?: React.ReactNode;
+}) {
+  const fmt = (raw: string) => {
+    const digits = raw.replace(/\./g, "").replace(/,/g, "").replace(/[^\d]/g, "");
+    if (!digits) return "";
+    return parseInt(digits, 10).toLocaleString("es-CO");
+  };
+
+  return (
+    <div className="relative">
+      {prefix && (
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-[14px] pointer-events-none">
+          {prefix}
+        </span>
+      )}
+      <input
+        inputMode="numeric"
+        value={fmt(value)}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\./g, "").replace(/,/g, "").replace(/[^\d]/g, "");
+          onChange(digits);
+        }}
+        className={className ?? `${fieldClass} ${prefix ? "pl-[26px]" : ""} tabular-nums`}
+      />
+    </div>
+  );
+}
+
 export function CancelSave({
   onClose,
   onSave,

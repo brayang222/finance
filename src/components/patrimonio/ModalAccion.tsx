@@ -4,10 +4,10 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { addStock, updateStock } from "../../../lib/actions";
-import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
+import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
 import type { Stock, BankAccount } from "../../types";
 
-const num = (s: string) => Number(s.replace(",", ".")) || 0;
+const num = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
 
 export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Stock; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
@@ -74,14 +74,14 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
         </div>
         <div className="flex-1">
           <label className={labelClass}>Precio COP</label>
-          <input inputMode="decimal" value={priceCOP} onChange={(e) => setPriceCOP(e.target.value)} placeholder="0" className={fieldClass} />
+          <MoneyInput value={priceCOP} onChange={setPriceCOP} prefix="$" />
         </div>
       </div>
 
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelClass}>Comisión COP</label>
-          <input inputMode="decimal" value={commission} onChange={(e) => setCommission(e.target.value)} className={fieldClass} />
+          <MoneyInput value={commission} onChange={setCommission} prefix="$" />
         </div>
         <div className="flex-1">
           <label className={labelClass}>Fecha</label>

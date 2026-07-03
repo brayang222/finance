@@ -397,8 +397,8 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
       </div>
       <Section title="Filtros">
         <div className="flex gap-1.5 flex-wrap items-end mb-2">
-          <Input label="Desde"     type="date" value={finFilter.dateFrom}  onChange={e => setFinFilter({ ...finFilter, dateFrom: e.target.value })}  className="w-[120px]" />
-          <Input label="Hasta"     type="date" value={finFilter.dateTo}    onChange={e => setFinFilter({ ...finFilter, dateTo: e.target.value })}    className="w-[120px]" />
+          <Input label="Desde"     type="date" value={finFilter.dateFrom}  onChange={e => setFinFilter({ ...finFilter, dateFrom: e.target.value })}  className="w-30" />
+          <Input label="Hasta"     type="date" value={finFilter.dateTo}    onChange={e => setFinFilter({ ...finFilter, dateTo: e.target.value })}    className="w-30" />
           <Select label="Tipo"     options={["", "ingreso", "egreso"]}     value={finFilter.type}     onChange={e => setFinFilter({ ...finFilter, type: e.target.value })} />
           <Select label="Categoría" options={["", ...allCategories]}       value={finFilter.category} onChange={e => setFinFilter({ ...finFilter, category: e.target.value })} />
           <Input label="Buscar"    value={finFilter.search} onChange={e => setFinFilter({ ...finFilter, search: e.target.value })} placeholder="texto..." />
@@ -607,7 +607,7 @@ export default function FinanceApp({ initialData, user }: FinanceAppProps) {
           <Tab active={tab === "perfil"}    label="Perfil"        onClick={() => setTab("perfil")} />
         </div>
       </div>
-      <div className="p-5 max-w-[1100px] mx-auto">
+      <div className="p-5 max-w-275 mx-auto">
         {tab === "dashboard"  && <Dashboard />}
         {tab === "portafolio" && <Portafolio />}
         {tab === "cripto"     && <CriptoTab />}

@@ -145,3 +145,14 @@ export const IconClock = ({ size = 18 }: IconProps) => (
     <path d="M12 7v5l3 3" />
   </svg>
 );
+
+export const IconBank: React.FC<{ size?: number }> = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 7l8-4 8 4" />
+    <rect x="3" y="7" width="14" height="9" rx="1" />
+    <line x1="6" y1="7" x2="6" y2="16" />
+    <line x1="10" y1="7" x2="10" y2="16" />
+    <line x1="14" y1="7" x2="14" y2="16" />
+    <line x1="2" y1="16" x2="18" y2="16" />
+  </svg>
+);

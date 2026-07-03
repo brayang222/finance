@@ -5,28 +5,54 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { CATS_IN, CATS_OUT } from "../../data/constants";
 import { addFinance } from "../../../lib/actions";
-import ModalShell, { CancelSave, fieldClass, labelClass } from "./ModalShell";
+import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
 import type { BankAccount } from "../../types";
 
 type TxType = "ingreso" | "egreso";
 
-export default function ModalMovimiento({ onClose, bankAccounts = [] }: { onClose: () => void; bankAccounts?: BankAccount[] }) {
+const OTHER_IN  = "Otro ingreso";
+const OTHER_OUT = "Otro gasto";
+
+export default function ModalMovimiento({
+  onClose,
+  bankAccounts = [],
+  existingCats = [],
+}: {
+  onClose: () => void;
+  bankAccounts?: BankAccount[];
+  existingCats?: string[];
+}) {
   const router = useRouter();
-  const [type, setType] = useState<TxType>("egreso");
-  const [amount, setAmount] = useState("");
-  const [desc, setDesc] = useState("");
-  const cats = type === "ingreso" ? CATS_IN : CATS_OUT;
-  const [category, setCategory] = useState(cats[0]);
+  const [type, setType]       = useState<TxType>("egreso");
+  const [amount, setAmount]   = useState("");
+  const [desc, setDesc]       = useState("");
   const [dateISO, setDateISO] = useState(today());
   const [accountId, setAccountId] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [customCat, setCustomCat] = useState("");
+
+  // Merge static + existing (deduped), keep "Otro" last
+  const buildCats = (t: TxType) => {
+    const base  = t === "ingreso" ? CATS_IN : CATS_OUT;
+    const other = t === "ingreso" ? OTHER_IN : OTHER_OUT;
+    const extra = existingCats.filter(c => !base.includes(c) && c !== other);
+    return [...base.slice(0, -1), ...extra, other];
+  };
+
+  const cats = buildCats(type);
+  const [category, setCategory] = useState(cats[0]);
+
+  const isOther = category === OTHER_IN || category === OTHER_OUT;
+  const finalCat = isOther ? customCat.trim() || category : category;
 
   const monto = Number(amount.replace(/[^\d]/g, "")) || 0;
-  const canSave = monto > 0 && desc.trim().length > 0;
+  const canSave = monto > 0 && desc.trim().length > 0 && (!isOther || customCat.trim().length > 0);
 
   const switchType = (t: TxType) => {
     setType(t);
-    setCategory((t === "ingreso" ? CATS_IN : CATS_OUT)[0]);
+    const newCats = buildCats(t);
+    setCategory(newCats[0]);
+    setCustomCat("");
   };
 
   const save = async () => {
@@ -37,7 +63,7 @@ export default function ModalMovimiento({ onClose, bankAccounts = [] }: { onClos
         type,
         amount: monto,
         desc: desc.trim(),
-        category,
+        category: finalCat,
         date: dateISO,
         accountId: acct?.id,
         accountName: acct?.name,
@@ -72,25 +98,7 @@ export default function ModalMovimiento({ onClose, bankAccounts = [] }: { onClos
 
       <div>
         <label className={labelClass}>Monto</label>
-        <div className="relative">
-          <span
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-dim"
-            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-          >
-            $
-          </span>
-          <input
-            inputMode="numeric"
-            value={amount}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/[^\d]/g, "");
-              setAmount(digits ? Number(digits).toLocaleString("es-CO") : "");
-            }}
-            placeholder="0"
-            className={`${fieldClass} pl-[26px] tabular-nums`}
-            style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-          />
-        </div>
+        <MoneyInput value={amount} onChange={setAmount} prefix="$" />
       </div>
 
       <div>
@@ -105,12 +113,29 @@ export default function ModalMovimiento({ onClose, bankAccounts = [] }: { onClos
 
       <div>
         <label className={labelClass}>Categoría</label>
-        <select value={category} onChange={(e) => setCategory(e.target.value)} className={fieldClass}>
+        <select
+          value={category}
+          onChange={(e) => { setCategory(e.target.value); setCustomCat(""); }}
+          className={fieldClass}
+        >
           {cats.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
       </div>
+
+      {isOther && (
+        <div>
+          <label className={labelClass}>Nueva categoría</label>
+          <input
+            value={customCat}
+            onChange={(e) => setCustomCat(e.target.value)}
+            placeholder={type === "ingreso" ? "Ej. Dividendos" : "Ej. Salud"}
+            className={fieldClass}
+            autoFocus
+          />
+        </div>
+      )}
 
       <div>
         <label className={labelClass}>Fecha</label>
