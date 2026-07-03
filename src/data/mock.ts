@@ -22,6 +22,7 @@ export type TxType = "ingreso" | "egreso";
 
 export type Transaction = {
   id: number;
+  financeId?: string;
   dateISO: string;
   desc: string;
   category: string;

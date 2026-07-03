@@ -69,6 +69,17 @@ export interface ActivityLog {
   createdAt: string
 }
 
+export interface Budget {
+  id: string
+  category: string
+  amount: number
+}
+
+export interface BudgetConfig {
+  period: "semanal" | "mensual" | "anual"
+  amount: number
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -80,4 +91,6 @@ export interface AllData {
   config: UserConfig | null
   bankAccounts: BankAccount[]
   activityLogs: ActivityLog[]
+  budgets: Budget[]
+  budgetConfig: BudgetConfig | null
 }

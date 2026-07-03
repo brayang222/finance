@@ -25,7 +25,7 @@ async function logActivity(
 export async function loadAll() {
   const userId = await getUserId();
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs] =
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfig] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId } }),
       prisma.crypto.findMany({ where: { userId } }),
@@ -38,6 +38,8 @@ export async function loadAll() {
       prisma.userConfig.findUnique({ where: { userId } }),
       prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
       prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      prisma.budget.findMany({ where: { userId }, orderBy: { category: 'asc' } }),
+      prisma.budgetConfig.findUnique({ where: { userId } }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
@@ -98,6 +100,10 @@ export async function loadAll() {
     config: config ? { theme: config.theme as "dark" | "light" } : null,
     bankAccounts: typedBankAccounts,
     activityLogs: typedActivityLogs,
+    budgets: budgets.map(b => ({ id: b.id, category: b.category, amount: b.amount })),
+    budgetConfig: budgetConfig
+      ? { period: budgetConfig.period as "semanal" | "mensual" | "anual", amount: budgetConfig.amount }
+      : null,
   };
 }
 
@@ -134,6 +140,24 @@ async function adjustBalance(userId: string, accountId: string | undefined | nul
 }
 
 // ── ADD SINGLE ENTRIES ──
+export async function updateFinance(id: string, item: Omit<Finance, "id">) {
+  const userId = await getUserId();
+  const old = await prisma.finance.findUnique({ where: { id } });
+  if (!old || old.userId !== userId) throw new Error("Not found");
+  // Reverse old balance effect, apply new
+  await adjustBalance(userId, old.accountId, old.type === "ingreso" ? -old.amount : old.amount);
+  await adjustBalance(userId, item.accountId, item.type === "ingreso" ? item.amount : -item.amount);
+  await prisma.finance.update({ where: { id }, data: { ...item, userId } });
+}
+
+export async function deleteFinance(id: string) {
+  const userId = await getUserId();
+  const old = await prisma.finance.findUnique({ where: { id } });
+  if (!old || old.userId !== userId) return;
+  await adjustBalance(userId, old.accountId, old.type === "ingreso" ? -old.amount : old.amount);
+  await prisma.finance.delete({ where: { id } });
+}
+
 export async function addFinance(item: Omit<Finance, "id">) {
   const userId = await getUserId();
   await prisma.finance.create({ data: { ...item, id: crypto.randomUUID(), userId } });
@@ -488,4 +512,28 @@ export async function seedUserData(data: any) { // TODO: type
   ]);
 
   return { seeded: true };
+}
+
+// ── BUDGETS ──
+export async function upsertBudgetConfig(period: string, amount: number) {
+  const userId = await getUserId();
+  await prisma.budgetConfig.upsert({
+    where: { userId },
+    create: { userId, period, amount },
+    update: { period, amount },
+  });
+}
+
+export async function upsertBudget(category: string, amount: number) {
+  const userId = await getUserId();
+  await prisma.budget.upsert({
+    where: { userId_category: { userId, category } },
+    create: { userId, category, amount },
+    update: { amount },
+  });
+}
+
+export async function deleteBudget(category: string) {
+  const userId = await getUserId();
+  await prisma.budget.deleteMany({ where: { userId, category } });
 }

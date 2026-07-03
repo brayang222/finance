@@ -10,6 +10,7 @@ import {
   IconCard,
   IconClock,
   IconBank,
+  IconChart,
 } from "./utils";
 
 export const NAV_ITEMS: { href: string; label: string; icon: React.FC<{ size?: number }> }[] = [
@@ -19,6 +20,7 @@ export const NAV_ITEMS: { href: string; label: string; icon: React.FC<{ size?: n
   { href: "/transactions", label: "Transacciones", icon: IconArrows },
   { href: "/accounts", label: "Cuentas", icon: IconCard },
   { href: "/savings", label: "Alto Rendimiento", icon: IconBank },
+  { href: "/analytics", label: "Análisis", icon: IconChart },
   { href: "/history", label: "Historial", icon: IconClock },
 ];
 

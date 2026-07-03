@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { CATS_IN, CATS_OUT } from "../../data/constants";
-import { addFinance } from "../../../lib/actions";
+import { addFinance, updateFinance } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
 import type { BankAccount } from "../../types";
 
@@ -13,23 +13,30 @@ type TxType = "ingreso" | "egreso";
 const OTHER_IN  = "Otro ingreso";
 const OTHER_OUT = "Otro gasto";
 
+interface EditInitial {
+  type: TxType;
+  amount: number;
+  desc: string;
+  date: string;
+  category: string;
+  accountId?: string;
+}
+
 export default function ModalMovimiento({
   onClose,
   bankAccounts = [],
   existingCats = [],
+  editId,
+  editInitial,
 }: {
   onClose: () => void;
   bankAccounts?: BankAccount[];
   existingCats?: string[];
+  editId?: string;
+  editInitial?: EditInitial;
 }) {
   const router = useRouter();
-  const [type, setType]       = useState<TxType>("egreso");
-  const [amount, setAmount]   = useState("");
-  const [desc, setDesc]       = useState("");
-  const [dateISO, setDateISO] = useState(today());
-  const [accountId, setAccountId] = useState("");
-  const [saving, setSaving]   = useState(false);
-  const [customCat, setCustomCat] = useState("");
+  const isEdit = !!editId;
 
   // Merge static + existing (deduped), keep "Otro" last
   const buildCats = (t: TxType) => {
@@ -39,8 +46,28 @@ export default function ModalMovimiento({
     return [...base.slice(0, -1), ...extra, other];
   };
 
+  const initType = editInitial?.type ?? "egreso";
+  const initCats = buildCats(initType);
+
+  // For edit mode: if category isn't in the built list, use "Otro" + customCat
+  const initCatInList = editInitial
+    ? initCats.find(c => c === editInitial.category) ?? null
+    : null;
+  const initCategory = initCatInList ?? (initType === "ingreso" ? OTHER_IN : OTHER_OUT);
+  const initCustomCat = (!initCatInList && editInitial?.category)
+    ? editInitial.category
+    : "";
+
+  const [type, setType]           = useState<TxType>(initType);
+  const [amount, setAmount]       = useState(editInitial ? String(Math.round(editInitial.amount)) : "");
+  const [desc, setDesc]           = useState(editInitial?.desc ?? "");
+  const [dateISO, setDateISO]     = useState(editInitial?.date ?? today());
+  const [accountId, setAccountId] = useState(editInitial?.accountId ?? "");
+  const [saving, setSaving]       = useState(false);
+  const [customCat, setCustomCat] = useState(initCustomCat);
+  const [category, setCategory]   = useState(initCategory);
+
   const cats = buildCats(type);
-  const [category, setCategory] = useState(cats[0]);
 
   const isOther = category === OTHER_IN || category === OTHER_OUT;
   const finalCat = isOther ? customCat.trim() || category : category;
@@ -59,7 +86,7 @@ export default function ModalMovimiento({
     setSaving(true);
     try {
       const acct = bankAccounts.find(b => b.id === accountId);
-      await addFinance({
+      const item = {
         type,
         amount: monto,
         desc: desc.trim(),
@@ -67,7 +94,12 @@ export default function ModalMovimiento({
         date: dateISO,
         accountId: acct?.id,
         accountName: acct?.name,
-      });
+      };
+      if (isEdit) {
+        await updateFinance(editId!, item);
+      } else {
+        await addFinance(item);
+      }
       router.refresh();
       onClose();
     } finally {
@@ -77,7 +109,7 @@ export default function ModalMovimiento({
 
   return (
     <ModalShell
-      title="Registrar movimiento"
+      title={isEdit ? "Editar movimiento" : "Registrar movimiento"}
       onClose={onClose}
       footer={<CancelSave onClose={onClose} onSave={save} canSave={canSave} saving={saving} />}
     >

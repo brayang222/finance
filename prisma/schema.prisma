@@ -29,6 +29,8 @@ model User {
   config        UserConfig?
   bankAccounts  BankAccount[]
   activityLogs  ActivityLog[]
+  budgets       Budget[]
+  budgetConfig  BudgetConfig?
 }
 
 model Account {
@@ -187,4 +189,22 @@ model ActivityLog {
   accountName String?
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Budget {
+  id       String @id @default(cuid())
+  userId   String
+  category String
+  amount   Float
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+}
+
+model BudgetConfig {
+  id     String @id @default(cuid())
+  userId String @unique
+  period String @default("mensual")
+  amount Float  @default(0)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

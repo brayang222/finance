@@ -57,10 +57,11 @@ export function toTransactions(finances: Finance[]): Transaction[] {
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((f, i) => ({
       id: i + 1,
+      financeId: f.id,
       dateISO: f.date,
       desc: f.desc ?? f.category,
       category: f.category,
-      account: "",
+      account: f.accountName ?? "",
       type: f.type as TxType,
       amount: f.amount,
     }));

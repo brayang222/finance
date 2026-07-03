@@ -102,6 +102,14 @@ function Result({ label, value, highlight }: { label: string; value: string; hig
   );
 }
 
+function fmtDisplay(s: string): string {
+  if (s === "Error") return s;
+  const [int, dec] = s.split(",");
+  const n = parseInt(int, 10);
+  const intFmt = isNaN(n) ? int : n.toLocaleString("es-CO");
+  return dec !== undefined ? `${intFmt},${dec}` : intFmt;
+}
+
 // ── 1. Calculadora normal ─────────────────────────────────────────────────────
 const KEY_MAP: Record<string, string> = {
   "0":"0","1":"1","2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9",
@@ -198,7 +206,7 @@ function CalcNormal() {
       <div className="rounded-xl p-4 text-right" style={{ background: "var(--panel2)" }}>
         <div className="text-xs h-4" style={{ color: "var(--dim)" }}>{expr}</div>
         <div className="text-3xl font-light truncate" style={{ color: "var(--fg)", fontFamily: "'IBM Plex Mono', monospace" }}>
-          {display}
+          {fmtDisplay(display)}
         </div>
       </div>
       <div className="flex flex-col gap-2">

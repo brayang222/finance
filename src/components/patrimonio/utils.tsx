@@ -156,3 +156,11 @@ export const IconBank: React.FC<{ size?: number }> = ({ size = 20 }) => (
     <line x1="2" y1="16" x2="18" y2="16" />
   </svg>
 );
+
+export const IconChart: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="11" width="4" height="7" rx="1" />
+    <rect x="8" y="6" width="4" height="12" rx="1" />
+    <rect x="14" y="2" width="4" height="16" rx="1" />
+  </svg>
+);

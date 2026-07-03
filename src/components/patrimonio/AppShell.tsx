@@ -13,11 +13,11 @@ import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
 import FloatingCalc from "./FloatingCalc";
 
-type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics";
 
 function sectionFromPath(path: string): Section {
   const seg = path.split("/")[1] || "transactions";
-  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings"].includes(seg)) {
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics"].includes(seg)) {
     return seg as Section;
   }
   return "transactions";
@@ -33,6 +33,7 @@ const PAGE_META: Record<Section, { title: string; sub: string }> = {
   history:      { title: "Historial",          sub: "Registro de actividad" },
   profile:      { title: "Perfil",             sub: "Tu cuenta y preferencias" },
   savings:      { title: "Alto rendimiento",   sub: "Cuenta de crecimiento" },
+  analytics:    { title: "Análisis",           sub: "Presupuesto, categorías y tendencias" },
 };
 
 // Sections where the "Registrar" button is shown
