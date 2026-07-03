@@ -11,6 +11,7 @@ import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount } from "../
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
+import { IconEdit, IconTrash } from "./Icons";
 
 // ponytail: shared style objects replaced with className strings
 const cardClass = "border border-line bg-panel rounded-[18px] p-5.5";
@@ -330,19 +331,11 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
                       </td>
                       <td className={`${tdClass} text-right`}>
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setEditItem(t)}
-                            className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg"
-                            title="Editar"
-                          >
-                            ✏️
+                          <button onClick={() => setEditItem(t)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg" title="Editar">
+                            <IconEdit />
                           </button>
-                          <button
-                            onClick={() => handleDelete(t.id)}
-                            className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg"
-                            title="Eliminar"
-                          >
-                            🗑
+                          <button onClick={() => handleDelete(t.id)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar">
+                            <IconTrash />
                           </button>
                         </div>
                       </td>
@@ -626,10 +619,10 @@ function AccountCard({
             </span>
           )}
           {onEdit && (
-            <button onClick={onEdit} className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg" title="Editar">✏️</button>
+            <button onClick={onEdit} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg" title="Editar"><IconEdit /></button>
           )}
           {onDelete && (
-            <button onClick={onDelete} className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg" title="Eliminar">🗑</button>
+            <button onClick={onDelete} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar"><IconTrash /></button>
           )}
         </div>
       </div>
@@ -663,12 +656,15 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const stockTotal  = holdings.reduce((s, a) => s + a.qty * a.price, 0);
   const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
 
-  // HYS current balance = last movement's balance compounded to today
+  // HYS balance uses Date.now() — defer to client to avoid SSR/client mismatch
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => { setNow(Date.now()); }, []);
   const hysBalance = (() => {
+    if (!now) return 0;
     const hys = initialData.hys;
     if (!hys || hys.movements.length === 0) return 0;
     const last = hys.movements[hys.movements.length - 1];
-    const days = (Date.now() - new Date(last.date).getTime()) / 86400000;
+    const days = (now - new Date(last.date).getTime()) / 86400000;
     return last.balance * Math.pow(1 + hys.rate / 100, days / 365);
   })();
 

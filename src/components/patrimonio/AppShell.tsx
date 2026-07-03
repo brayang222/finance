@@ -11,6 +11,7 @@ import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
+import FloatingCalc from "./FloatingCalc";
 
 type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings";
 
@@ -131,6 +132,7 @@ export default function AppShell({
         {isMobile && <BottomNav />}
 
         {modal}
+        <FloatingCalc />
       </div>
     </PrivacyContext.Provider>
   );
