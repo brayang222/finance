@@ -106,6 +106,19 @@ export interface BudgetConfig {
   amount: number
 }
 
+export interface Recurring {
+  id: string
+  type: "ingreso" | "egreso"
+  category: string
+  desc: string
+  amount: number
+  accountId?: string
+  accountName?: string
+  frequency: "diario" | "semanal" | "quincenal" | "mensual" | "anual"
+  nextDate: string
+  active: boolean
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -121,4 +134,5 @@ export interface AllData {
   budgetConfigs: BudgetConfig[]
   categories: Category[]
   goals: Goal[]
+  recurrings: Recurring[]
 }

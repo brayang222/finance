@@ -13,6 +13,7 @@ import {
   IconBank,
   IconChart,
   IconTarget,
+  IconRepeat,
 } from "./utils";
 
 type NavItem = {
@@ -31,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/savings",      label: "Alto Rendimiento", icon: IconBank,     module: "showHys" },
   { href: "/analytics",    label: "Análisis",         icon: IconChart },
   { href: "/goals",        label: "Metas",            icon: IconTarget,   module: "showGoals" },
+  { href: "/recurrentes",  label: "Recurrentes",      icon: IconRepeat },
   { href: "/history",      label: "Historial",        icon: IconClock,    module: "showActivity" },
 ];
 

@@ -14,11 +14,11 @@ import { PrivacyContext } from "./PrivacyContext";
 import FloatingCalc from "./FloatingCalc";
 import Onboarding from "./Onboarding";
 
-type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals" | "recurrentes";
 
 function sectionFromPath(path: string): Section {
   const seg = path.split("/")[1] || "transactions";
-  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals"].includes(seg)) {
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals", "recurrentes"].includes(seg)) {
     return seg as Section;
   }
   return "transactions";
@@ -36,6 +36,7 @@ const PAGE_META: Record<Section, { title: string; sub: string }> = {
   savings:      { title: "Alto rendimiento",   sub: "Cuenta de crecimiento" },
   analytics:    { title: "Análisis",           sub: "Presupuesto, categorías y tendencias" },
   goals:        { title: "Metas",              sub: "Objetivos de ahorro" },
+  recurrentes:  { title: "Recurrentes",        sub: "Arriendo, salario, suscripciones" },
 };
 
 const REGISTRAR_SECTIONS: Section[] = ["transactions", "investments", "crypto", "accounts"];
@@ -88,13 +89,22 @@ export default function AppShell({
     if (!showModal) return null;
     const close = () => setShowModal(false);
     switch (section) {
-      case "transactions": return <ModalMovimiento bankAccounts={allAccounts} categories={data.categories} onClose={close} />;
+      case "transactions": return (
+        <ModalMovimiento
+          bankAccounts={allAccounts}
+          categories={data.categories}
+          finances={data.finances}
+          budgets={data.budgets}
+          budgetConfigs={data.budgetConfigs}
+          onClose={close}
+        />
+      );
       case "investments":  return <ModalAccion bankAccounts={allAccounts} onClose={close} />;
       case "crypto":       return <ModalCripto bankAccounts={allAccounts} onClose={close} />;
       case "accounts":     return <ModalCuenta onClose={close} />;
       default:              return null;
     }
-  }, [showModal, section, allAccounts, data.categories]);
+  }, [showModal, section, allAccounts, data.categories, data.finances, data.budgets, data.budgetConfigs]);
 
   const showOnboarding = !data.config?.onboardingDone;
 

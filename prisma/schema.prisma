@@ -33,6 +33,7 @@ model User {
   budgetConfigs BudgetConfig[]
   categories    Category[]
   goals         Goal[]
+  recurrings    Recurring[]
 }
 
 model Account {
@@ -189,6 +190,21 @@ model Goal {
   color     String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Recurring {
+  id          String  @id @default(cuid())
+  userId      String
+  type        String
+  category    String
+  desc        String
+  amount      Float
+  accountId   String?
+  accountName String?
+  frequency   String
+  nextDate    String
+  active      Boolean @default(true)
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Category {

@@ -635,6 +635,9 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
             editInitial={{ type: f.type, amount: f.amount, desc: f.desc ?? "", date: f.date, category: f.category, accountId: f.accountId }}
             bankAccounts={allAccounts}
             categories={initialData.categories}
+            finances={initialData.finances}
+            budgets={initialData.budgets}
+            budgetConfigs={initialData.budgetConfigs}
             onClose={() => setEditId(null)}
           />
         );

@@ -172,3 +172,12 @@ export const IconTarget: React.FC<{ size?: number }> = ({ size = 18 }) => (
     <circle cx="12" cy="12" r="1.2" fill="currentColor" />
   </svg>
 );
+
+export const IconRepeat: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 2l4 4-4 4" />
+    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+    <path d="M7 22l-4-4 4-4" />
+    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+  </svg>
+);

@@ -7,6 +7,7 @@ import { upsertBudget, deleteBudget, upsertBudgetConfig } from "../../../lib/act
 import { COLORS } from "../../data/constants";
 import { usePrivacy } from "./PrivacyContext";
 import { MoneyInput } from "./ModalShell";
+import { Period, getPeriodRange } from "./periods";
 
 const COP = (n: number) =>
   n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -14,28 +15,7 @@ const COP = (n: number) =>
 const card = "border border-line bg-panel rounded-2xl p-5";
 const inputSm = "h-7 text-xs border border-line rounded px-2 bg-panel2 text-fg outline-none font-mono tabular-nums";
 
-type Period = "semanal" | "mensual" | "anual";
-
 const PERIOD_LABELS: Record<Period, string> = { semanal: "Semanal", mensual: "Mensual", anual: "Anual" };
-
-// Full calendar ranges (week Mon–Sun, whole month, whole year) so
-// transactions dated "tomorrow" by timezone shift still count in the period
-function getPeriodRange(period: Period, now: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  if (period === "semanal") {
-    const dow = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return { from: fmt(monday), to: fmt(sunday) };
-  }
-  if (period === "anual") return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to: fmt(lastDay) };
-}
 
 function periodSubLabel(period: Period, now: Date): string {
   if (period === "semanal") {

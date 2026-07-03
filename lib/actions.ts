@@ -26,7 +26,7 @@ async function logActivity(
 export async function loadAll() {
   const userId = await getUserId();
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals] =
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId } }),
       prisma.crypto.findMany({ where: { userId } }),
@@ -43,6 +43,7 @@ export async function loadAll() {
       prisma.budgetConfig.findMany({ where: { userId } }),
       prisma.category.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
       prisma.goal.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.recurring.findMany({ where: { userId }, orderBy: { nextDate: 'asc' } }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
@@ -126,6 +127,18 @@ export async function loadAll() {
     goals: goals.map(g => ({
       id: g.id, name: g.name, target: g.target, saved: g.saved,
       deadline: g.deadline ?? undefined, color: g.color ?? undefined,
+    })),
+    recurrings: recurrings.map(r => ({
+      id: r.id,
+      type: r.type as "ingreso" | "egreso",
+      category: r.category,
+      desc: r.desc,
+      amount: r.amount,
+      accountId: r.accountId ?? undefined,
+      accountName: r.accountName ?? undefined,
+      frequency: r.frequency as "diario" | "semanal" | "quincenal" | "mensual" | "anual",
+      nextDate: r.nextDate,
+      active: r.active,
     })),
   };
 }
@@ -709,4 +722,59 @@ export async function contributeGoal(id: string, amount: number) {
   if (!goal) throw new Error("Meta no encontrada");
   await prisma.goal.update({ where: { id }, data: { saved: { increment: amount } } });
   await logActivity(userId, "goal_contribute", `Abono a meta: ${goal.name}`, { amount });
+}
+
+// ── RECURRING TRANSACTIONS ──
+export async function addRecurring(item: {
+  type: string; category: string; desc: string; amount: number;
+  accountId?: string; accountName?: string; frequency: string; nextDate: string;
+}) {
+  const userId = await getUserId();
+  await prisma.recurring.create({ data: { ...item, userId } });
+}
+
+export async function updateRecurring(id: string, item: {
+  type: string; category: string; desc: string; amount: number;
+  accountId?: string; accountName?: string; frequency: string; nextDate: string; active: boolean;
+}) {
+  const userId = await getUserId();
+  await prisma.recurring.updateMany({ where: { id, userId }, data: item });
+}
+
+export async function deleteRecurring(id: string) {
+  const userId = await getUserId();
+  await prisma.recurring.deleteMany({ where: { id, userId } });
+}
+
+function advanceDate(date: string, frequency: string): string {
+  const d = new Date(date + "T00:00:00");
+  switch (frequency) {
+    case "diario":     d.setDate(d.getDate() + 1); break;
+    case "semanal":    d.setDate(d.getDate() + 7); break;
+    case "quincenal":  d.setDate(d.getDate() + 15); break;
+    case "mensual":    d.setMonth(d.getMonth() + 1); break;
+    case "anual":      d.setFullYear(d.getFullYear() + 1); break;
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export async function applyRecurring(id: string) {
+  const userId = await getUserId();
+  const r = await prisma.recurring.findFirst({ where: { id, userId } });
+  if (!r) throw new Error("Recurrente no encontrado");
+  await prisma.finance.create({
+    data: {
+      id: crypto.randomUUID(), userId,
+      type: r.type, category: r.category, desc: r.desc,
+      amount: r.amount, date: r.nextDate,
+      accountId: r.accountId, accountName: r.accountName,
+    },
+  });
+  await autoSaveCategory(userId, r.category, r.type);
+  const delta = r.type === "ingreso" ? r.amount : -r.amount;
+  await adjustBalance(userId, r.accountId ?? undefined, delta);
+  const next = advanceDate(r.nextDate, r.frequency);
+  await prisma.recurring.update({ where: { id }, data: { nextDate: next } });
+  await logActivity(userId, r.type, `Recurrente: ${r.desc}`, { amount: r.amount, accountName: r.accountName ?? undefined });
 }

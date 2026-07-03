@@ -6,12 +6,18 @@ import { today } from "../../data/mock";
 import { CATS_IN, CATS_OUT } from "../../data/constants";
 import { addFinance, updateFinance } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
-import type { BankAccount, Category } from "../../types";
+import type { BankAccount, Category, Finance, Budget, BudgetConfig } from "../../types";
+import { Period, getPeriodRange } from "./periods";
 
 type TxType = "ingreso" | "egreso";
 
 const OTHER_IN  = "Otro ingreso";
 const OTHER_OUT = "Otro gasto";
+
+const COP = (n: number) =>
+  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+
+const PERIOD_LABEL: Record<Period, string> = { semanal: "semanal", mensual: "mensual", anual: "anual" };
 
 interface EditInitial {
   type: TxType;
@@ -26,12 +32,18 @@ export default function ModalMovimiento({
   onClose,
   bankAccounts = [],
   categories = [],
+  finances = [],
+  budgets = [],
+  budgetConfigs = [],
   editId,
   editInitial,
 }: {
   onClose: () => void;
   bankAccounts?: BankAccount[];
   categories?: Category[];
+  finances?: Finance[];
+  budgets?: Budget[];
+  budgetConfigs?: BudgetConfig[];
   editId?: string;
   editInitial?: EditInitial;
 }) {
@@ -71,6 +83,49 @@ export default function ModalMovimiento({
 
   const monto = Number(amount.replace(/[^\d]/g, "")) || 0;
   const canSave = monto > 0 && desc.trim().length > 0 && (!isOther || customCat.trim().length > 0);
+
+  // Non-blocking budget warnings, anchored to the transaction's date
+  const budgetWarnings: string[] = [];
+  if (type === "egreso" && monto > 0 && dateISO) {
+    const anchor = new Date(dateISO + "T00:00:00");
+    const catLower = finalCat.trim().toLowerCase();
+    for (const p of ["semanal", "mensual", "anual"] as Period[]) {
+      const { from, to } = getPeriodRange(p, anchor);
+      // exclude the row being edited so its old amount doesn't double-count
+      const inPeriod = finances.filter(f => f.type === "egreso" && f.id !== editId && f.date >= from && f.date <= to);
+
+      const total = budgetConfigs.find(c => c.period === p)?.amount ?? 0;
+      if (total > 0) {
+        const spent = inPeriod.reduce((s, f) => s + f.amount, 0);
+        if (spent + monto > total) {
+          budgetWarnings.push(`Superarás tu presupuesto ${PERIOD_LABEL[p]} por ${COP(spent + monto - total)}`);
+        }
+      }
+
+      const catBudget = budgets.find(b => b.period === p && b.category.toLowerCase() === catLower);
+      if (catBudget && catBudget.amount > 0) {
+        const spentCat = inPeriod.filter(f => f.category.toLowerCase() === catLower).reduce((s, f) => s + f.amount, 0);
+        if (spentCat + monto > catBudget.amount) {
+          budgetWarnings.push(`Superarás el límite ${PERIOD_LABEL[p]} de "${catBudget.category}" por ${COP(spentCat + monto - catBudget.amount)}`);
+        }
+      }
+    }
+  }
+
+  // Duplicate detection: same category + amount within ±3 days, excluding self
+  const duplicateWarning = (() => {
+    if (!monto || !dateISO || !finalCat) return null;
+    const anchor = new Date(dateISO + "T00:00:00").getTime();
+    const THREE_DAYS = 3 * 86400000;
+    const dup = finances.find(f =>
+      f.id !== editId &&
+      f.type === type &&
+      f.category.toLowerCase() === finalCat.toLowerCase() &&
+      Math.abs(f.amount - monto) < 1 &&
+      Math.abs(new Date(f.date + "T00:00:00").getTime() - anchor) <= THREE_DAYS
+    );
+    return dup ? `Posible duplicado: ya registraste ${COP(dup.amount)} en "${dup.category}" el ${dup.date}` : null;
+  })();
 
   const switchType = (t: TxType) => {
     setType(t);
@@ -176,6 +231,28 @@ export default function ModalMovimiento({
             <option value="">— Sin cuenta —</option>
             {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+        </div>
+      )}
+
+      {duplicateWarning && (
+        <div
+          className="rounded-xl border px-3.5 py-2.5 flex flex-col gap-1"
+          style={{ borderColor: "#6366f1", background: "color-mix(in srgb, #6366f1 8%, transparent)" }}
+        >
+          <div className="text-xs font-medium" style={{ color: "#818cf8" }}>⟳ {duplicateWarning}</div>
+          <div className="text-[11px] text-dim">Si es diferente, puedes registrarlo igual.</div>
+        </div>
+      )}
+
+      {budgetWarnings.length > 0 && (
+        <div
+          className="rounded-xl border px-3.5 py-2.5 flex flex-col gap-1"
+          style={{ borderColor: "#f59e0b", background: "color-mix(in srgb, #f59e0b 8%, transparent)" }}
+        >
+          {budgetWarnings.map(w => (
+            <div key={w} className="text-xs font-medium" style={{ color: "#f59e0b" }}>⚠ {w}</div>
+          ))}
+          <div className="text-[11px] text-dim">Puedes registrarlo de todas formas.</div>
         </div>
       )}
     </ModalShell>
