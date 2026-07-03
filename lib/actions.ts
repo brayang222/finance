@@ -2,7 +2,7 @@
 
 import { auth } from "../auth";
 import { prisma } from "./prisma";
-import type { Stock, Crypto, Finance, Hys, Cash } from '../src/types';
+import type { Stock, Crypto, Finance, Hys, Cash, BankAccount } from '../src/types';
 
 async function getUserId() {
   const session = await auth();
@@ -10,11 +10,22 @@ async function getUserId() {
   return session.user.id;
 }
 
+async function logActivity(
+  userId: string,
+  type: string,
+  description: string,
+  extras?: { amount?: number; ticker?: string; accountName?: string }
+) {
+  await prisma.activityLog.create({
+    data: { userId, type, description, ...extras },
+  });
+}
+
 // ── LOAD ALL ──
 export async function loadAll() {
   const userId = await getUserId();
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config] =
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId } }),
       prisma.crypto.findMany({ where: { userId } }),
@@ -25,15 +36,240 @@ export async function loadAll() {
       prisma.target.findMany({ where: { userId } }),
       prisma.cash.findUnique({ where: { userId } }),
       prisma.userConfig.findUnique({ where: { userId } }),
+      prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
   const targetsMap = Object.fromEntries(targets.map(t => [t.ticker, t.value]));
   const hysData = hys
-    ? { rate: hys.rate, movements: hysMovements }
+    ? { rate: hys.rate, movements: hysMovements.map(m => ({ ...m, note: m.note ?? undefined })) }
     : null;
 
-  return { stocks, crypto, finances, hys: hysData, prices: pricesMap, targets: targetsMap, cash, config: config ? { theme: config.theme as "dark" | "light" } : null };
+  const typedFinances = finances.map(f => ({
+    ...f,
+    type: f.type as "ingreso" | "egreso",
+    desc: f.desc ?? undefined,
+    accountId: f.accountId ?? undefined,
+    accountName: f.accountName ?? undefined,
+  }));
+
+  const typedCash = cash ? { banco: cash.banco, note: cash.note ?? undefined } : null;
+
+  const typedBankAccounts = bankAccounts.map(b => ({
+    id: b.id,
+    name: b.name,
+    bank: b.bank ?? undefined,
+    type: b.type ?? "banco",
+    balance: b.balance,
+    color: b.color ?? undefined,
+  }));
+
+  const typedActivityLogs = activityLogs.map(a => ({
+    id: a.id,
+    type: a.type,
+    description: a.description,
+    amount: a.amount ?? undefined,
+    ticker: a.ticker ?? undefined,
+    accountName: a.accountName ?? undefined,
+    createdAt: a.createdAt.toISOString(),
+  }));
+
+  const typedStocks = stocks.map(s => ({
+    ...s,
+    accountId: s.accountId ?? undefined,
+    accountName: s.accountName ?? undefined,
+  }));
+
+  const typedCrypto = crypto.map(c => ({
+    ...c,
+    accountId: c.accountId ?? undefined,
+    accountName: c.accountName ?? undefined,
+  }));
+
+  return {
+    stocks: typedStocks,
+    crypto: typedCrypto,
+    finances: typedFinances,
+    hys: hysData,
+    prices: pricesMap,
+    targets: targetsMap,
+    cash: typedCash,
+    config: config ? { theme: config.theme as "dark" | "light" } : null,
+    bankAccounts: typedBankAccounts,
+    activityLogs: typedActivityLogs,
+  };
+}
+
+// ── BALANCE ADJUSTMENT HELPER ──
+// delta > 0 = credit (money in), delta < 0 = debit (money out)
+async function adjustBalance(userId: string, accountId: string | undefined | null, delta: number) {
+  if (!accountId || Math.abs(delta) < 0.01) return;
+  if (accountId === "hys") {
+    const hys = await prisma.hys.findUnique({ where: { userId } });
+    if (!hys) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+    const base = last ? last.balance * (1 + hys.rate / 100) ** (
+      Math.max(0, Math.floor((new Date(todayStr).getTime() - new Date(last.date).getTime()) / 86400000)) / 365
+    ) : 0;
+    const newBal = Math.max(0, base + delta);
+    await prisma.hysMovement.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId,
+        date: todayStr,
+        type: delta >= 0 ? "deposito" : "retiro",
+        amount: Math.abs(delta),
+        balance: newBal,
+        rate: hys.rate,
+      },
+    });
+  } else {
+    await prisma.bankAccount.updateMany({
+      where: { id: accountId, userId },
+      data: { balance: { increment: delta } },
+    });
+  }
+}
+
+// ── ADD SINGLE ENTRIES ──
+export async function addFinance(item: Omit<Finance, "id">) {
+  const userId = await getUserId();
+  await prisma.finance.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+  const delta = item.type === "ingreso" ? item.amount : -item.amount;
+  await adjustBalance(userId, item.accountId, delta);
+  await logActivity(userId, item.type, `${item.type === "ingreso" ? "Ingreso" : "Egreso"}: ${item.desc ?? item.category}`, {
+    amount: item.amount,
+    accountName: item.accountName,
+  });
+}
+
+export async function addStock(item: Omit<Stock, "id">) {
+  const userId = await getUserId();
+  const { source, ...rest } = item;
+  await prisma.stock.create({ data: { ...rest, id: crypto.randomUUID(), userId } });
+  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  await logActivity(userId, "stock_buy", `Compra acción: ${item.ticker}`, {
+    amount: item.priceCOP * item.qty,
+    ticker: item.ticker,
+    accountName: item.accountName,
+  });
+}
+
+export async function addCrypto(item: Omit<Crypto, "id">) {
+  const userId = await getUserId();
+  await prisma.crypto.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  await logActivity(userId, "crypto_buy", `Compra cripto: ${item.ticker}`, {
+    amount: item.priceCOP * item.qty,
+    ticker: item.ticker,
+    accountName: item.accountName,
+  });
+}
+
+// ── UPDATE / DELETE SINGLE ENTRIES ──
+export async function updateStock(id: string, item: Omit<Stock, "id">) {
+  const userId = await getUserId();
+  const old = await prisma.stock.findUnique({ where: { id } });
+  const { source, ...rest } = item;
+  await prisma.stock.update({ where: { id, userId }, data: rest });
+  // Reverse old debit, apply new debit
+  if (old?.accountId) await adjustBalance(userId, old.accountId, old.priceCOP * old.qty + old.commission);
+  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  await logActivity(userId, "stock_edit", `Edición acción: ${item.ticker}`, { ticker: item.ticker });
+}
+
+export async function deleteStock(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.stock.findUnique({ where: { id } });
+  await prisma.stock.delete({ where: { id, userId } });
+  if (row?.accountId) await adjustBalance(userId, row.accountId, row.priceCOP * row.qty + row.commission);
+  await logActivity(userId, "stock_delete", `Eliminación acción: ${row?.ticker ?? id}`, { ticker: row?.ticker });
+}
+
+export async function updateCrypto(id: string, item: Omit<Crypto, "id">) {
+  const userId = await getUserId();
+  const old = await prisma.crypto.findUnique({ where: { id } });
+  await prisma.crypto.update({ where: { id, userId }, data: item });
+  if (old?.accountId) await adjustBalance(userId, old.accountId, old.priceCOP * old.qty + old.commission);
+  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  await logActivity(userId, "crypto_edit", `Edición cripto: ${item.ticker}`, { ticker: item.ticker });
+}
+
+export async function deleteCrypto(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.crypto.findUnique({ where: { id } });
+  await prisma.crypto.delete({ where: { id, userId } });
+  if (row?.accountId) await adjustBalance(userId, row.accountId, row.priceCOP * row.qty + row.commission);
+  await logActivity(userId, "crypto_delete", `Eliminación cripto: ${row?.ticker ?? id}`, { ticker: row?.ticker });
+}
+
+// ── BANK ACCOUNTS ──
+export async function createBankAccount(item: Omit<BankAccount, "id">) {
+  const userId = await getUserId();
+  await prisma.bankAccount.create({ data: { ...item, userId } });
+  await logActivity(userId, "account_create", `Nueva cuenta: ${item.name}`, { accountName: item.name });
+}
+
+export async function updateBankAccount(id: string, item: Omit<BankAccount, "id">) {
+  const userId = await getUserId();
+  await prisma.bankAccount.update({ where: { id, userId }, data: item });
+  await logActivity(userId, "account_edit", `Cuenta editada: ${item.name}`, { accountName: item.name });
+}
+
+export async function deleteBankAccount(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.bankAccount.findUnique({ where: { id } });
+  await prisma.bankAccount.delete({ where: { id, userId } });
+  await logActivity(userId, "account_delete", `Cuenta eliminada: ${row?.name ?? id}`, { accountName: row?.name });
+}
+
+// ── REFRESH MARKET PRICES ──
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: "bitcoin", ETH: "ethereum", SOL: "solana", ADA: "cardano",
+  USDT: "tether", BNB: "binancecoin", XRP: "ripple", DOT: "polkadot",
+  MATIC: "matic-network", AVAX: "avalanche-2", DOGE: "dogecoin",
+  LINK: "chainlink", LTC: "litecoin", UNI: "uniswap", ATOM: "cosmos",
+};
+
+export async function refreshPrices(stockTickers: string[], cryptoTickers: string[]) {
+  const userId = await getUserId();
+  const pricesMap: Record<string, number> = {};
+
+  for (const ticker of stockTickers) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.CL?range=1d&interval=1d`;
+      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 0 } });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price && price > 0) pricesMap[ticker] = price;
+    } catch { /* skip */ }
+  }
+
+  const ids = cryptoTickers.map(t => COINGECKO_IDS[t.toUpperCase()]).filter(Boolean);
+  if (ids.length > 0) {
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=cop`;
+      const res = await fetch(url, { next: { revalidate: 0 } });
+      if (res.ok) {
+        const json = await res.json();
+        for (const ticker of cryptoTickers) {
+          const coinId = COINGECKO_IDS[ticker.toUpperCase()];
+          if (coinId && json[coinId]?.cop) pricesMap[ticker.toUpperCase()] = json[coinId].cop;
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (Object.keys(pricesMap).length === 0) return { updated: 0 };
+
+  const existing = await prisma.price.findMany({ where: { userId } });
+  const merged = { ...Object.fromEntries(existing.map(p => [p.ticker, p.value])), ...pricesMap };
+  await prisma.price.deleteMany({ where: { userId } });
+  await prisma.price.createMany({ data: Object.entries(merged).map(([ticker, value]) => ({ userId, ticker, value })) });
+  return { updated: Object.keys(pricesMap).length };
 }
 
 // ── STOCKS ──
@@ -77,6 +313,113 @@ export async function saveHys({ rate, movements }: Hys) {
       data: movements.map(m => ({ ...m, userId })),
     }),
   ]);
+}
+
+// ── HYS GRANULAR ACTIONS ──
+
+function diffDays(later: string, earlier: string): number {
+  return Math.floor((new Date(later).getTime() - new Date(earlier).getTime()) / 86400000);
+}
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Compound balance B from date L to date T using TEA. */
+function compound(B: number, tea: number, dateL: string, dateT: string): number {
+  const days = diffDays(dateT, dateL);
+  if (days <= 0) return B;
+  return B * (1 + tea / 100) ** (days / 365);
+}
+
+/** After changing or deleting a movement, replay the series to fix subsequent balances. */
+async function replayBalances(userId: string, fromDate: string) {
+  const all = await prisma.hysMovement.findMany({ where: { userId }, orderBy: { date: "asc" } });
+  const pivotIdx = all.findIndex(m => m.date >= fromDate);
+  if (pivotIdx <= 0) return; // nothing before to base from, or nothing after
+  let prev = all[pivotIdx - 1];
+  for (let i = pivotIdx; i < all.length; i++) {
+    const m = all[i];
+    const accrued = compound(prev.balance, prev.rate, prev.date, m.date);
+    const isDeposit = m.type === "deposito" || m.type === "inicio" || m.type === "rendimiento";
+    const isRetiro = m.type === "retiro";
+    const newBalance = isRetiro ? accrued - m.amount : accrued + (isDeposit ? m.amount : m.amount);
+    // rendimiento movements record a 0 amount deposit (just the accrual capture)
+    const finalBalance = m.type === "rendimiento" ? accrued : newBalance;
+    await prisma.hysMovement.update({ where: { id: m.id }, data: { balance: finalBalance } });
+    prev = { ...m, balance: finalBalance };
+  }
+}
+
+export async function initHys(initialBalance: number, rate: number) {
+  const userId = await getUserId();
+  const today = todayISO();
+  await prisma.$transaction([
+    prisma.hys.upsert({ where: { userId }, update: { rate }, create: { userId, rate } }),
+    prisma.hysMovement.deleteMany({ where: { userId } }),
+    prisma.hysMovement.create({
+      data: { id: crypto.randomUUID(), userId, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
+    }),
+  ]);
+}
+
+export async function hysDeposit(amount: number, note?: string) {
+  const userId = await getUserId();
+  const today = todayISO();
+  const hys = await prisma.hys.findUnique({ where: { userId } });
+  if (!hys) throw new Error("Cuenta no inicializada");
+  const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  const base = last ? compound(last.balance, last.rate, last.date, today) : amount;
+  const newBalance = base + amount;
+  await prisma.hysMovement.create({
+    data: { id: crypto.randomUUID(), userId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
+  });
+}
+
+export async function hysWithdraw(amount: number, note?: string) {
+  const userId = await getUserId();
+  const today = todayISO();
+  const hys = await prisma.hys.findUnique({ where: { userId } });
+  if (!hys) throw new Error("Cuenta no inicializada");
+  const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  const base = last ? compound(last.balance, last.rate, last.date, today) : 0;
+  const newBalance = base - amount;
+  await prisma.hysMovement.create({
+    data: { id: crypto.randomUUID(), userId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },
+  });
+}
+
+export async function hysChangeRate(newRate: number) {
+  const userId = await getUserId();
+  const today = todayISO();
+  const hys = await prisma.hys.findUnique({ where: { userId } });
+  if (!hys) throw new Error("Cuenta no inicializada");
+  const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  const accrued = last ? compound(last.balance, last.rate, last.date, today) : 0;
+  // snapshot accrual with old rate, then update rate
+  await prisma.$transaction([
+    prisma.hysMovement.create({
+      data: { id: crypto.randomUUID(), userId, date: today, type: "rendimiento", amount: 0, balance: accrued, rate: hys.rate },
+    }),
+    prisma.hys.update({ where: { userId }, data: { rate: newRate } }),
+  ]);
+}
+
+export async function hysEditMovement(id: string, patch: { amount?: number; note?: string; date?: string }) {
+  const userId = await getUserId();
+  const movement = await prisma.hysMovement.findFirst({ where: { id, userId } });
+  if (!movement) throw new Error("Movimiento no encontrado");
+  const updated = await prisma.hysMovement.update({ where: { id }, data: patch });
+  await replayBalances(userId, updated.date);
+}
+
+export async function hysDeleteMovement(id: string) {
+  const userId = await getUserId();
+  const movement = await prisma.hysMovement.findFirst({ where: { id, userId } });
+  if (!movement) throw new Error("Movimiento no encontrado");
+  const date = movement.date;
+  await prisma.hysMovement.delete({ where: { id } });
+  await replayBalances(userId, date);
 }
 
 // ── PRICES ──
@@ -127,7 +470,6 @@ export async function saveConfig(theme: string) {
 export async function seedUserData(data: any) { // TODO: type
   const userId = await getUserId();
 
-  // Solo semilla si no tiene datos
   const existing = await prisma.stock.count({ where: { userId } });
   if (existing > 0) return { seeded: false };
 

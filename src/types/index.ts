@@ -9,6 +9,8 @@ export interface Stock {
   priceCOP: number
   commission: number
   source?: string
+  accountId?: string
+  accountName?: string
 }
 
 export interface Crypto extends Omit<Stock, 'source'> {}
@@ -20,6 +22,8 @@ export interface Finance {
   category: string
   desc?: string
   amount: number
+  accountId?: string
+  accountName?: string
 }
 
 export interface HysMovement {
@@ -46,6 +50,25 @@ export interface UserConfig {
   theme: "dark" | "light"
 }
 
+export interface BankAccount {
+  id: string
+  name: string
+  bank?: string
+  type: string
+  balance: number
+  color?: string
+}
+
+export interface ActivityLog {
+  id: string
+  type: string
+  description: string
+  amount?: number
+  ticker?: string
+  accountName?: string
+  createdAt: string
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -55,4 +78,6 @@ export interface AllData {
   targets: Record<string, number>
   cash: Cash | null
   config: UserConfig | null
+  bankAccounts: BankAccount[]
+  activityLogs: ActivityLog[]
 }
