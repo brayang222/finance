@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { IconCalc } from "./Icons";
+import { refreshTrm } from "../../../lib/actions";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -324,11 +325,21 @@ function CalcPrestamo() {
 }
 
 // ── 5. TRM / Conversor ────────────────────────────────────────────────────────
-function CalcTRM() {
-  const [trm,    setTrm]    = useState("4200");
+function CalcTRM({ storedTrm }: { storedTrm?: number | null }) {
+  const [trm,    setTrm]    = useState(storedTrm ? String(Math.round(storedTrm)) : "");
   const [usd,    setUsd]    = useState("");
   const [cop,    setCop]    = useState("");
   const [active, setActive] = useState<"usd" | "cop">("usd");
+  const [busy,   setBusy]   = useState(false);
+
+  const updateTrm = async () => {
+    setBusy(true);
+    try {
+      const value = await refreshTrm();
+      setTrm(String(Math.round(value)));
+    } catch { /* keep current value */ }
+    finally { setBusy(false); }
+  };
 
   const T = NUM(trm);
   const result = T > 0 ? (
@@ -341,8 +352,17 @@ function CalcTRM() {
 
   return (
     <div className="flex flex-col gap-3">
-      <NumField   label="TRM (COP por 1 USD)" value={trm} onChange={setTrm} placeholder="4200" />
-      <MoneyField label="Monto en USD"        value={usd} onChange={v => { setUsd(v); setActive("usd"); setCop(""); }} />
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <NumField label="TRM (COP por 1 USD)" value={trm} onChange={setTrm} placeholder="4200" />
+        </div>
+        <button onClick={updateTrm} disabled={busy} title="Consultar TRM actual"
+          className="h-9 px-3 rounded-lg border text-xs cursor-pointer shrink-0 disabled:opacity-50"
+          style={{ borderColor: "var(--line)", background: "var(--panel2)", color: "var(--muted)" }}>
+          {busy ? "…" : "↻ Hoy"}
+        </button>
+      </div>
+      <MoneyField label="Monto en USD" value={usd} onChange={v => { setUsd(v); setActive("usd"); setCop(""); }} />
       <div className="flex items-center gap-2">
         <div className="flex-1 h-px" style={{ background: "var(--line)" }} />
         <span className="text-xs" style={{ color: "var(--dim)" }}>ó</span>
@@ -356,16 +376,16 @@ function CalcTRM() {
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: "normal",   label: "Normal",   component: CalcNormal },
-  { id: "hys",      label: "HYS",      component: CalcHYS },
-  { id: "accion",   label: "Acción",   component: CalcAccion },
-  { id: "prestamo", label: "Préstamo", component: CalcPrestamo },
-  { id: "trm",      label: "TRM",      component: CalcTRM },
+  { id: "normal",   label: "Normal" },
+  { id: "hys",      label: "HYS" },
+  { id: "accion",   label: "Acción" },
+  { id: "prestamo", label: "Préstamo" },
+  { id: "trm",      label: "TRM" },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
 
-export default function FloatingCalc() {
+export default function FloatingCalc({ trm }: { trm?: number | null }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab]   = useState<TabId>("normal");
   const panelRef        = useRef<HTMLDivElement>(null);
@@ -379,7 +399,13 @@ export default function FloatingCalc() {
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
 
-  const ActiveCalc = TABS.find(t => t.id === tab)!.component;
+  const activeCalc = {
+    normal:   <CalcNormal />,
+    hys:      <CalcHYS />,
+    accion:   <CalcAccion />,
+    prestamo: <CalcPrestamo />,
+    trm:      <CalcTRM storedTrm={trm} />,
+  }[tab];
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
@@ -407,7 +433,7 @@ export default function FloatingCalc() {
             ))}
           </div>
           {/* Body */}
-          <div className="p-4"><ActiveCalc /></div>
+          <div className="p-4">{activeCalc}</div>
         </div>
       )}
 

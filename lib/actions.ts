@@ -3,6 +3,7 @@
 import { auth } from "../auth";
 import { prisma } from "./prisma";
 import type { Stock, Crypto, Finance, Hys, Cash, BankAccount } from '../src/types';
+import { GENERIC_CATS_IN, GENERIC_CATS_OUT } from '../src/data/constants';
 
 async function getUserId() {
   const session = await auth();
@@ -25,7 +26,7 @@ async function logActivity(
 export async function loadAll() {
   const userId = await getUserId();
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfig] =
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId } }),
       prisma.crypto.findMany({ where: { userId } }),
@@ -39,7 +40,9 @@ export async function loadAll() {
       prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
       prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
       prisma.budget.findMany({ where: { userId }, orderBy: { category: 'asc' } }),
-      prisma.budgetConfig.findUnique({ where: { userId } }),
+      prisma.budgetConfig.findMany({ where: { userId } }),
+      prisma.category.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
+      prisma.goal.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
@@ -97,13 +100,33 @@ export async function loadAll() {
     prices: pricesMap,
     targets: targetsMap,
     cash: typedCash,
-    config: config ? { theme: config.theme as "dark" | "light" } : null,
+    config: config ? {
+      theme: config.theme as "dark" | "light",
+      onboardingDone: config.onboardingDone,
+      showStocks: config.showStocks,
+      showCrypto: config.showCrypto,
+      showHys: config.showHys,
+      showActivity: config.showActivity,
+      showGoals: config.showGoals,
+      baseCurrency: config.baseCurrency as "COP" | "USD",
+      trm: config.trm,
+      trmUpdatedAt: config.trmUpdatedAt?.toISOString() ?? null,
+      summaryWidgets: config.summaryWidgets ? JSON.parse(config.summaryWidgets) : null,
+    } : null,
     bankAccounts: typedBankAccounts,
     activityLogs: typedActivityLogs,
-    budgets: budgets.map(b => ({ id: b.id, category: b.category, amount: b.amount })),
-    budgetConfig: budgetConfig
-      ? { period: budgetConfig.period as "semanal" | "mensual" | "anual", amount: budgetConfig.amount }
-      : null,
+    budgets: budgets.map(b => ({
+      id: b.id, category: b.category, amount: b.amount,
+      period: b.period as "semanal" | "mensual" | "anual",
+    })),
+    budgetConfigs: budgetConfigs.map(c => ({
+      period: c.period as "semanal" | "mensual" | "anual", amount: c.amount,
+    })),
+    categories: categories.map(c => ({ id: c.id, name: c.name, type: c.type as "ingreso" | "egreso" })),
+    goals: goals.map(g => ({
+      id: g.id, name: g.name, target: g.target, saved: g.saved,
+      deadline: g.deadline ?? undefined, color: g.color ?? undefined,
+    })),
   };
 }
 
@@ -144,10 +167,10 @@ export async function updateFinance(id: string, item: Omit<Finance, "id">) {
   const userId = await getUserId();
   const old = await prisma.finance.findUnique({ where: { id } });
   if (!old || old.userId !== userId) throw new Error("Not found");
-  // Reverse old balance effect, apply new
   await adjustBalance(userId, old.accountId, old.type === "ingreso" ? -old.amount : old.amount);
   await adjustBalance(userId, item.accountId, item.type === "ingreso" ? item.amount : -item.amount);
   await prisma.finance.update({ where: { id }, data: { ...item, userId } });
+  await autoSaveCategory(userId, item.category, item.type);
 }
 
 export async function deleteFinance(id: string) {
@@ -158,9 +181,18 @@ export async function deleteFinance(id: string) {
   await prisma.finance.delete({ where: { id } });
 }
 
+async function autoSaveCategory(userId: string, name: string, type: string) {
+  await prisma.category.upsert({
+    where: { userId_name_type: { userId, name, type } },
+    create: { userId, name, type },
+    update: {},
+  });
+}
+
 export async function addFinance(item: Omit<Finance, "id">) {
   const userId = await getUserId();
   await prisma.finance.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+  await autoSaveCategory(userId, item.category, item.type);
   const delta = item.type === "ingreso" ? item.amount : -item.amount;
   await adjustBalance(userId, item.accountId, delta);
   await logActivity(userId, item.type, `${item.type === "ingreso" ? "Ingreso" : "Egreso"}: ${item.desc ?? item.category}`, {
@@ -514,26 +546,167 @@ export async function seedUserData(data: any) { // TODO: type
   return { seeded: true };
 }
 
-// ── BUDGETS ──
+// ── BUDGETS (independent per period: semanal/mensual/anual) ──
 export async function upsertBudgetConfig(period: string, amount: number) {
   const userId = await getUserId();
   await prisma.budgetConfig.upsert({
-    where: { userId },
+    where: { userId_period: { userId, period } },
     create: { userId, period, amount },
-    update: { period, amount },
-  });
-}
-
-export async function upsertBudget(category: string, amount: number) {
-  const userId = await getUserId();
-  await prisma.budget.upsert({
-    where: { userId_category: { userId, category } },
-    create: { userId, category, amount },
     update: { amount },
   });
 }
 
-export async function deleteBudget(category: string) {
+export async function upsertBudget(category: string, amount: number, period: string) {
   const userId = await getUserId();
-  await prisma.budget.deleteMany({ where: { userId, category } });
+  await prisma.budget.upsert({
+    where: { userId_category_period: { userId, category, period } },
+    create: { userId, category, amount, period },
+    update: { amount },
+  });
+}
+
+export async function deleteBudget(category: string, period: string) {
+  const userId = await getUserId();
+  await prisma.budget.deleteMany({ where: { userId, category, period } });
+}
+
+// ── ONBOARDING / MODULES ──
+export async function completeOnboarding(modules: {
+  showStocks: boolean;
+  showCrypto: boolean;
+  showHys: boolean;
+  showActivity: boolean;
+  showGoals: boolean;
+}) {
+  const userId = await getUserId();
+
+  // Bootstrap from existing transaction categories
+  const existing = await prisma.finance.findMany({
+    where: { userId },
+    select: { category: true, type: true },
+    distinct: ['category', 'type'],
+  });
+
+  const defaults = [
+    ...GENERIC_CATS_IN.map(name => ({ name, type: "ingreso" })),
+    ...GENERIC_CATS_OUT.map(name => ({ name, type: "egreso" })),
+  ];
+
+  const existingSet = new Set(existing.map(f => `${f.type}::${f.category.toLowerCase()}`));
+  const toInsert = [
+    ...existing.map(f => ({ name: f.category, type: f.type })),
+    ...defaults.filter(d => !existingSet.has(`${d.type}::${d.name.toLowerCase()}`)),
+  ];
+
+  for (const cat of toInsert) {
+    await prisma.category.upsert({
+      where: { userId_name_type: { userId, name: cat.name, type: cat.type } },
+      create: { userId, name: cat.name, type: cat.type },
+      update: {},
+    });
+  }
+
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, onboardingDone: true, ...modules },
+    update: { onboardingDone: true, ...modules },
+  });
+}
+
+export async function updateModules(modules: {
+  showStocks: boolean;
+  showCrypto: boolean;
+  showHys: boolean;
+  showActivity: boolean;
+  showGoals: boolean;
+}) {
+  const userId = await getUserId();
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, onboardingDone: true, ...modules },
+    update: modules,
+  });
+}
+
+// ── CATEGORIES ──
+export async function addCategory(name: string, type: string) {
+  const userId = await getUserId();
+  await prisma.category.upsert({
+    where: { userId_name_type: { userId, name, type } },
+    create: { userId, name, type },
+    update: {},
+  });
+}
+
+export async function deleteCategory(id: string) {
+  const userId = await getUserId();
+  await prisma.category.deleteMany({ where: { id, userId } });
+}
+
+// ── CURRENCY / TRM ──
+export async function saveCurrency(baseCurrency: string) {
+  const userId = await getUserId();
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, baseCurrency },
+    update: { baseCurrency },
+  });
+}
+
+export async function refreshTrm() {
+  const userId = await getUserId();
+  const res = await fetch("https://open.er-api.com/v6/latest/USD", { next: { revalidate: 0 } });
+  if (!res.ok) throw new Error("No se pudo consultar la tasa de cambio");
+  const json = await res.json();
+  const cop = json?.rates?.COP;
+  if (!cop || cop <= 0) throw new Error("TRM no disponible");
+  const now = new Date();
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, trm: cop, trmUpdatedAt: now },
+    update: { trm: cop, trmUpdatedAt: now },
+  });
+  return cop as number;
+}
+
+// ── SUMMARY WIDGETS ──
+export async function saveSummaryWidgets(keys: string[]) {
+  const userId = await getUserId();
+  const json = JSON.stringify(keys);
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, summaryWidgets: json },
+    update: { summaryWidgets: json },
+  });
+}
+
+// ── GOALS ──
+export async function addGoal(item: { name: string; target: number; saved?: number; deadline?: string; color?: string }) {
+  const userId = await getUserId();
+  await prisma.goal.create({ data: { ...item, userId } });
+  await logActivity(userId, "goal_create", `Nueva meta: ${item.name}`, { amount: item.target });
+}
+
+export async function updateGoal(id: string, item: { name: string; target: number; saved: number; deadline?: string; color?: string }) {
+  const userId = await getUserId();
+  await prisma.goal.updateMany({
+    where: { id, userId },
+    data: { ...item, deadline: item.deadline ?? null },
+  });
+}
+
+export async function deleteGoal(id: string) {
+  const userId = await getUserId();
+  const goal = await prisma.goal.findFirst({ where: { id, userId } });
+  if (!goal) return;
+  await prisma.goal.delete({ where: { id } });
+  await logActivity(userId, "goal_delete", `Meta eliminada: ${goal.name}`);
+}
+
+export async function contributeGoal(id: string, amount: number) {
+  const userId = await getUserId();
+  const goal = await prisma.goal.findFirst({ where: { id, userId } });
+  if (!goal) throw new Error("Meta no encontrada");
+  await prisma.goal.update({ where: { id }, data: { saved: { increment: amount } } });
+  await logActivity(userId, "goal_contribute", `Abono a meta: ${goal.name}`, { amount });
 }

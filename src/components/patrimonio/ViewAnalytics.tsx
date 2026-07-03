@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AllData } from "../../types";
 import { upsertBudget, deleteBudget, upsertBudgetConfig } from "../../../lib/actions";
-import { COLORS, CATS_OUT } from "../../data/constants";
+import { COLORS } from "../../data/constants";
 import { usePrivacy } from "./PrivacyContext";
 import { MoneyInput } from "./ModalShell";
 
@@ -18,6 +18,8 @@ type Period = "semanal" | "mensual" | "anual";
 
 const PERIOD_LABELS: Record<Period, string> = { semanal: "Semanal", mensual: "Mensual", anual: "Anual" };
 
+// Full calendar ranges (week Mon–Sun, whole month, whole year) so
+// transactions dated "tomorrow" by timezone shift still count in the period
 function getPeriodRange(period: Period, now: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -30,8 +32,9 @@ function getPeriodRange(period: Period, now: Date) {
     sunday.setDate(monday.getDate() + 6);
     return { from: fmt(monday), to: fmt(sunday) };
   }
-  if (period === "anual") return { from: `${now.getFullYear()}-01-01`, to: fmt(now) };
-  return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to: fmt(now) };
+  if (period === "anual") return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to: fmt(lastDay) };
 }
 
 function periodSubLabel(period: Period, now: Date): string {
@@ -114,22 +117,22 @@ function ProgressBar({ pct, over }: { pct: number; over: boolean }) {
 export function ViewAnalytics({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
-  const { finances, budgets, budgetConfig } = initialData;
+  const { finances, budgets, budgetConfigs } = initialData;
 
   const now = new Date();
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // ── Budget config state (synced with server) ──
-  const [period, setPeriod] = useState<Period>(budgetConfig?.period ?? "mensual");
-  useEffect(() => {
-    if (budgetConfig?.period) setPeriod(budgetConfig.period as Period);
-  }, [budgetConfig?.period]);
+  // ── Period tab (pure UI state — each period has its own budget) ──
+  const [period, setPeriod] = useState<Period>("mensual");
 
   const [editingTotal, setEditingTotal] = useState(false);
   const [totalInput, setTotalInput] = useState("");
-  const totalAmount = budgetConfig?.amount ?? 0;
+  const totalAmount = budgetConfigs.find(c => c.period === period)?.amount ?? 0;
+
+  // Only budgets for the selected period
+  const periodBudgets = budgets.filter(b => b.period === period);
 
   // ── Category item state ──
   const [editingCat, setEditingCat] = useState<string | null>(null);
@@ -158,13 +161,13 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
 
   const budgetMap: Record<string, number> = {};
   const canonicalToDbCat: Record<string, string> = {};
-  for (const b of budgets) {
+  for (const b of periodBudgets) {
     const canonical = spentKeyMap[b.category.toLowerCase()] ?? b.category;
     budgetMap[canonical] = b.amount;
     canonicalToDbCat[canonical] = b.category;
   }
 
-  const totalAssigned = budgets.reduce((s, b) => s + b.amount, 0);
+  const totalAssigned = periodBudgets.reduce((s, b) => s + b.amount, 0);
   const unassigned = Math.max(0, totalAmount - totalAssigned);
   const overallPct = totalAmount > 0 ? totalSpent / totalAmount : 0;
   const overallOver = totalAmount > 0 && totalSpent > totalAmount;
@@ -176,11 +179,10 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
   ).sort();
   const allBudgetCats = [...budgetedCats, ...spentOnlyCats];
 
-  // Known categories for add selector
-  const knownCats = [...new Set(finances.filter(f => f.type === "egreso").map(f => f.category))].sort();
-  const OTHER = "Otro gasto";
-  const baseCats = CATS_OUT.filter(c => c !== OTHER);
-  const allKnown = [...new Set([...knownCats, ...baseCats])].sort();
+  // Known categories for add selector: from DB + from transaction history
+  const dbEgressCats = initialData.categories.filter(c => c.type === "egreso").map(c => c.name);
+  const txCats = [...new Set(finances.filter(f => f.type === "egreso").map(f => f.category))];
+  const allKnown = [...new Set([...dbEgressCats, ...txCats])].sort();
   const selectorCats = allKnown.filter(c =>
     !Object.keys(budgetMap).map(k => k.toLowerCase()).includes(c.toLowerCase())
   );
@@ -205,10 +207,11 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
     finally { setSaving(false); }
   };
 
-  const savePeriod = async (p: Period) => {
+  const switchPeriod = (p: Period) => {
     setPeriod(p);
-    await upsertBudgetConfig(p, totalAmount);
-    router.refresh();
+    setEditingTotal(false);
+    setEditingCat(null);
+    setAddingItem(false);
   };
 
   const saveCatBudget = async (cat: string, raw: string) => {
@@ -216,7 +219,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
     if (amount <= 0) return;
     setSaving(true);
     try {
-      await upsertBudget(cat, amount);
+      await upsertBudget(cat, amount, period);
       router.refresh();
       setEditingCat(null);
       setAddingItem(false);
@@ -266,12 +269,12 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
         {/* Period selector */}
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <div>
-            <div className="text-sm font-medium">Presupuesto</div>
+            <div className="text-sm font-medium">Presupuesto {PERIOD_LABELS[period].toLowerCase()}</div>
             <div className="text-xs text-dim capitalize">{periodSubLabel(period, now)}</div>
           </div>
           <div className="flex rounded-lg overflow-hidden border border-line text-xs">
             {(["semanal", "mensual", "anual"] as Period[]).map(p => (
-              <button key={p} onClick={() => savePeriod(p)} className="px-3 py-1.5 border-none cursor-pointer"
+              <button key={p} onClick={() => switchPeriod(p)} className="px-3 py-1.5 border-none cursor-pointer"
                 style={period === p ? { background: "var(--accent)", color: "var(--accentFg)" } : { background: "var(--panel2)", color: "var(--muted)" }}>
                 {PERIOD_LABELS[p]}
               </button>
@@ -326,8 +329,8 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-3 mb-5">
-            <span className="text-sm text-muted">Sin presupuesto definido</span>
+          <div className="flex items-center gap-3 mb-5 flex-wrap">
+            <span className="text-sm text-muted">Sin presupuesto {PERIOD_LABELS[period].toLowerCase()} — cada periodo tiene el suyo</span>
             {!editingTotal ? (
               <button onClick={() => { setEditingTotal(true); setTotalInput(""); }}
                 className="text-xs text-accent border border-line rounded-lg px-3 py-1.5 cursor-pointer bg-panel2">
@@ -384,7 +387,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
                             {budget > 0 ? "Editar" : "+ Límite"}
                           </button>
                           {budget > 0 && (
-                            <button onClick={async () => { await deleteBudget(canonicalToDbCat[cat] ?? cat); router.refresh(); }}
+                            <button onClick={async () => { await deleteBudget(canonicalToDbCat[cat] ?? cat, period); router.refresh(); }}
                               className="text-xs text-neg bg-transparent border-none cursor-pointer">✕</button>
                           )}
                         </>

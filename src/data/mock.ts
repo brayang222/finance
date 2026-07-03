@@ -90,4 +90,9 @@ export const COPSHORT = (n: number) => {
 
 export const PCT = (n: number) => `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%`;
 
-export const today = () => new Date().toISOString().slice(0, 10);
+// Local date, not UTC — Colombia is UTC-5, toISOString() shifts to tomorrow at night
+export const today = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};

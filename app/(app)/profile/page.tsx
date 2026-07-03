@@ -2,6 +2,7 @@ import { auth, signOut } from "../../../auth";
 import { redirect } from "next/navigation";
 import { loadAll } from "../../../lib/actions";
 import ThemeSelector from "../../../src/components/patrimonio/ThemeSelector";
+import ProfileSettings from "../../../src/components/patrimonio/ProfileSettings";
 
 export default async function Page() {
   const session = await auth();
@@ -26,17 +27,20 @@ export default async function Page() {
         </div>
       </div>
 
-      {/* Preferences */}
+      {/* Theme */}
       <div className="border border-line bg-panel rounded-[18px] p-[22px] flex flex-col gap-4">
-        <div className="text-[11.5px] tracking-[0.08em] uppercase text-dim font-medium">Preferencias</div>
+        <div className="text-[11.5px] tracking-[0.08em] uppercase text-dim font-medium">Apariencia</div>
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[13.5px] font-medium">Tema</div>
-            <div className="text-[12px] text-muted mt-0.5">Apariencia de la interfaz</div>
+            <div className="text-[12px] text-muted mt-0.5">Interfaz clara u oscura</div>
           </div>
           <ThemeSelector current={data.config?.theme ?? "dark"} />
         </div>
       </div>
+
+      {/* Module toggles + categories */}
+      <ProfileSettings config={data.config} categories={data.categories} />
 
       {/* Sign out */}
       <form

@@ -164,3 +164,11 @@ export const IconChart: React.FC<{ size?: number }> = ({ size = 18 }) => (
     <rect x="14" y="2" width="4" height="16" rx="1" />
   </svg>
 );
+
+export const IconTarget: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+  </svg>
+);

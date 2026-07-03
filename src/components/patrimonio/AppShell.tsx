@@ -12,12 +12,13 @@ import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
 import FloatingCalc from "./FloatingCalc";
+import Onboarding from "./Onboarding";
 
-type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals";
 
 function sectionFromPath(path: string): Section {
   const seg = path.split("/")[1] || "transactions";
-  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics"].includes(seg)) {
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals"].includes(seg)) {
     return seg as Section;
   }
   return "transactions";
@@ -34,9 +35,9 @@ const PAGE_META: Record<Section, { title: string; sub: string }> = {
   profile:      { title: "Perfil",             sub: "Tu cuenta y preferencias" },
   savings:      { title: "Alto rendimiento",   sub: "Cuenta de crecimiento" },
   analytics:    { title: "Análisis",           sub: "Presupuesto, categorías y tendencias" },
+  goals:        { title: "Metas",              sub: "Objetivos de ahorro" },
 };
 
-// Sections where the "Registrar" button is shown
 const REGISTRAR_SECTIONS: Section[] = ["transactions", "investments", "crypto", "accounts"];
 
 export default function AppShell({
@@ -56,13 +57,9 @@ export default function AppShell({
   const [isMobile, setIsMobile] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  // Theme: prefer DB config, fall back to localStorage
   useEffect(() => {
     const dbTheme = data.config?.theme;
-    if (dbTheme) {
-      setTheme(dbTheme);
-      return;
-    }
+    if (dbTheme) { setTheme(dbTheme); return; }
     const stored = localStorage.getItem("gfp-theme") as "dark" | "light" | null;
     if (stored) setTheme(stored);
   }, [data.config?.theme]);
@@ -82,33 +79,29 @@ export default function AppShell({
   const meta = PAGE_META[section];
   const showRegistrar = REGISTRAR_SECTIONS.includes(section);
 
-  // Combine bank accounts + HYS account for modal selectors
   const allAccounts = useMemo(() => [
     ...data.bankAccounts,
     ...(data.hys ? [{ id: "hys", name: "Alto Rendimiento", type: "otro", balance: 0 }] : []),
   ], [data.bankAccounts, data.hys]);
 
-  const existingCats = useMemo(() =>
-    Array.from(new Set(data.finances.map(f => f.category))).sort(),
-    [data.finances]
-  );
-
   const modal = useMemo(() => {
     if (!showModal) return null;
     const close = () => setShowModal(false);
     switch (section) {
-      case "transactions": return <ModalMovimiento bankAccounts={allAccounts} existingCats={existingCats} onClose={close} />;
+      case "transactions": return <ModalMovimiento bankAccounts={allAccounts} categories={data.categories} onClose={close} />;
       case "investments":  return <ModalAccion bankAccounts={allAccounts} onClose={close} />;
       case "crypto":       return <ModalCripto bankAccounts={allAccounts} onClose={close} />;
       case "accounts":     return <ModalCuenta onClose={close} />;
       default:              return null;
     }
-  }, [showModal, section, allAccounts, existingCats]);
+  }, [showModal, section, allAccounts, data.categories]);
+
+  const showOnboarding = !data.config?.onboardingDone;
 
   return (
     <PrivacyContext.Provider value={privacy}>
       <div className="flex min-h-screen bg-bg">
-        {!isMobile && <Sidebar user={user} />}
+        {!isMobile && <Sidebar user={user} config={data.config} />}
 
         <main className="flex-1 min-w-0 flex flex-col">
           <Header
@@ -117,8 +110,8 @@ export default function AppShell({
             privacy={privacy}
             theme={theme}
             showRegistrar={showRegistrar}
-            onTogglePrivacy={() => setPrivacy((p) => !p)}
-            onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            onTogglePrivacy={() => setPrivacy(p => !p)}
+            onToggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")}
             onOpenModal={() => setShowModal(true)}
           />
 
@@ -130,10 +123,12 @@ export default function AppShell({
           </div>
         </main>
 
-        {isMobile && <BottomNav />}
+        {isMobile && <BottomNav config={data.config} />}
 
         {modal}
-        <FloatingCalc />
+        <FloatingCalc trm={data.config?.trm} />
+
+        {showOnboarding && <Onboarding />}
       </div>
     </PrivacyContext.Provider>
   );

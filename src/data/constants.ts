@@ -3,14 +3,21 @@ export const COLORS = [
   "#16A085", "#9B59B6", "#E67E22", "#C0392B", "#2980B9"
 ];
 
-export const CATS_IN = [
-  "Pago", "Freelance", "Venta", "Abono", "Otro ingreso"
+// Generic categories seeded for new users (no personal ones)
+export const GENERIC_CATS_IN = [
+  "Salario", "Freelance", "Negocio", "Inversiones", "Dividendos",
+  "Ventas", "Regalo", "Otros ingresos",
 ];
 
-export const CATS_OUT = [
-  "Comida", "Arriendo", "Transporte", "Utilidad", "Moto", "Dani", 
-  "Casa", "Mudanza", "Gusto", "Tarjeta", "Familia", "Calamidad", "Otro gasto"
+export const GENERIC_CATS_OUT = [
+  "Alimentación", "Vivienda", "Transporte", "Salud", "Educación",
+  "Entretenimiento", "Suscripciones", "Servicios", "Ropa", "Familia",
+  "Ahorro", "Otros gastos",
 ];
+
+// Legacy — kept for fallback in ModalMovimiento when categories not loaded yet
+export const CATS_IN = GENERIC_CATS_IN;
+export const CATS_OUT = GENERIC_CATS_OUT;
 
 export const STORAGE_KEYS = {
   STOCKS: "t5-stocks",

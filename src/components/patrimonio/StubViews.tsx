@@ -629,13 +629,12 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
           ...initialData.bankAccounts,
           ...(initialData.hys ? [{ id: "hys", name: "Alto Rendimiento", type: "otro", balance: 0 }] : []),
         ];
-        const existingCats = Array.from(new Set(initialData.finances.map(x => x.category))).sort();
         return (
           <ModalMovimiento
             editId={editId}
             editInitial={{ type: f.type, amount: f.amount, desc: f.desc ?? "", date: f.date, category: f.category, accountId: f.accountId }}
             bankAccounts={allAccounts}
-            existingCats={existingCats}
+            categories={initialData.categories}
             onClose={() => setEditId(null)}
           />
         );

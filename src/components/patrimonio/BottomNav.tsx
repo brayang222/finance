@@ -2,11 +2,13 @@
 
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { NAV_ITEMS, isActive } from "./Sidebar";
+import type { UserConfig } from "../../types";
+import { filterNavItems, isActive } from "./Sidebar";
 
-export default function BottomNav() {
+export default function BottomNav({ config }: { config?: UserConfig | null }) {
   const pathname = usePathname() || "";
   const router = useRouter();
+  const items = filterNavItems(config);
 
   return (
     <nav
@@ -18,7 +20,7 @@ export default function BottomNav() {
         padding: "8px 4px calc(8px + env(safe-area-inset-bottom))",
       }}
     >
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <button
