@@ -35,6 +35,8 @@ function costOf(asset: { qty: number; avg: number }) {
 
 const MONTHS = ["Jul", "Ago", "Sep", "Oct", "Nov", "Dic", "Ene", "Feb", "Mar", "Abr", "May", "Jun"];
 
+const ALL_WIDGET_KEYS = ["hero", "kpis", "goals", "chart", "allocation", "cashflow", "recent"];
+
 export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
@@ -44,6 +46,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
   const accounts = toAccounts(initialData);
   const [range, setRange] = useState<"1M" | "6M" | "1A" | "Todo">("1A");
+  const config = initialData.config;
 
   const stockValue = holdings.reduce((s, h) => s + valueOf(h), 0);
   const stockCost = holdings.reduce((s, h) => s + costOf(h), 0);
@@ -108,56 +111,70 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
 
   const monthLabel = new Date().toLocaleDateString("es-CO", { month: "long" });
 
-  return (
-    <div className="flex flex-col gap-[18px]">
-      {/* A. Hero + KPI grid */}
-      <div
-        className="grid gap-3.5"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}
-      >
-        {/* Hero */}
-        <div
-          className={`${cardBase} [grid-column:1/-1] rounded-[18px] p-6 flex flex-wrap items-center justify-between gap-5`}
-        >
-          <div>
-            <div className={`${microLabel} tracking-[0.04em]`}>Patrimonio total</div>
-            <div
-              className="font-medium tracking-[-0.02em] leading-[1.05] my-1.5 mb-2"
-              style={{ fontFamily: "Spectral, serif", fontSize: "clamp(34px,5vw,52px)" }}
-            >
-              <Bal n={total} privacy={privacy} />
-            </div>
-            <div className="text-[13px] text-muted">
-              <span className={change12m >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
-                {change12m >= 0 ? "▲" : "▼"} {PCT(Math.abs(change12m))}
-              </span>
-              {" · últimos 12 meses"}
-            </div>
-          </div>
-          <HeroSpark values={heroSpark} privacy={privacy} />
-        </div>
+  // USD display when preferred and TRM known
+  const inUSD = config?.baseCurrency === "USD" && !!config?.trm;
+  const usdTotal = inUSD ? total / config!.trm! : null;
 
-        {/* KPIs */}
-        <KpiCard
-          label="Inversiones · bolsa"
-          value={<Bal n={stockValue} privacy={privacy} />}
-          sub={
-            <span className={stockPL >= 0 ? "text-pos" : "text-neg"}>
-              {stockPL >= 0 ? "↑ " : "↓ "}
-              {privacy ? "••••" : COP(Math.abs(stockPL))} P/G sin realizar
+  // Widget order: saved config, or sensible default based on active modules
+  const widgetOrder = useMemo(() => {
+    if (config?.summaryWidgets) return config.summaryWidgets.filter(k => ALL_WIDGET_KEYS.includes(k));
+    return ALL_WIDGET_KEYS.filter(k => {
+      if (k === "goals") return config?.showGoals ?? true;
+      if (k === "allocation") return (config?.showStocks ?? true) || (config?.showCrypto ?? true);
+      return true;
+    });
+  }, [config]);
+
+  const blocks: Record<string, React.ReactNode> = {
+    hero: (
+      <div className={`${cardBase} rounded-[18px] p-6 flex flex-wrap items-center justify-between gap-5`}>
+        <div>
+          <div className={`${microLabel} tracking-[0.04em]`}>Patrimonio total</div>
+          <div
+            className="font-medium tracking-[-0.02em] leading-[1.05] my-1.5 mb-2"
+            style={{ fontFamily: "Spectral, serif", fontSize: "clamp(34px,5vw,52px)" }}
+          >
+            {inUSD
+              ? (privacy ? "••••" : `US$ ${usdTotal!.toLocaleString("en-US", { maximumFractionDigits: 0 })}`)
+              : <Bal n={total} privacy={privacy} />}
+          </div>
+          <div className="text-[13px] text-muted">
+            <span className={change12m >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
+              {change12m >= 0 ? "▲" : "▼"} {PCT(Math.abs(change12m))}
             </span>
-          }
-        />
-        <KpiCard
-          label="Cripto"
-          value={<Bal n={cryptoValue} privacy={privacy} />}
-          sub={
-            <span className={cryptoPL >= 0 ? "text-pos" : "text-neg"}>
-              {cryptoPL >= 0 ? "↑ " : "↓ "}
-              {privacy ? "••••" : COP(Math.abs(cryptoPL))} P/G sin realizar
-            </span>
-          }
-        />
+            {" · últimos 12 meses"}
+            {inUSD && !privacy && <span className="text-dim"> · ≈ {COP(total)}</span>}
+          </div>
+        </div>
+        <HeroSpark values={heroSpark} privacy={privacy} />
+      </div>
+    ),
+    kpis: (
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>
+        {(config?.showStocks ?? true) && (
+          <KpiCard
+            label="Inversiones · bolsa"
+            value={<Bal n={stockValue} privacy={privacy} />}
+            sub={
+              <span className={stockPL >= 0 ? "text-pos" : "text-neg"}>
+                {stockPL >= 0 ? "↑ " : "↓ "}
+                {privacy ? "••••" : COP(Math.abs(stockPL))} P/G sin realizar
+              </span>
+            }
+          />
+        )}
+        {(config?.showCrypto ?? true) && (
+          <KpiCard
+            label="Cripto"
+            value={<Bal n={cryptoValue} privacy={privacy} />}
+            sub={
+              <span className={cryptoPL >= 0 ? "text-pos" : "text-neg"}>
+                {cryptoPL >= 0 ? "↑ " : "↓ "}
+                {privacy ? "••••" : COP(Math.abs(cryptoPL))} P/G sin realizar
+              </span>
+            }
+          />
+        )}
         <KpiCard
           label="Efectivo y bancos"
           value={<Bal n={cash} privacy={privacy} />}
@@ -182,31 +199,23 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
           }
         />
       </div>
-
-      {/* B. Net worth chart */}
+    ),
+    goals: <GoalsWidget goals={initialData.goals} privacy={privacy} onNav={onNav} />,
+    chart: (
       <div className={`${cardBase} rounded-[18px] p-6`}>
         <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
           <div>
             <div className={sectionTitle}>Evolución del patrimonio</div>
-            <div className="text-[12.5px] text-muted mt-0.5">
-              Valor neto consolidado
-            </div>
+            <div className="text-[12.5px] text-muted mt-0.5">Valor neto consolidado</div>
           </div>
           <Segmented options={["1M", "6M", "1A", "Todo"]} value={range} onChange={(v) => setRange(v as typeof range)} />
         </div>
         <NetWorthChart points={series} privacy={privacy} />
       </div>
-
-      {/* C. Donut + bars */}
-      <div
-        className="grid gap-3.5"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}
-      >
-        <PortfolioDonut privacy={privacy} total={stockValue + cryptoValue} holdings={holdings} cryptoAssets={cryptoAssets} />
-        <IncomeExpenseBars privacy={privacy} transactions={transactions} />
-      </div>
-
-      {/* D. Recent transactions */}
+    ),
+    allocation: <PortfolioDonut privacy={privacy} total={stockValue + cryptoValue} holdings={holdings} cryptoAssets={cryptoAssets} />,
+    cashflow: <IncomeExpenseBars privacy={privacy} transactions={transactions} />,
+    recent: (
       <div className={`${cardBase} rounded-[18px] p-[22px]`}>
         <div className="flex items-center justify-between mb-3.5">
           <div className={sectionTitle}>Movimientos recientes</div>
@@ -223,6 +232,75 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
           ))}
         </div>
       </div>
+    ),
+  };
+
+  // Render in configured order; pair allocation+cashflow side by side when adjacent
+  const rendered: React.ReactNode[] = [];
+  const PAIRABLE = ["allocation", "cashflow"];
+  for (let i = 0; i < widgetOrder.length; i++) {
+    const key = widgetOrder[i];
+    const next = widgetOrder[i + 1];
+    if (PAIRABLE.includes(key) && next && PAIRABLE.includes(next)) {
+      rendered.push(
+        <div key={key + next} className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+          {blocks[key]}
+          {blocks[next]}
+        </div>
+      );
+      i++;
+    } else {
+      rendered.push(<React.Fragment key={key}>{blocks[key]}</React.Fragment>);
+    }
+  }
+
+  return <div className="flex flex-col gap-[18px]">{rendered}</div>;
+}
+
+function GoalsWidget({ goals, privacy, onNav }: { goals: AllData["goals"]; privacy: boolean; onNav: (v: string) => void }) {
+  const top = goals.slice(0, 3);
+  return (
+    <div className="border border-line bg-panel rounded-[18px] p-[22px]">
+      <div className="flex items-center justify-between mb-3.5">
+        <div className={sectionTitle}>Metas de ahorro</div>
+        <button
+          onClick={() => onNav("goals")}
+          className="bg-transparent border-none text-muted cursor-pointer text-[13px]"
+        >
+          Ver todas →
+        </button>
+      </div>
+      {top.length === 0 ? (
+        <div className="text-[13px] text-muted">
+          Sin metas aún.{" "}
+          <button onClick={() => onNav("goals")} className="bg-transparent border-none text-fg underline cursor-pointer text-[13px] p-0">
+            Crea la primera
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3.5">
+          {top.map(g => {
+            const pct = g.target > 0 ? Math.min(1, g.saved / g.target) : 0;
+            const done = g.saved >= g.target;
+            return (
+              <div key={g.id}>
+                <div className="flex justify-between text-[12.5px] mb-1.5">
+                  <span className="font-medium">{g.name}</span>
+                  <span className="text-muted tabular-nums">
+                    {privacy ? "••••" : `${(pct * 100).toFixed(0)}%`}
+                  </span>
+                </div>
+                <div className="h-2 bg-panel2 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${pct * 100}%`, background: done ? "var(--pos)" : (g.color ?? "var(--line-accent)") }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

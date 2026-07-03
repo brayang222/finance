@@ -48,6 +48,31 @@ export interface Cash {
 
 export interface UserConfig {
   theme: "dark" | "light"
+  onboardingDone: boolean
+  showStocks: boolean
+  showCrypto: boolean
+  showHys: boolean
+  showActivity: boolean
+  showGoals: boolean
+  baseCurrency: "COP" | "USD"
+  trm: number | null
+  trmUpdatedAt: string | null
+  summaryWidgets: string[] | null
+}
+
+export interface Goal {
+  id: string
+  name: string
+  target: number
+  saved: number
+  deadline?: string
+  color?: string
+}
+
+export interface Category {
+  id: string
+  name: string
+  type: "ingreso" | "egreso"
 }
 
 export interface BankAccount {
@@ -69,6 +94,18 @@ export interface ActivityLog {
   createdAt: string
 }
 
+export interface Budget {
+  id: string
+  category: string
+  amount: number
+  period: "semanal" | "mensual" | "anual"
+}
+
+export interface BudgetConfig {
+  period: "semanal" | "mensual" | "anual"
+  amount: number
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -80,4 +117,8 @@ export interface AllData {
   config: UserConfig | null
   bankAccounts: BankAccount[]
   activityLogs: ActivityLog[]
+  budgets: Budget[]
+  budgetConfigs: BudgetConfig[]
+  categories: Category[]
+  goals: Goal[]
 }

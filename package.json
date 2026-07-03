@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "vite:dev": "vite",
-    "vite:build": "vite build"
+    "vite:build": "prisma generate && vite build"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

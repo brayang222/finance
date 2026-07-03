@@ -7,10 +7,12 @@ import type { AllData, Stock, Crypto } from "../../types";
 import { Bal } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance } from "../../../lib/actions";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
+import ModalMovimiento from "./ModalMovimiento";
+import { IconEdit, IconTrash } from "./Icons";
 
 // ponytail: shared style objects replaced with className strings
 const cardClass = "border border-line bg-panel rounded-[18px] p-5.5";
@@ -330,19 +332,11 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
                       </td>
                       <td className={`${tdClass} text-right`}>
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setEditItem(t)}
-                            className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg"
-                            title="Editar"
-                          >
-                            ✏️
+                          <button onClick={() => setEditItem(t)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg" title="Editar">
+                            <IconEdit />
                           </button>
-                          <button
-                            onClick={() => handleDelete(t.id)}
-                            className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg"
-                            title="Eliminar"
-                          >
-                            🗑
+                          <button onClick={() => handleDelete(t.id)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar">
+                            <IconTrash />
                           </button>
                         </div>
                       </td>
@@ -397,6 +391,7 @@ function exportXlsx(rows: ReturnType<typeof toTransactions>, from: string, to: s
 
 export function ViewTransacciones({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
+  const router = useRouter();
   const transactions = toTransactions(initialData.finances);
 
   const yearStart = `${new Date().getFullYear()}-01-01`;
@@ -411,6 +406,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
   const [pageSize, setPageSize]   = React.useState(20);
   const [page, setPage]           = React.useState(1);
   const [sort, setSort]           = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
+  const [editId, setEditId]       = React.useState<string | null>(null);
 
   // KPIs: date-filtered only
   const dateFiltered = transactions.filter((t) => t.dateISO >= from && t.dateISO <= to);
@@ -557,24 +553,48 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
                 <th className={thClass}>Descripción</th>
                 <SortBtn col="categoria" label="Categoría" />
                 <SortBtn col="monto"     label="Monto" right />
+                <th className={thClass} />
               </tr>
             </thead>
             <tbody>
               {paged.map((t) => {
                 const pos = t.type === "ingreso";
                 return (
-                  <tr key={t.id}>
+                  <tr key={t.id} className="group">
                     <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.dateISO}</td>
                     <td className={`${tdClass} font-medium`}>{t.desc}</td>
                     <td className={`${tdClass} text-muted`}>{t.category}</td>
                     <td className={`${tdClass} text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
                       {privacy ? "••••••" : `${pos ? "+" : "−"}${COP(t.amount)}`}
                     </td>
+                    <td className={`${tdClass} text-right whitespace-nowrap`}>
+                      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => setEditId(t.financeId!)}
+                          className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg"
+                          title="Editar"
+                        >
+                          <IconEdit />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!t.financeId) return;
+                            if (!window.confirm(`¿Eliminar "${t.desc}"?`)) return;
+                            await deleteFinance(t.financeId);
+                            router.refresh();
+                          }}
+                          className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg"
+                          title="Eliminar"
+                        >
+                          <IconTrash />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
               {paged.length === 0 && (
-                <tr><td colSpan={4} className={`${tdClass} text-dim text-center`}>Sin movimientos</td></tr>
+                <tr><td colSpan={5} className={`${tdClass} text-dim text-center`}>Sin movimientos</td></tr>
               )}
             </tbody>
           </table>
@@ -600,6 +620,25 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
           </div>
         </div>
       </div>
+
+      {/* Edit modal */}
+      {editId && (() => {
+        const f = initialData.finances.find(x => x.id === editId);
+        if (!f) return null;
+        const allAccounts = [
+          ...initialData.bankAccounts,
+          ...(initialData.hys ? [{ id: "hys", name: "Alto Rendimiento", type: "otro", balance: 0 }] : []),
+        ];
+        return (
+          <ModalMovimiento
+            editId={editId}
+            editInitial={{ type: f.type, amount: f.amount, desc: f.desc ?? "", date: f.date, category: f.category, accountId: f.accountId }}
+            bankAccounts={allAccounts}
+            categories={initialData.categories}
+            onClose={() => setEditId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -626,10 +665,10 @@ function AccountCard({
             </span>
           )}
           {onEdit && (
-            <button onClick={onEdit} className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-fg" title="Editar">✏️</button>
+            <button onClick={onEdit} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg" title="Editar"><IconEdit /></button>
           )}
           {onDelete && (
-            <button onClick={onDelete} className="text-[12px] text-muted cursor-pointer bg-transparent border-none px-1.5 py-0.5 rounded hover:text-neg" title="Eliminar">🗑</button>
+            <button onClick={onDelete} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar"><IconTrash /></button>
           )}
         </div>
       </div>
@@ -663,12 +702,15 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const stockTotal  = holdings.reduce((s, a) => s + a.qty * a.price, 0);
   const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
 
-  // HYS current balance = last movement's balance compounded to today
+  // HYS balance uses Date.now() — defer to client to avoid SSR/client mismatch
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => { setNow(Date.now()); }, []);
   const hysBalance = (() => {
+    if (!now) return 0;
     const hys = initialData.hys;
     if (!hys || hys.movements.length === 0) return 0;
     const last = hys.movements[hys.movements.length - 1];
-    const days = (Date.now() - new Date(last.date).getTime()) / 86400000;
+    const days = (now - new Date(last.date).getTime()) / 86400000;
     return last.balance * Math.pow(1 + hys.rate / 100, days / 365);
   })();
 
