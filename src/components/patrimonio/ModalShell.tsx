@@ -35,15 +35,16 @@ export default function ModalShell({
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div
           onClick={(e) => e.stopPropagation()}
-          className="modal-card-enter rounded-[20px] p-6 pointer-events-auto relative"
+          className="modal-card-enter rounded-[20px] pointer-events-auto relative flex flex-col"
           style={{
             background: "var(--panel)",
             border: "1px solid var(--line)",
             width: "min(480px, 94vw)",
+            maxHeight: "90dvh",
             boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
           }}
         >
-          <div className="flex items-center justify-between mb-[18px]">
+          <div className="flex items-center justify-between px-6 pt-6 pb-[18px] shrink-0">
             <h2 className="text-[20px] font-medium m-0" style={{ fontFamily: "Spectral, serif" }}>
               {title}
             </h2>
@@ -51,8 +52,8 @@ export default function ModalShell({
               ×
             </button>
           </div>
-          <div className="flex flex-col gap-3.5">{children}</div>
-          <div className="flex gap-2.5 mt-[22px]">{footer}</div>
+          <div className="flex flex-col gap-3.5 overflow-y-auto px-6 pb-1" style={{ minHeight: 0 }}>{children}</div>
+          <div className="flex gap-2.5 px-6 pb-6 pt-[18px] shrink-0">{footer}</div>
         </div>
       </div>
     </div>,
