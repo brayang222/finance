@@ -13,6 +13,7 @@ import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
 import ModalMovimiento from "./ModalMovimiento";
+import ModalShell from "./ModalShell";
 import { IconEdit, IconTrash } from "./Icons";
 
 // ponytail: shared style objects replaced with className strings
@@ -412,6 +413,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
   const [sort, setSort]           = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
   const [editId, setEditId]       = React.useState<string | null>(null);
   const [deletedIds, setDeletedIds] = React.useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = React.useState<ReturnType<typeof toTransactions>[number] | null>(null);
 
   const handleDelete = (t: ReturnType<typeof toTransactions>[number]) => {
     if (!t.financeId) return;
@@ -419,8 +421,8 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
     setDeletedIds(prev => new Set([...prev, fid]));
     const tid = setTimeout(async () => {
       await deleteFinance(fid);
-      setDeletedIds(prev => { const s = new Set(prev); s.delete(fid); return s; });
       router.refresh();
+      // ponytail: don't clear deletedIds here — avoids flash while refresh is in-flight
     }, 4500);
     toast.success(`"${t.desc}" eliminado`, {
       label: "Deshacer",
@@ -601,7 +603,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
                           <IconEdit />
                         </button>
                         <button
-                          onClick={() => handleDelete(t)}
+                          onClick={() => setPendingDelete(t)}
                           className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg"
                           title="Eliminar"
                         >
@@ -653,6 +655,36 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {pendingDelete && (
+        <ModalShell
+          title="Eliminar movimiento"
+          onClose={() => setPendingDelete(null)}
+          footer={
+            <>
+              <button
+                onClick={() => setPendingDelete(null)}
+                className="flex-1 h-[42px] rounded-xl border border-line bg-panel text-fg cursor-pointer text-[13.5px] font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { handleDelete(pendingDelete); setPendingDelete(null); }}
+                className="flex-1 h-[42px] rounded-xl border-none text-[13.5px] font-medium cursor-pointer"
+                style={{ background: "var(--neg)", color: "#fff" }}
+              >
+                Eliminar
+              </button>
+            </>
+          }
+        >
+          <p className="text-[14px] m-0" style={{ color: "var(--muted)" }}>
+            ¿Eliminar <strong style={{ color: "var(--fg)" }}>&ldquo;{pendingDelete.desc}&rdquo;</strong>?
+            Esta acción se puede deshacer durante 4 segundos después de confirmar.
+          </p>
+        </ModalShell>
+      )}
 
       {/* Edit modal */}
       {editId && (() => {

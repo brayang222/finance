@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import { IconEye, IconEyeOff, IconSun, IconMoon } from "./utils";
 
 const iconBtnClass =
@@ -46,6 +47,13 @@ export default function Header({
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/help" className={iconBtnClass} aria-label="Ayuda" title="Ayuda">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </Link>
           <button className={iconBtnClass} onClick={onTogglePrivacy} aria-label="Privacidad" title="Privacidad">
             {privacy ? <IconEyeOff /> : <IconEye />}
           </button>
