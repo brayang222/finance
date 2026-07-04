@@ -13,7 +13,7 @@ import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
 import FloatingCalc from "./FloatingCalc";
 import Onboarding from "./Onboarding";
-import { switchViewAs } from "../../../lib/actions";
+import { switchViewAs, addFinance } from "../../../lib/actions";
 import { ToastProvider, useToast } from "./Toast";
 import CommandPalette from "./CommandPalette";
 import CsvImport from "./CsvImport";
@@ -110,6 +110,24 @@ function AppShellInner({
       `${overdue.length} recurrente${overdue.length > 1 ? "s" : ""} pendiente${overdue.length > 1 ? "s" : ""} de aplicar`,
       { label: "Ver", fn: () => router.push("/recurrentes") }
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // SW registration + offline queue flush on reconnect
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    const flush = async () => {
+      const { flushQueue } = await import("../../../lib/offlineQueue");
+      const count = await flushQueue(addFinance);
+      if (count > 0) {
+        toast.success(`${count} movimiento${count > 1 ? "s" : ""} sincronizado${count > 1 ? "s" : ""}`);
+        router.refresh();
+      }
+    };
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { CATS_IN, CATS_OUT } from "../../data/constants";
 import { addFinance, updateFinance } from "../../../lib/actions";
+import { enqueue } from "../../../lib/offlineQueue";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
 import type { BankAccount, Category, Finance, Budget, BudgetConfig } from "../../types";
 import { Period, getPeriodRange } from "./periods";
 
@@ -415,6 +417,7 @@ export default function ModalMovimiento({
   editInitial?: EditInitial;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const isEdit = !!editId;
 
   const buildCats = (t: TxType) => {
@@ -635,10 +638,16 @@ export default function ModalMovimiento({
       };
       if (isEdit) {
         await updateFinance(editId!, item);
+        router.refresh();
       } else {
-        await addFinance(item);
+        try {
+          await addFinance(item);
+          router.refresh();
+        } catch {
+          await enqueue(item);
+          toast.info("Guardado offline — se sincronizará al conectarse");
+        }
       }
-      router.refresh();
       onClose();
     } finally {
       setSaving(false);

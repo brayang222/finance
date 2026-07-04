@@ -1,10 +1,8 @@
-const CACHE = "finance-v1";
-
-const SHELL = ["/", "/index.html"];
+const CACHE = "finance-v2";
 
 self.addEventListener("install", e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.add("/")).then(() => self.skipWaiting())
   );
 });
 
@@ -20,18 +18,33 @@ self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
 
-  // External APIs (precios, TRM): network only, no cache
   if (url.origin !== self.location.origin) return;
+  // Auth and API routes always go to network
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
+  // Immutable static chunks: cache-first
+  if (url.pathname.startsWith("/_next/static/")) {
+    e.respondWith(
+      caches.open(CACHE).then(async cache => {
+        const hit = await cache.match(e.request);
+        if (hit) return hit;
+        const res = await fetch(e.request);
+        if (res.ok) cache.put(e.request, res.clone());
+        return res;
+      })
+    );
+    return;
+  }
+
+  // Navigation + RSC: cache-first with network update in background
   e.respondWith(
     caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(e.request);
-      const networkFetch = fetch(e.request).then(res => {
+      const hit = await cache.match(e.request);
+      const fromNet = fetch(e.request).then(res => {
         if (res.ok) cache.put(e.request, res.clone());
         return res;
       }).catch(() => null);
-
-      return cached || networkFetch;
+      return hit ?? await fromNet;
     })
   );
 });
