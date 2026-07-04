@@ -13,6 +13,7 @@ export default function Header({
   onTogglePrivacy,
   onToggleTheme,
   onOpenModal,
+  onOpenCsvImport,
 }: {
   pageTitle: string;
   pageSub: string;
@@ -22,6 +23,7 @@ export default function Header({
   onTogglePrivacy: () => void;
   onToggleTheme: () => void;
   onOpenModal: () => void;
+  onOpenCsvImport?: () => void;
 }) {
   return (
     <header
@@ -35,7 +37,7 @@ export default function Header({
       <div className="max-w-[1180px] mx-auto px-7 py-4 flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1
-            className="text-[22px] font-medium m-0 tracking-[-0.01em]"
+            className="vt-page-title text-[22px] font-medium m-0 tracking-[-0.01em]"
             style={{ fontFamily: "Spectral, serif" }}
           >
             {pageTitle}
@@ -50,6 +52,20 @@ export default function Header({
           <button className={iconBtnClass} onClick={onToggleTheme} aria-label="Tema" title="Tema">
             {theme === "dark" ? <IconSun /> : <IconMoon />}
           </button>
+          {showRegistrar && onOpenCsvImport && (
+            <button
+              onClick={onOpenCsvImport}
+              title="Importar CSV"
+              className={iconBtnClass}
+              aria-label="Importar CSV"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </button>
+          )}
           {showRegistrar && (
             <button
               onClick={onOpenModal}

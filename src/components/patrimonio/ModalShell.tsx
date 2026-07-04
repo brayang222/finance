@@ -29,14 +29,15 @@ export default function ModalShell({
     <div className="fixed inset-0" style={{ zIndex: 9999 }}>
       <div
         onClick={onClose}
-        className="absolute inset-0"
+        className="modal-backdrop-enter absolute inset-0"
         style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)" }}
       />
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div
           onClick={(e) => e.stopPropagation()}
-          className="rounded-[20px] p-6 pointer-events-auto relative bg-white"
+          className="modal-card-enter rounded-[20px] p-6 pointer-events-auto relative"
           style={{
+            background: "var(--panel)",
             border: "1px solid var(--line)",
             width: "min(480px, 94vw)",
             boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
@@ -105,11 +106,13 @@ export function CancelSave({
   onSave,
   canSave,
   saving,
+  saveLabel = "Guardar",
 }: {
   onClose: () => void;
   onSave: () => void;
   canSave: boolean;
   saving?: boolean;
+  saveLabel?: string;
 }) {
   return (
     <>
@@ -127,7 +130,7 @@ export function CancelSave({
           canSave && !saving ? "cursor-pointer opacity-100" : "cursor-not-allowed opacity-[0.45]",
         ].join(" ")}
       >
-        {saving ? "Guardando…" : "Guardar"}
+        {saving ? "Guardando…" : saveLabel}
       </button>
     </>
   );

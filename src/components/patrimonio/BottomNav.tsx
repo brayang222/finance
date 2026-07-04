@@ -1,13 +1,19 @@
 "use client";
 
 import React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { UserConfig } from "../../types";
 import { filterNavItems, isActive } from "./Sidebar";
 
-export default function BottomNav({ config }: { config?: UserConfig | null }) {
+export default function BottomNav({
+  config,
+  onNavStart,
+}: {
+  config?: UserConfig | null;
+  onNavStart?: () => void;
+}) {
   const pathname = usePathname() || "";
-  const router = useRouter();
   const items = filterNavItems(config);
 
   return (
@@ -23,17 +29,18 @@ export default function BottomNav({ config }: { config?: UserConfig | null }) {
       {items.map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
-          <button
+          <Link
             key={href}
-            onClick={() => router.push(href)}
+            href={href}
+            onClick={onNavStart}
             className={[
-              "flex-1 flex flex-col items-center gap-[3px] border-none bg-transparent cursor-pointer py-1 text-[10.5px]",
+              "flex-1 flex flex-col items-center gap-[3px] no-underline py-1 text-[10.5px]",
               active ? "text-fg font-medium" : "text-dim font-normal",
             ].join(" ")}
           >
             <Icon size={20} />
             {label}
-          </button>
+          </Link>
         );
       })}
     </nav>

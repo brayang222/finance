@@ -212,12 +212,12 @@ export default function ViewRecurrentes({ initialData }: { initialData: AllData 
 
       {active.length > 0 && (
         <div className="flex flex-col gap-3">
-          {active.map(r => {
+          {active.map((r, i) => {
             const days = daysUntil(r.nextDate);
             const overdue = days < 0;
             const soon = days >= 0 && days <= 3;
             return (
-              <div key={r.id} className="bg-panel rounded-2xl p-4 flex items-center gap-4">
+              <div key={r.id} className="animate-item bg-panel rounded-2xl p-4 flex items-center gap-4" style={{ animationDelay: `${i * 55}ms` }}>
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
                   style={{ background: r.type === "ingreso" ? "color-mix(in srgb, #10b981 15%, transparent)" : "color-mix(in srgb, #ef4444 15%, transparent)" }}

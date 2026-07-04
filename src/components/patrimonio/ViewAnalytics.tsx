@@ -86,7 +86,7 @@ function ProgressBar({ pct, over }: { pct: number; over: boolean }) {
   return (
     <div className="h-2 rounded-full overflow-hidden bg-panel2">
       <div
-        className="h-full rounded-full transition-all duration-300"
+        className="h-full rounded-full transition-all duration-300 animate-bar"
         style={{ width: `${Math.min(pct * 100, 100)}%`, background: over ? "var(--neg)" : pct > 0.85 ? "#f59e0b" : "var(--pos)" }}
       />
     </div>
@@ -307,6 +307,17 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
               <span>{(Math.min(overallPct, 1) * 100).toFixed(1)}% utilizado</span>
               {!overallOver && totalAmount > 0 && <span>Quedan {COP(totalAmount - totalSpent)}</span>}
             </div>
+            {period === "mensual" && totalSpent > 0 && (() => {
+              const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              const projected = (totalSpent / now.getDate()) * daysInMonth;
+              const overProj = projected > totalAmount;
+              return (
+                <div className={`text-xs mt-2 ${overProj ? "text-neg" : "text-muted"}`}>
+                  📈 A este ritmo terminarás el mes en {privacy ? "••••" : COP(projected)} ({((projected / totalAmount) * 100).toFixed(0)}% del presupuesto)
+                  {overProj && " — vas camino a excederlo"}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="flex items-center gap-3 mb-5 flex-wrap">
@@ -335,7 +346,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
           )}
 
           <div className="flex flex-col gap-4">
-            {allBudgetCats.map(cat => {
+            {allBudgetCats.map((cat, catIdx) => {
               const budget = budgetMap[cat] || 0;
               const spent = spentByCat[cat] || 0;
               const pct = budget > 0 ? spent / budget : 0;
@@ -346,7 +357,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
               const warn = isEditing ? overallExceedWarning(editParsed, budget) : null;
 
               return (
-                <div key={cat}>
+                <div key={cat} className="animate-item" style={{ animationDelay: `${catIdx * 50}ms` }}>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-sm font-medium truncate">{cat}</span>

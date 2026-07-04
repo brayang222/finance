@@ -7,6 +7,8 @@ import { addGoal, updateGoal, deleteGoal, contributeGoal } from "../../../lib/ac
 import { COLORS } from "../../data/constants";
 import { usePrivacy } from "./PrivacyContext";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
+import { spawnConfetti } from "./confetti";
 
 const COP = (n: number) =>
   n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -21,6 +23,7 @@ function monthsUntil(deadline: string) {
 
 function GoalModal({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState(goal?.name ?? "");
   const [target, setTarget] = useState(goal ? String(Math.round(goal.target)) : "");
   const [saved, setSaved] = useState(goal ? String(Math.round(goal.saved)) : "");
@@ -42,11 +45,15 @@ function GoalModal({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
       };
       if (goal) {
         await updateGoal(goal.id, item);
+        toast.success("Meta actualizada");
       } else {
         await addGoal(item);
+        toast.success("Meta creada");
       }
       router.refresh();
       onClose();
+    } catch {
+      toast.error("Error al guardar la meta");
     } finally {
       setSaving(false);
     }
@@ -107,6 +114,7 @@ function GoalModal({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
 
 function ContributeModal({ goal, onClose }: { goal: Goal; onClose: () => void }) {
   const router = useRouter();
+  const toast = useToast();
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const monto = num(amount);
@@ -114,9 +122,18 @@ function ContributeModal({ goal, onClose }: { goal: Goal; onClose: () => void })
   const save = async () => {
     setSaving(true);
     try {
+      const willComplete = goal.saved + monto >= goal.target;
       await contributeGoal(goal.id, monto);
       router.refresh();
       onClose();
+      if (willComplete) {
+        spawnConfetti();
+        toast.success(`¡Meta "${goal.name}" completada!`);
+      } else {
+        toast.success(`Abono de ${COP(monto)} registrado`);
+      }
+    } catch {
+      toast.error("Error al guardar el abono");
     } finally {
       setSaving(false);
     }
@@ -143,16 +160,23 @@ function ContributeModal({ goal, onClose }: { goal: Goal; onClose: () => void })
 
 export default function ViewGoals({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
+  const router = useRouter();
+  const toast = useToast();
   const goals = initialData.goals;
 
   const [showAdd, setShowAdd] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [contribGoal, setContribGoal] = useState<Goal | null>(null);
 
-  const handleDelete = async (g: Goal) => {
-    if (!confirm(`¿Eliminar la meta "${g.name}"?`)) return;
-    await deleteGoal(g.id);
-    location.reload();
+  const handleDelete = (g: Goal) => {
+    const tid = setTimeout(async () => {
+      await deleteGoal(g.id);
+      router.refresh();
+    }, 4500);
+    toast.info(`Meta "${g.name}" eliminada`, {
+      label: "Deshacer",
+      fn: () => clearTimeout(tid),
+    });
   };
 
   return (
@@ -182,7 +206,7 @@ export default function ViewGoals({ initialData }: { initialData: AllData }) {
         </div>
       ) : (
         <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-          {goals.map(g => {
+          {goals.map((g, i) => {
             const pct = g.target > 0 ? Math.min(1, g.saved / g.target) : 0;
             const done = g.saved >= g.target;
             const months = g.deadline ? monthsUntil(g.deadline) : null;
@@ -192,7 +216,11 @@ export default function ViewGoals({ initialData }: { initialData: AllData }) {
             const color = g.color ?? COLORS[0];
 
             return (
-              <div key={g.id} className="border border-line bg-panel rounded-[18px] p-5 flex flex-col gap-3">
+              <div
+                key={g.id}
+                className="animate-card border border-line bg-panel rounded-[18px] p-5 flex flex-col gap-3"
+                style={{ animationDelay: `${i * 60}ms`, viewTransitionName: `goal-${g.id}` } as React.CSSProperties}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
@@ -214,7 +242,7 @@ export default function ViewGoals({ initialData }: { initialData: AllData }) {
                   </div>
                   <div className="h-2 bg-panel2 rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all"
+                      className="h-full rounded-full transition-all animate-bar"
                       style={{ width: `${pct * 100}%`, background: done ? "var(--pos)" : color }}
                     />
                   </div>

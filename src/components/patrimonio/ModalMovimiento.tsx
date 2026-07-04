@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { CATS_IN, CATS_OUT } from "../../data/constants";
@@ -76,6 +76,58 @@ export default function ModalMovimiento({
   const [saving, setSaving]       = useState(false);
   const [customCat, setCustomCat] = useState(initCustomCat);
   const [category, setCategory]   = useState(initCategory);
+  const [listening, setListening] = useState(false);
+  const [voiceErr, setVoiceErr]   = useState("");
+  const catUserPicked = useRef(false);
+
+  // Auto-categorize from history when desc changes
+  useEffect(() => {
+    if (isEdit || catUserPicked.current || desc.length < 3) return;
+    const q = desc.toLowerCase();
+    const match = [...finances]
+      .filter(f => f.type === type && (f.desc ?? "").toLowerCase().includes(q))
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!match) return;
+    const inList = buildCats(type).includes(match.category);
+    if (inList) setCategory(match.category);
+    else { setCategory(type === "ingreso" ? OTHER_IN : OTHER_OUT); setCustomCat(match.category); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desc, type]);
+
+  const startVoice = () => {
+    setVoiceErr("");
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      setVoiceErr("Tu navegador no soporta voz. Usa Chrome o Edge.");
+      return;
+    }
+    const sr = new SR();
+    sr.lang = "es-CO";
+    sr.interimResults = false;
+    sr.continuous = false;
+    setListening(true);
+    sr.onresult = (e: any) => {
+      const text: string = e.results[0][0].transcript;
+      // Try "número descripción" or "descripción número"
+      const numMatch = text.match(/(\d[\d.]*)/);
+      if (numMatch) {
+        setAmount(numMatch[1].replace(/\./g, ""));
+        const rest = text.replace(numMatch[1], "").trim();
+        if (rest) setDesc(rest);
+      } else {
+        setDesc(text);
+      }
+    };
+    sr.onerror = (e: any) => {
+      setListening(false);
+      if (e.error === "not-allowed") setVoiceErr("Permiso de micrófono denegado. Revisa la configuración del navegador.");
+      else if (e.error === "no-speech") setVoiceErr("No se detectó voz. Intenta de nuevo.");
+      else if (e.error === "network") setVoiceErr("El dictado requiere HTTPS. En móvil usa el micrófono del teclado nativo.");
+      else setVoiceErr(`Error de dictado: ${e.error}`);
+    };
+    sr.onend = () => setListening(false);
+    sr.start();
+  };
 
   const cats = buildCats(type);
   const isOther = category === OTHER_IN || category === OTHER_OUT;
@@ -187,19 +239,42 @@ export default function ModalMovimiento({
 
       <div>
         <label className={labelClass}>Descripción</label>
-        <input
-          value={desc}
-          onChange={e => setDesc(e.target.value)}
-          placeholder="Ej. Salario, Mercado…"
-          className={fieldClass}
-        />
+        <div className="relative">
+          <input
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            placeholder="Ej. Salario, Mercado…"
+            className={fieldClass}
+            style={{ paddingRight: "2.5rem" }}
+          />
+          <button
+            type="button"
+            onClick={startVoice}
+            title="Dictado por voz"
+            className={[
+              "absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer transition-colors",
+              listening ? "bg-neg/20 text-neg" : "bg-panel2 text-dim hover:text-fg",
+            ].join(" ")}
+          >
+            {listening ? (
+              <span className="block w-2 h-2 rounded-full bg-neg animate-pulse" />
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="9" y="2" width="6" height="12" rx="3"/>
+                <path d="M5 10a7 7 0 0 0 14 0"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+              </svg>
+            )}
+          </button>
+        </div>
+        {voiceErr && <p className="text-[11.5px] text-neg mt-1">{voiceErr}</p>}
       </div>
 
       <div>
         <label className={labelClass}>Categoría</label>
         <select
           value={category}
-          onChange={e => { setCategory(e.target.value); setCustomCat(""); }}
+          onChange={e => { catUserPicked.current = true; setCategory(e.target.value); setCustomCat(""); }}
           className={fieldClass}
         >
           {cats.map(c => <option key={c} value={c}>{c}</option>)}

@@ -9,13 +9,40 @@ export type View =
   | "transacciones"
   | "cuentas";
 
-/** Masked monetary value display honoring privacy mode. */
-export const Bal = ({ n, privacy }: { n: number; privacy: boolean }) =>
-  privacy ? (
-    <span style={{ letterSpacing: "0.1em", color: "var(--dim)" }}>••••••</span>
-  ) : (
-    <>{COP(n)}</>
-  );
+/** Animates a number toward its target with ease-out; snaps if reduced-motion. */
+function useCountUp(target: number, duration = 600) {
+  const [value, setValue] = React.useState(target);
+  const prev = React.useRef(target);
+
+  React.useEffect(() => {
+    const from = prev.current;
+    prev.current = target;
+    if (from === target) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setValue(target);
+      return;
+    }
+    const t0 = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(from + (target - from) * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+
+  return value;
+}
+
+/** Masked monetary value display honoring privacy mode; animates value changes. */
+export const Bal = ({ n, privacy }: { n: number; privacy: boolean }) => {
+  const animated = useCountUp(n);
+  if (privacy) return <span style={{ letterSpacing: "0.1em", color: "var(--dim)" }}>••••••</span>;
+  return <>{COP(animated)}</>;
+};
 
 /** Catmull-rom spline through points -> smooth SVG path. */
 export function catmullRomPath(points: [number, number][], tension = 0.18): string {

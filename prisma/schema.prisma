@@ -31,9 +31,11 @@ model User {
   activityLogs  ActivityLog[]
   budgets       Budget[]
   budgetConfigs BudgetConfig[]
-  categories    Category[]
-  goals         Goal[]
-  recurrings    Recurring[]
+  categories     Category[]
+  goals          Goal[]
+  recurrings     Recurring[]
+  sharesGiven    ShareInvite[] @relation("SharesGiven")
+  sharesReceived ShareInvite[] @relation("SharesReceived")
 }
 
 model Account {
@@ -177,6 +179,7 @@ model UserConfig {
   trm            Float?
   trmUpdatedAt   DateTime?
   summaryWidgets String?
+  telegramId     String?
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -250,6 +253,20 @@ model Budget {
   user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, category, period])
+}
+
+model ShareInvite {
+  id         String   @id @default(cuid())
+  ownerId    String
+  guestEmail String
+  guestId    String?
+  role       String   @default("viewer")
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  owner      User     @relation("SharesGiven",    fields: [ownerId],  references: [id], onDelete: Cascade)
+  guest      User?    @relation("SharesReceived", fields: [guestId],  references: [id], onDelete: SetNull)
+
+  @@unique([ownerId, guestEmail])
 }
 
 model BudgetConfig {

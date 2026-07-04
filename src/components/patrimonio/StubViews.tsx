@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Asset, Account, COP, PCT, today } from "../../data/mock";
 import type { AllData, Stock, Crypto } from "../../types";
 import { Bal } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
 import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance } from "../../../lib/actions";
+import { useToast } from "./Toast";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
@@ -392,21 +393,43 @@ function exportXlsx(rows: ReturnType<typeof toTransactions>, from: string, to: s
 export function ViewTransacciones({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
+  const toast = useToast();
   const transactions = toTransactions(initialData.finances);
 
   const yearStart = `${new Date().getFullYear()}-01-01`;
   const oldestDate = transactions.length
     ? transactions.map(t => t.dateISO).sort()[0]
     : yearStart;
-  const [from, setFrom]       = React.useState(yearStart);
+  // Deep-link from the command palette: /transactions?q=...
+  const initialQ = useSearchParams().get("q") ?? "";
+  const [from, setFrom]       = React.useState(initialQ ? oldestDate : yearStart);
   const [to, setTo]           = React.useState(today());
   const [filter, setFilter]   = React.useState<"todos" | "ingresos" | "egresos">("todos");
-  const [search, setSearch]   = React.useState("");
+  const [search, setSearch]   = React.useState(initialQ);
   const [catFilter, setCatFilter] = React.useState("todas");
   const [pageSize, setPageSize]   = React.useState(20);
   const [page, setPage]           = React.useState(1);
   const [sort, setSort]           = React.useState<{ col: SortCol; dir: SortDir }>({ col: "fecha", dir: "desc" });
   const [editId, setEditId]       = React.useState<string | null>(null);
+  const [deletedIds, setDeletedIds] = React.useState<Set<string>>(new Set());
+
+  const handleDelete = (t: ReturnType<typeof toTransactions>[number]) => {
+    if (!t.financeId) return;
+    const fid = t.financeId;
+    setDeletedIds(prev => new Set([...prev, fid]));
+    const tid = setTimeout(async () => {
+      await deleteFinance(fid);
+      setDeletedIds(prev => { const s = new Set(prev); s.delete(fid); return s; });
+      router.refresh();
+    }, 4500);
+    toast.success(`"${t.desc}" eliminado`, {
+      label: "Deshacer",
+      fn: () => {
+        clearTimeout(tid);
+        setDeletedIds(prev => { const s = new Set(prev); s.delete(fid); return s; });
+      },
+    });
+  };
 
   // KPIs: date-filtered only
   const dateFiltered = transactions.filter((t) => t.dateISO >= from && t.dateISO <= to);
@@ -424,6 +447,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
   // Full filter pipeline
   const q = search.trim().toLowerCase();
   const filtered = dateFiltered.filter((t) => {
+    if (t.financeId && deletedIds.has(t.financeId)) return false;
     if (filter === "ingresos" && t.type !== "ingreso") return false;
     if (filter === "egresos"  && t.type !== "egreso")  return false;
     if (catFilter !== "todas" && t.category !== catFilter) return false;
@@ -577,12 +601,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
                           <IconEdit />
                         </button>
                         <button
-                          onClick={async () => {
-                            if (!t.financeId) return;
-                            if (!window.confirm(`¿Eliminar "${t.desc}"?`)) return;
-                            await deleteFinance(t.financeId);
-                            router.refresh();
-                          }}
+                          onClick={() => handleDelete(t)}
                           className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg"
                           title="Eliminar"
                         >
@@ -594,7 +613,21 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
                 );
               })}
               {paged.length === 0 && (
-                <tr><td colSpan={5} className={`${tdClass} text-dim text-center`}>Sin movimientos</td></tr>
+                <tr>
+                  <td colSpan={5} className="py-12 text-center">
+                    <div className="text-[26px] mb-2">🧾</div>
+                    <div className="text-[13.5px] font-medium mb-1">
+                      {q || catFilter !== "todas" || filter !== "todos"
+                        ? "Nada coincide con estos filtros"
+                        : "Sin movimientos en este rango"}
+                    </div>
+                    <div className="text-[12.5px] text-dim">
+                      {q || catFilter !== "todas" || filter !== "todos"
+                        ? "Prueba ampliar el rango de fechas o limpiar la búsqueda."
+                        : "Registra tu primer movimiento con el botón «Registrar» arriba."}
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -941,7 +974,7 @@ export function ViewHistorico({ initialData }: { initialData: AllData }) {
 // ── Shared sub-components ───────────────────────────────────────────────────
 function SummaryCard({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <div className="border border-line bg-panel rounded-2xl px-5 py-4.5">
+    <div className="animate-card border border-line bg-panel rounded-2xl px-5 py-4.5">
       <div className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-2.5">
         {label}
       </div>

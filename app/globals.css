@@ -71,6 +71,128 @@
   ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
 }
 
+/* ── View Transitions ── */
+/* Suppress the default root cross-fade; animate named regions instead */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Main content: quick fade out, snap in with tiny lift */
+::view-transition-old(page-content) {
+  animation: vt-fade-out 70ms ease both;
+}
+::view-transition-new(page-content) {
+  animation: vt-content-in 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Page title: fast crossfade + tiny slide */
+::view-transition-old(page-title) {
+  animation: vt-fade-out 60ms ease both;
+}
+::view-transition-new(page-title) {
+  animation: vt-title-in 130ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Sidebar pill: instant reposition crossfade */
+::view-transition-old(nav-pill) {
+  animation: vt-fade-out 80ms ease both;
+}
+::view-transition-new(nav-pill) {
+  animation: vt-fade-in 100ms ease both;
+}
+
+@keyframes vt-content-in {
+  from { opacity: 0; transform: translateY(5px); }
+}
+@keyframes vt-title-in {
+  from { opacity: 0; transform: translateX(5px); }
+}
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+@keyframes vt-fade-in {
+  from { opacity: 0; }
+}
+
+/* Modal open animation (applied via CSS class, not view transitions) */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+}
+@keyframes modal-card-in {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+}
+
+.modal-backdrop-enter {
+  animation: modal-backdrop-in 200ms ease-out both;
+}
+.modal-card-enter {
+  animation: modal-card-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Named view-transition helpers */
+.vt-page-content { view-transition-name: page-content; }
+.vt-page-title   { view-transition-name: page-title; }
+.vt-nav-pill     { view-transition-name: nav-pill; }
+
+/* ── Skeleton loaders ── */
+@keyframes skeleton-pulse {
+  50% { opacity: 0.5; }
+}
+.skeleton {
+  background: var(--panel2);
+  border-radius: 14px;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* ── Navigation loading bar ── */
+@keyframes nav-bar-run {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+/* ── Entrance animations (within-page) ── */
+@keyframes item-enter {
+  from { opacity: 0; transform: translateY(10px); }
+}
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+@keyframes bar-fill {
+  from { transform: scaleX(0); }
+}
+
+.animate-item {
+  animation: item-enter 200ms ease-out both;
+}
+.animate-card {
+  animation: card-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-bar {
+  animation: bar-fill 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  transform-origin: left;
+}
+
+/* Cross-page morphing targets */
+.vt-hero      { view-transition-name: hero-card; }
+.vt-kpi-cash  { view-transition-name: kpi-cash; }
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .modal-backdrop-enter,
+  .modal-card-enter,
+  .animate-item,
+  .animate-card,
+  .animate-bar {
+    animation: none !important;
+  }
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-panel: var(--panel);
