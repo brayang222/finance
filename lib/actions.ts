@@ -2,6 +2,7 @@
 
 import { auth } from "../auth";
 import { prisma } from "./prisma";
+import { cookies } from "next/headers";
 import type { Stock, Crypto, Finance, Hys, Cash, BankAccount } from '../src/types';
 import { GENERIC_CATS_IN, GENERIC_CATS_OUT } from '../src/data/constants';
 
@@ -24,25 +25,57 @@ async function logActivity(
 
 // ── LOAD ALL ──
 export async function loadAll() {
-  const userId = await getUserId();
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("No autenticado");
+  const userId = session.user.id;
+  const userEmail = session.user.email ?? "";
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals] =
+  // Resolve view-as cookie
+  const cookieStore = await cookies();
+  const viewAsId = cookieStore.get("gfp-view-as")?.value;
+  let targetUserId = userId;
+  let viewingAs: { userId: string; name: string } | null = null;
+
+  if (viewAsId && viewAsId !== userId) {
+    const share = await prisma.shareInvite.findFirst({
+      where: { ownerId: viewAsId, guestId: userId, status: "accepted" },
+      include: { owner: { select: { name: true, email: true } } },
+    });
+    if (share) {
+      targetUserId = viewAsId;
+      viewingAs = { userId: viewAsId, name: share.owner.name ?? share.owner.email ?? viewAsId };
+    }
+  }
+
+  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, sharesGiven, sharesReceived] =
     await Promise.all([
-      prisma.stock.findMany({ where: { userId } }),
-      prisma.crypto.findMany({ where: { userId } }),
-      prisma.finance.findMany({ where: { userId } }),
-      prisma.hys.findUnique({ where: { userId } }),
-      prisma.hysMovement.findMany({ where: { userId } }),
-      prisma.price.findMany({ where: { userId } }),
-      prisma.target.findMany({ where: { userId } }),
-      prisma.cash.findUnique({ where: { userId } }),
-      prisma.userConfig.findUnique({ where: { userId } }),
-      prisma.bankAccount.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
-      prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
-      prisma.budget.findMany({ where: { userId }, orderBy: { category: 'asc' } }),
-      prisma.budgetConfig.findMany({ where: { userId } }),
-      prisma.category.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
-      prisma.goal.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.stock.findMany({ where: { userId: targetUserId } }),
+      prisma.crypto.findMany({ where: { userId: targetUserId } }),
+      prisma.finance.findMany({ where: { userId: targetUserId } }),
+      prisma.hys.findUnique({ where: { userId: targetUserId } }),
+      prisma.hysMovement.findMany({ where: { userId: targetUserId } }),
+      prisma.price.findMany({ where: { userId: targetUserId } }),
+      prisma.target.findMany({ where: { userId: targetUserId } }),
+      prisma.cash.findUnique({ where: { userId: targetUserId } }),
+      prisma.userConfig.findUnique({ where: { userId: targetUserId } }),
+      prisma.bankAccount.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
+      prisma.activityLog.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      prisma.budget.findMany({ where: { userId: targetUserId }, orderBy: { category: 'asc' } }),
+      prisma.budgetConfig.findMany({ where: { userId: targetUserId } }),
+      prisma.category.findMany({ where: { userId: targetUserId }, orderBy: { name: 'asc' } }),
+      prisma.goal.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
+      prisma.recurring.findMany({ where: { userId: targetUserId }, orderBy: { nextDate: 'asc' } }),
+      // Sharing metadata always from the real user
+      prisma.shareInvite.findMany({
+        where: { ownerId: userId, status: { not: "revoked" } },
+        include: { guest: { select: { name: true, email: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.shareInvite.findMany({
+        where: { status: { not: "revoked" }, OR: [{ guestId: userId }, { guestEmail: userEmail }] },
+        include: { owner: { select: { name: true, email: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
@@ -127,6 +160,33 @@ export async function loadAll() {
       id: g.id, name: g.name, target: g.target, saved: g.saved,
       deadline: g.deadline ?? undefined, color: g.color ?? undefined,
     })),
+    recurrings: recurrings.map(r => ({
+      id: r.id,
+      type: r.type as "ingreso" | "egreso",
+      category: r.category,
+      desc: r.desc,
+      amount: r.amount,
+      accountId: r.accountId ?? undefined,
+      accountName: r.accountName ?? undefined,
+      frequency: r.frequency as "diario" | "semanal" | "quincenal" | "mensual" | "anual",
+      nextDate: r.nextDate,
+      active: r.active,
+    })),
+    sharesGiven: sharesGiven.map(s => ({
+      id: s.id, ownerId: s.ownerId, ownerName: null,
+      guestEmail: s.guestEmail, guestId: s.guestId,
+      guestName: s.guest?.name ?? s.guest?.email ?? null,
+      role: s.role as "viewer" | "editor",
+      status: s.status as "pending" | "accepted",
+    })),
+    sharesReceived: sharesReceived.map(s => ({
+      id: s.id, ownerId: s.ownerId,
+      ownerName: s.owner.name ?? s.owner.email ?? null,
+      guestEmail: s.guestEmail, guestId: s.guestId, guestName: null,
+      role: s.role as "viewer" | "editor",
+      status: s.status as "pending" | "accepted",
+    })),
+    viewingAs,
   };
 }
 
@@ -321,10 +381,15 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
 
   if (Object.keys(pricesMap).length === 0) return { updated: 0 };
 
-  const existing = await prisma.price.findMany({ where: { userId } });
-  const merged = { ...Object.fromEntries(existing.map(p => [p.ticker, p.value])), ...pricesMap };
-  await prisma.price.deleteMany({ where: { userId } });
-  await prisma.price.createMany({ data: Object.entries(merged).map(([ticker, value]) => ({ userId, ticker, value })) });
+  await Promise.all(
+    Object.entries(pricesMap).map(([ticker, value]) =>
+      prisma.price.upsert({
+        where: { userId_ticker: { userId, ticker } },
+        create: { userId, ticker, value },
+        update: { value },
+      })
+    )
+  );
   return { updated: Object.keys(pricesMap).length };
 }
 
@@ -522,6 +587,15 @@ export async function saveConfig(theme: string) {
   });
 }
 
+export async function saveTelegramId(telegramId: string) {
+  const userId = await getUserId();
+  await prisma.userConfig.upsert({
+    where: { userId },
+    update: { telegramId: telegramId || null },
+    create: { userId, telegramId: telegramId || null },
+  });
+}
+
 // ── SEED (migración inicial) ──
 export async function seedUserData(data: any) { // TODO: type
   const userId = await getUserId();
@@ -709,4 +783,133 @@ export async function contributeGoal(id: string, amount: number) {
   if (!goal) throw new Error("Meta no encontrada");
   await prisma.goal.update({ where: { id }, data: { saved: { increment: amount } } });
   await logActivity(userId, "goal_contribute", `Abono a meta: ${goal.name}`, { amount });
+}
+
+// ── RECURRING TRANSACTIONS ──
+export async function addRecurring(item: {
+  type: string; category: string; desc: string; amount: number;
+  accountId?: string; accountName?: string; frequency: string; nextDate: string;
+}) {
+  const userId = await getUserId();
+  await prisma.recurring.create({ data: { ...item, userId } });
+}
+
+export async function updateRecurring(id: string, item: {
+  type: string; category: string; desc: string; amount: number;
+  accountId?: string; accountName?: string; frequency: string; nextDate: string; active: boolean;
+}) {
+  const userId = await getUserId();
+  await prisma.recurring.updateMany({ where: { id, userId }, data: item });
+}
+
+export async function deleteRecurring(id: string) {
+  const userId = await getUserId();
+  await prisma.recurring.deleteMany({ where: { id, userId } });
+}
+
+function advanceDate(date: string, frequency: string): string {
+  const d = new Date(date + "T00:00:00");
+  switch (frequency) {
+    case "diario":     d.setDate(d.getDate() + 1); break;
+    case "semanal":    d.setDate(d.getDate() + 7); break;
+    case "quincenal":  d.setDate(d.getDate() + 15); break;
+    case "mensual":    d.setMonth(d.getMonth() + 1); break;
+    case "anual":      d.setFullYear(d.getFullYear() + 1); break;
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// ── SHARED ACCESS ──
+export async function inviteShare(guestEmail: string, role: string = "viewer") {
+  const userId = await getUserId();
+  const guestUser = await prisma.user.findUnique({ where: { email: guestEmail }, select: { id: true } });
+  await prisma.shareInvite.upsert({
+    where: { ownerId_guestEmail: { ownerId: userId, guestEmail } },
+    create: { ownerId: userId, guestEmail, guestId: guestUser?.id ?? null, role, status: "pending" },
+    update: { status: "pending", role, guestId: guestUser?.id ?? undefined },
+  });
+}
+
+export async function acceptShare(inviteId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("No autenticado");
+  const userId = session.user.id;
+  const userEmail = session.user.email ?? "";
+  const invite = await prisma.shareInvite.findFirst({
+    where: { id: inviteId, status: "pending", OR: [{ guestId: userId }, { guestEmail: userEmail }] },
+  });
+  if (!invite) throw new Error("Invitación no encontrada");
+  await prisma.shareInvite.update({ where: { id: inviteId }, data: { guestId: userId, status: "accepted" } });
+}
+
+export async function revokeShare(inviteId: string) {
+  const userId = await getUserId();
+  // Owner revokes, or guest removes themselves
+  await prisma.shareInvite.updateMany({
+    where: { id: inviteId, OR: [{ ownerId: userId }, { guestId: userId }] },
+    data: { status: "revoked" },
+  });
+}
+
+export async function switchViewAs(targetUserId: string | null) {
+  const userId = await getUserId();
+  const cookieStore = await cookies();
+  if (!targetUserId || targetUserId === userId) {
+    cookieStore.delete("gfp-view-as");
+    return;
+  }
+  const share = await prisma.shareInvite.findFirst({
+    where: { ownerId: targetUserId, guestId: userId, status: "accepted" },
+  });
+  if (!share) throw new Error("Sin permiso");
+  cookieStore.set("gfp-view-as", targetUserId, { httpOnly: true, sameSite: "lax", path: "/" });
+}
+
+export async function applyRecurring(id: string) {
+  const userId = await getUserId();
+  const r = await prisma.recurring.findFirst({ where: { id, userId } });
+  if (!r) throw new Error("Recurrente no encontrado");
+  await prisma.finance.create({
+    data: {
+      id: crypto.randomUUID(), userId,
+      type: r.type, category: r.category, desc: r.desc,
+      amount: r.amount, date: r.nextDate,
+      accountId: r.accountId, accountName: r.accountName,
+    },
+  });
+  await autoSaveCategory(userId, r.category, r.type);
+  const delta = r.type === "ingreso" ? r.amount : -r.amount;
+  await adjustBalance(userId, r.accountId ?? undefined, delta);
+  const next = advanceDate(r.nextDate, r.frequency);
+  await prisma.recurring.update({ where: { id }, data: { nextDate: next } });
+  await logActivity(userId, r.type, `Recurrente: ${r.desc}`, { amount: r.amount, accountName: r.accountName ?? undefined });
+}
+
+export async function importFinances(items: Array<{
+  type: "ingreso" | "egreso";
+  amount: number;
+  desc: string;
+  category: string;
+  date: string;
+  accountId?: string;
+  accountName?: string;
+}>) {
+  const userId = await getUserId();
+  await prisma.finance.createMany({
+    data: items.map(item => ({
+      id: crypto.randomUUID(),
+      userId,
+      type: item.type,
+      amount: item.amount,
+      desc: item.desc,
+      category: item.category,
+      date: item.date,
+      accountId: item.accountId,
+      accountName: item.accountName,
+    })),
+  });
+  for (const item of items) {
+    await autoSaveCategory(userId, item.category, item.type);
+  }
 }

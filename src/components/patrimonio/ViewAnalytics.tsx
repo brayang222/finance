@@ -7,6 +7,7 @@ import { upsertBudget, deleteBudget, upsertBudgetConfig } from "../../../lib/act
 import { COLORS } from "../../data/constants";
 import { usePrivacy } from "./PrivacyContext";
 import { MoneyInput } from "./ModalShell";
+import { Period, getPeriodRange } from "./periods";
 
 const COP = (n: number) =>
   n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -14,28 +15,7 @@ const COP = (n: number) =>
 const card = "border border-line bg-panel rounded-2xl p-5";
 const inputSm = "h-7 text-xs border border-line rounded px-2 bg-panel2 text-fg outline-none font-mono tabular-nums";
 
-type Period = "semanal" | "mensual" | "anual";
-
 const PERIOD_LABELS: Record<Period, string> = { semanal: "Semanal", mensual: "Mensual", anual: "Anual" };
-
-// Full calendar ranges (week Mon–Sun, whole month, whole year) so
-// transactions dated "tomorrow" by timezone shift still count in the period
-function getPeriodRange(period: Period, now: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-  if (period === "semanal") {
-    const dow = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return { from: fmt(monday), to: fmt(sunday) };
-  }
-  if (period === "anual") return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to: fmt(lastDay) };
-}
 
 function periodSubLabel(period: Period, now: Date): string {
   if (period === "semanal") {
@@ -106,7 +86,7 @@ function ProgressBar({ pct, over }: { pct: number; over: boolean }) {
   return (
     <div className="h-2 rounded-full overflow-hidden bg-panel2">
       <div
-        className="h-full rounded-full transition-all duration-300"
+        className="h-full rounded-full transition-all duration-300 animate-bar"
         style={{ width: `${Math.min(pct * 100, 100)}%`, background: over ? "var(--neg)" : pct > 0.85 ? "#f59e0b" : "var(--pos)" }}
       />
     </div>
@@ -327,6 +307,17 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
               <span>{(Math.min(overallPct, 1) * 100).toFixed(1)}% utilizado</span>
               {!overallOver && totalAmount > 0 && <span>Quedan {COP(totalAmount - totalSpent)}</span>}
             </div>
+            {period === "mensual" && totalSpent > 0 && (() => {
+              const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              const projected = (totalSpent / now.getDate()) * daysInMonth;
+              const overProj = projected > totalAmount;
+              return (
+                <div className={`text-xs mt-2 ${overProj ? "text-neg" : "text-muted"}`}>
+                  📈 A este ritmo terminarás el mes en {privacy ? "••••" : COP(projected)} ({((projected / totalAmount) * 100).toFixed(0)}% del presupuesto)
+                  {overProj && " — vas camino a excederlo"}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="flex items-center gap-3 mb-5 flex-wrap">
@@ -355,7 +346,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
           )}
 
           <div className="flex flex-col gap-4">
-            {allBudgetCats.map(cat => {
+            {allBudgetCats.map((cat, catIdx) => {
               const budget = budgetMap[cat] || 0;
               const spent = spentByCat[cat] || 0;
               const pct = budget > 0 ? spent / budget : 0;
@@ -366,7 +357,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
               const warn = isEditing ? overallExceedWarning(editParsed, budget) : null;
 
               return (
-                <div key={cat}>
+                <div key={cat} className="animate-item" style={{ animationDelay: `${catIdx * 50}ms` }}>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-sm font-medium truncate">{cat}</span>

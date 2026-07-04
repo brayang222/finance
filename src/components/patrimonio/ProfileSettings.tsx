@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { UserConfig, Category } from "../../types";
+import type { UserConfig, Category, ShareInfo } from "../../types";
 import {
   updateModules,
   addCategory,
@@ -10,6 +10,10 @@ import {
   saveCurrency,
   refreshTrm,
   saveSummaryWidgets,
+  inviteShare,
+  acceptShare,
+  revokeShare,
+  saveTelegramId,
 } from "../../../lib/actions";
 import { fieldClass } from "./ModalShell";
 
@@ -55,7 +59,14 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 const cardClass = "border border-line bg-panel rounded-[18px] p-[22px] flex flex-col gap-4";
 const cardTitle = "text-[11.5px] tracking-[0.08em] uppercase text-dim font-medium";
 
-export default function ProfileSettings({ config, categories }: { config: UserConfig | null; categories: Category[] }) {
+export default function ProfileSettings({
+  config, categories, sharesGiven = [], sharesReceived = [],
+}: {
+  config: UserConfig | null;
+  categories: Category[];
+  sharesGiven?: ShareInfo[];
+  sharesReceived?: ShareInfo[];
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -162,6 +173,56 @@ export default function ProfileSettings({ config, categories }: { config: UserCo
   const trmAgeLabel = trmAt
     ? new Date(trmAt).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
     : null;
+
+  // ── Telegram ──
+  const [tgId, setTgId]       = useState(config?.telegramId ?? "");
+  const [tgBusy, setTgBusy]   = useState(false);
+  const [tgSaved, setTgSaved] = useState(false);
+  const handleSaveTg = async () => {
+    setTgBusy(true);
+    await saveTelegramId(tgId.trim());
+    setTgSaved(true);
+    setTimeout(() => setTgSaved(false), 2000);
+    setTgBusy(false);
+  };
+
+  // ── Sharing ──
+  const [inviteEmail, setInviteEmail]   = useState("");
+  const [inviteBusy, setInviteBusy]     = useState(false);
+  const [inviteError, setInviteError]   = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [shareTab, setShareTab]         = useState<"given" | "received">("received");
+
+  const pendingReceived = sharesReceived.filter(s => s.status === "pending");
+  const acceptedReceived = sharesReceived.filter(s => s.status === "accepted");
+
+  const handleInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || inviteBusy) return;
+    setInviteBusy(true);
+    setInviteError("");
+    setInviteSuccess(false);
+    try {
+      await inviteShare(email);
+      setInviteEmail("");
+      setInviteSuccess(true);
+      router.refresh();
+    } catch {
+      setInviteError("No se pudo enviar. Verifica el correo.");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const handleAccept = async (id: string) => {
+    await acceptShare(id);
+    router.refresh();
+  };
+
+  const handleRevoke = async (id: string) => {
+    await revokeShare(id);
+    router.refresh();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -314,6 +375,160 @@ export default function ProfileSettings({ config, categories }: { config: UserCo
           >
             Agregar
           </button>
+        </div>
+      </div>
+      {/* Sharing */}
+      <div className={cardClass}>
+        <div className={cardTitle}>Acceso compartido</div>
+
+        {/* Pending invites received */}
+        {pendingReceived.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="text-[12px] text-amber-300 font-medium">Invitaciones pendientes</div>
+            {pendingReceived.map(s => (
+              <div key={s.id} className="flex items-center justify-between gap-3 bg-panel2 rounded-xl px-3.5 py-2.5">
+                <div>
+                  <div className="text-[13px] font-medium">{s.ownerName ?? s.guestEmail}</div>
+                  <div className="text-xs text-muted">quiere compartir sus finanzas contigo</div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAccept(s.id)}
+                    className="h-8 px-3 rounded-lg bg-accent text-accentFg text-xs font-medium border-none cursor-pointer"
+                  >
+                    Aceptar
+                  </button>
+                  <button
+                    onClick={() => handleRevoke(s.id)}
+                    className="h-8 px-3 rounded-lg border border-line bg-transparent text-muted text-xs cursor-pointer"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="flex bg-panel2 rounded-xl p-[3px] w-fit">
+          {([["received", "Tengo acceso a"], ["given", "Comparto mis datos"]] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              onClick={() => setShareTab(tab)}
+              className={[
+                "h-[30px] px-3 rounded-[9px] border-none cursor-pointer text-[12px] font-medium whitespace-nowrap",
+                shareTab === tab ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+              ].join(" ")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {shareTab === "received" && (
+          <div className="flex flex-col gap-2">
+            {acceptedReceived.length === 0 && (
+              <p className="text-xs text-dim">Nadie ha compartido sus finanzas contigo aún.</p>
+            )}
+            {acceptedReceived.map(s => (
+              <div key={s.id} className="flex items-center justify-between gap-3 bg-panel2 rounded-xl px-3.5 py-2.5">
+                <div>
+                  <div className="text-[13px] font-medium">{s.ownerName ?? s.guestEmail}</div>
+                  <div className="text-xs text-muted capitalize">{s.role}</div>
+                </div>
+                <button
+                  onClick={() => handleRevoke(s.id)}
+                  className="h-7 px-2.5 rounded-lg border border-line bg-transparent text-red-400 text-xs cursor-pointer"
+                >
+                  Salir
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {shareTab === "given" && (
+          <div className="flex flex-col gap-3">
+            {sharesGiven.length === 0 && (
+              <p className="text-xs text-dim">Aún no has compartido tus finanzas con nadie.</p>
+            )}
+            {sharesGiven.map(s => (
+              <div key={s.id} className="flex items-center justify-between gap-3 bg-panel2 rounded-xl px-3.5 py-2.5">
+                <div>
+                  <div className="text-[13px] font-medium">{s.guestName ?? s.guestEmail}</div>
+                  <div className={["text-xs capitalize", s.status === "pending" ? "text-amber-300" : "text-muted"].join(" ")}>
+                    {s.status === "pending" ? "Pendiente de aceptar" : "Aceptado"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRevoke(s.id)}
+                  className="h-7 px-2.5 rounded-lg border border-line bg-transparent text-red-400 text-xs cursor-pointer"
+                >
+                  Revocar
+                </button>
+              </div>
+            ))}
+
+            <div className="border-t border-line pt-3">
+              <div className="text-[12.5px] text-muted mb-2">Invitar a alguien por correo</div>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => { setInviteEmail(e.target.value); setInviteError(""); setInviteSuccess(false); }}
+                  onKeyDown={e => e.key === "Enter" && handleInvite()}
+                  placeholder="correo@ejemplo.com"
+                  className={`${fieldClass} flex-1`}
+                />
+                <button
+                  onClick={handleInvite}
+                  disabled={!inviteEmail.trim() || inviteBusy}
+                  className="h-[38px] px-4 bg-accent text-accentFg rounded-[10px] text-[13px] font-medium border-none cursor-pointer disabled:opacity-40 shrink-0"
+                >
+                  {inviteBusy ? "…" : "Invitar"}
+                </button>
+              </div>
+              {inviteError && <p className="text-xs text-red-400 mt-1.5">{inviteError}</p>}
+              {inviteSuccess && <p className="text-xs text-emerald-400 mt-1.5">Invitación enviada. Dile que revise su perfil.</p>}
+              <p className="text-[11px] text-dim mt-1.5">La persona debe tener cuenta en Patrimonio. Verá tus datos en modo lectura.</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Telegram bot */}
+      <div className={cardClass}>
+        <div className={cardTitle}>Bot de Telegram</div>
+        <div className="text-[12.5px] text-muted -mt-2">
+          Registra gastos desde Telegram. Busca <strong>@PatrimonioBot</strong>, escribe <code>/start</code> y vincula tu ID aquí.
+        </div>
+        <div>
+          <label className="block text-[12px] text-dim mb-1.5 font-medium tracking-wide uppercase">Tu Telegram ID</label>
+          <div className="flex gap-2">
+            <input
+              value={tgId}
+              onChange={e => setTgId(e.target.value)}
+              placeholder="Ej. 123456789"
+              className={`${fieldClass} flex-1`}
+            />
+            <button
+              onClick={handleSaveTg}
+              disabled={tgBusy}
+              className="h-[38px] px-4 bg-accent text-accentFg rounded-[10px] text-[13px] font-medium border-none cursor-pointer disabled:opacity-40 shrink-0"
+            >
+              {tgSaved ? "Guardado ✓" : tgBusy ? "…" : "Guardar"}
+            </button>
+          </div>
+          <p className="text-[11px] text-dim mt-1.5">Para obtener tu ID escríbele a @userinfobot en Telegram.</p>
+        </div>
+        <div className="rounded-xl border border-line px-3.5 py-2.5 text-[12.5px] text-muted">
+          <div className="font-medium mb-0.5">Comandos disponibles</div>
+          <div className="text-[12px] text-dim flex flex-col gap-0.5 mt-1">
+            <div><code>35000 almuerzo</code> → egreso</div>
+            <div><code>+2500000 salario</code> → ingreso</div>
+            <div><code>/saldo</code> → ver balance neto</div>
+          </div>
         </div>
       </div>
     </div>

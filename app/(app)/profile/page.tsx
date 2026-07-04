@@ -40,7 +40,12 @@ export default async function Page() {
       </div>
 
       {/* Module toggles + categories */}
-      <ProfileSettings config={data.config} categories={data.categories} />
+      <ProfileSettings
+        config={data.config}
+        categories={data.categories}
+        sharesGiven={data.sharesGiven}
+        sharesReceived={data.sharesReceived}
+      />
 
       {/* Sign out */}
       <form

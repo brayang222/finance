@@ -58,6 +58,7 @@ export interface UserConfig {
   trm: number | null
   trmUpdatedAt: string | null
   summaryWidgets: string[] | null
+  telegramId?: string | null
 }
 
 export interface Goal {
@@ -106,6 +107,30 @@ export interface BudgetConfig {
   amount: number
 }
 
+export interface Recurring {
+  id: string
+  type: "ingreso" | "egreso"
+  category: string
+  desc: string
+  amount: number
+  accountId?: string
+  accountName?: string
+  frequency: "diario" | "semanal" | "quincenal" | "mensual" | "anual"
+  nextDate: string
+  active: boolean
+}
+
+export interface ShareInfo {
+  id: string
+  ownerId: string
+  ownerName: string | null
+  guestEmail: string
+  guestId: string | null
+  guestName: string | null
+  role: "viewer" | "editor"
+  status: "pending" | "accepted"
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -121,4 +146,8 @@ export interface AllData {
   budgetConfigs: BudgetConfig[]
   categories: Category[]
   goals: Goal[]
+  recurrings: Recurring[]
+  sharesGiven: ShareInfo[]
+  sharesReceived: ShareInfo[]
+  viewingAs: { userId: string; name: string } | null
 }

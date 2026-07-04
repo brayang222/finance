@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Asset,
@@ -18,7 +18,7 @@ import {
   DONUT_COLORS,
 } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
-import { toAssets, toTransactions, toAccounts } from "./transforms";
+import { toAssets, toTransactions } from "./transforms";
 
 // ponytail: shared style objects replaced with className strings; kept as consts for readability
 const cardBase = "border border-line bg-panel";
@@ -44,7 +44,6 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const transactions = toTransactions(initialData.finances);
   const holdings = toAssets(initialData.stocks, initialData.prices);
   const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
-  const accounts = toAccounts(initialData);
   const [range, setRange] = useState<"1M" | "6M" | "1A" | "Todo">("1A");
   const config = initialData.config;
 
@@ -56,7 +55,21 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const cryptoCost = cryptoAssets.reduce((s, c) => s + costOf(c), 0);
   const cryptoPL = cryptoValue - cryptoCost;
 
-  const cash = accounts.reduce((s, a) => s + a.balance, 0);
+  // Liquid accounts: bank accounts + HYS (exclude bolsa/cripto-type accounts)
+  const liquidAccounts = initialData.bankAccounts.filter(a => a.type !== "bolsa" && a.type !== "cripto");
+  const bankTotal = liquidAccounts.reduce((s, a) => s + a.balance, 0);
+  // now is null on SSR → hysBalance stays 0 to avoid hydration mismatch (Date.now() differs server/client)
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => { setNow(Date.now()); }, []);
+  const hysBalance = useMemo(() => {
+    if (!now) return 0;
+    const hys = initialData.hys;
+    if (!hys || !hys.movements.length) return 0;
+    const last = hys.movements[hys.movements.length - 1];
+    const days = (now - new Date(last.date).getTime()) / 86400000;
+    return last.balance * Math.pow(1 + hys.rate / 100, days / 365);
+  }, [now, initialData.hys]);
+  const cash = bankTotal + hysBalance;
   const total = stockValue + cryptoValue + cash;
 
   // Filter transactions to current month
@@ -66,6 +79,76 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const income = monthTx.filter((t) => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
   const expense = monthTx.filter((t) => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const monthBalance = income - expense;
+
+  // ── Insights: month-over-month category comparison ──
+  const prevYM = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  }, []);
+
+  const insights = useMemo(() => {
+    const sumBy = (ym: string) => {
+      const m: Record<string, number> = {};
+      for (const t of transactions)
+        if (t.type === "egreso" && t.dateISO.startsWith(ym))
+          m[t.category] = (m[t.category] || 0) + t.amount;
+      return m;
+    };
+    const cur = sumBy(nowYM);
+    const prev = sumBy(prevYM);
+    const out: { icon: string; tone: "pos" | "neg"; text: string }[] = [];
+    let bestUp: { cat: string; pct: number } | null = null;
+    let bestDown: { cat: string; pct: number } | null = null;
+    for (const cat of new Set([...Object.keys(cur), ...Object.keys(prev)])) {
+      const c = cur[cat] || 0;
+      const p = prev[cat] || 0;
+      if (p < 20000) continue;
+      const pct = (c - p) / p;
+      if (pct > 0.15 && (!bestUp || pct > bestUp.pct)) bestUp = { cat, pct };
+      if (pct < -0.15 && (!bestDown || pct < bestDown.pct)) bestDown = { cat, pct };
+    }
+    if (bestUp)
+      out.push({ icon: "▲", tone: "neg", text: `Llevas ${PCT(bestUp.pct)} más en ${bestUp.cat} que el mes pasado` });
+    if (bestDown)
+      out.push({ icon: "▼", tone: "pos", text: `Llevas ${PCT(-bestDown.pct)} menos en ${bestDown.cat} que el mes pasado` });
+    return out;
+  }, [transactions, nowYM, prevYM]);
+
+  // ── Streak: consecutive days with at least one record ──
+  const streak = useMemo(() => {
+    const days = new Set(transactions.map(t => t.dateISO));
+    const iso = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const d = new Date();
+    if (!days.has(iso(d))) d.setDate(d.getDate() - 1); // today still pending is fine
+    let n = 0;
+    while (days.has(iso(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }, [transactions]);
+
+  // ── Monthly recap: shown the first days of each month, dismissible ──
+  const recap = useMemo(() => {
+    const tx = transactions.filter(t => t.dateISO.startsWith(prevYM));
+    if (tx.length === 0) return null;
+    const inc = tx.filter(t => t.type === "ingreso").reduce((s, t) => s + t.amount, 0);
+    const exp = tx.filter(t => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
+    const byCat: Record<string, number> = {};
+    for (const t of tx) if (t.type === "egreso") byCat[t.category] = (byCat[t.category] || 0) + t.amount;
+    const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+    const label = new Date(prevYM + "-15T00:00:00").toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+    return { inc, exp, net: inc - exp, topCat, count: tx.length, label };
+  }, [transactions, prevYM]);
+
+  const [showRecap, setShowRecap] = useState(false);
+  useEffect(() => {
+    if (new Date().getDate() <= 5 && !localStorage.getItem(`gfp-recap-${prevYM}`)) setShowRecap(true);
+  }, [prevYM]);
+  const dismissRecap = () => {
+    localStorage.setItem(`gfp-recap-${prevYM}`, "1");
+    setShowRecap(false);
+  };
 
   // Real net-worth series from actual transaction dates
   const allSeries = useMemo(() => {
@@ -178,7 +261,29 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
         <KpiCard
           label="Efectivo y bancos"
           value={<Bal n={cash} privacy={privacy} />}
-          sub={<span className="text-dim">{accounts.length} cuenta{accounts.length !== 1 ? "s" : ""}</span>}
+          sub={
+            <div className="flex flex-col gap-0.5 mt-0.5">
+              {liquidAccounts.map(a => (
+                <div key={a.id} className="flex items-center justify-between gap-2">
+                  <span className="text-dim truncate">{a.name}</span>
+                  <span className="text-dim tabular-nums shrink-0">
+                    {privacy ? "••••" : COP(a.balance)}
+                  </span>
+                </div>
+              ))}
+              {hysBalance > 0 && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-dim">Alto rendimiento</span>
+                  <span className="text-dim tabular-nums shrink-0">
+                    {privacy ? "••••" : COP(hysBalance)}
+                  </span>
+                </div>
+              )}
+              {liquidAccounts.length === 0 && hysBalance === 0 && (
+                <span className="text-dim">0 cuentas</span>
+              )}
+            </div>
+          }
         />
         <KpiCard
           label={`Ingresos · ${monthLabel}`}
@@ -228,7 +333,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
         </div>
         <div className="flex flex-col">
           {transactions.slice(0, 6).map((t, i) => (
-            <TxRow key={t.id} tx={t} privacy={privacy} first={i === 0} />
+            <TxRow key={t.id} tx={t} privacy={privacy} first={i === 0} delay={i * 45} />
           ))}
         </div>
       </div>
@@ -254,7 +359,51 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
     }
   }
 
-  return <div className="flex flex-col gap-[18px]">{rendered}</div>;
+  return (
+    <div className="flex flex-col gap-[18px]">
+      {showRecap && recap && (
+        <div className={`animate-card ${cardBase} rounded-[18px] p-[22px] relative`}>
+          <button
+            onClick={dismissRecap}
+            className="absolute top-3.5 right-4 bg-transparent border-none text-dim cursor-pointer text-[18px] leading-none"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+          <div className={`${microLabel} mb-1`}>Tu mes en números</div>
+          <div className="text-[17px] font-medium mb-3 capitalize" style={{ fontFamily: "Spectral, serif" }}>
+            {recap.label}
+          </div>
+          <div className="flex flex-wrap gap-x-7 gap-y-2 text-[13px]">
+            <span>Ingresos <span className="text-pos font-medium">{privacy ? "••••" : COP(recap.inc)}</span></span>
+            <span>Egresos <span className="text-neg font-medium">{privacy ? "••••" : COP(recap.exp)}</span></span>
+            <span>Balance <span className={`font-medium ${recap.net >= 0 ? "text-pos" : "text-neg"}`}>{privacy ? "••••" : COP(recap.net)}</span></span>
+            {recap.topCat && (
+              <span className="text-muted">Mayor gasto: <span className="text-fg">{recap.topCat[0]}</span>{privacy ? "" : ` (${COP(recap.topCat[1])})`}</span>
+            )}
+            <span className="text-muted">{recap.count} movimientos</span>
+          </div>
+        </div>
+      )}
+
+      {(insights.length > 0 || streak >= 3) && (
+        <div className="animate-item flex flex-wrap gap-2">
+          {streak >= 3 && (
+            <span className="border border-line bg-panel rounded-full px-3.5 py-1.5 text-[12.5px]">
+              🔥 {streak} días seguidos registrando
+            </span>
+          )}
+          {insights.map((ins, i) => (
+            <span key={i} className="border border-line bg-panel rounded-full px-3.5 py-1.5 text-[12.5px]">
+              <span className={ins.tone === "pos" ? "text-pos" : "text-neg"}>{ins.icon}</span> {ins.text}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {rendered}
+    </div>
+  );
 }
 
 function GoalsWidget({ goals, privacy, onNav }: { goals: AllData["goals"]; privacy: boolean; onNav: (v: string) => void }) {
@@ -292,7 +441,7 @@ function GoalsWidget({ goals, privacy, onNav }: { goals: AllData["goals"]; priva
                 </div>
                 <div className="h-2 bg-panel2 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full"
+                    className="h-full rounded-full animate-bar"
                     style={{ width: `${pct * 100}%`, background: done ? "var(--pos)" : (g.color ?? "var(--line-accent)") }}
                   />
                 </div>
@@ -315,7 +464,7 @@ function KpiCard({
   sub: React.ReactNode;
 }) {
   return (
-    <div className="border border-line bg-panel rounded-2xl px-5 py-[18px]">
+    <div className="animate-card border border-line bg-panel rounded-2xl px-5 py-[18px]">
       <div className={`${microLabel} mb-2.5`}>{label}</div>
       <div className={kpiValueClass} style={{ fontFamily: "Spectral, serif" }}>{value}</div>
       <div className="text-[12.5px] mt-1.5">{sub}</div>
@@ -364,8 +513,8 @@ function HeroSpark({ values, privacy }: { values: number[]; privacy: boolean }) 
           <stop offset="100%" stopColor="var(--line-accent)" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#heroGrad)" />
-      <path d={line} fill="none" stroke="var(--line-accent)" strokeWidth={2.2} />
+      <path d={area} fill="url(#heroGrad)" suppressHydrationWarning />
+      <path d={line} fill="none" stroke="var(--line-accent)" strokeWidth={2.2} suppressHydrationWarning />
       <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r={3.5} fill="var(--line-accent)" />
     </svg>
   );
@@ -453,8 +602,8 @@ function NetWorthChart({ points, privacy }: { points: { ym: string; value: numbe
         );
       })}
 
-      <path d={area} fill="url(#nwGrad)" />
-      <path d={line} fill="none" stroke="var(--line-accent)" strokeWidth={2.4} />
+      <path d={area} fill="url(#nwGrad)" suppressHydrationWarning />
+      <path d={line} fill="none" stroke="var(--line-accent)" strokeWidth={2.4} suppressHydrationWarning />
 
       {/* Hover crosshair */}
       {hovPt && (
@@ -626,13 +775,14 @@ function IncomeExpenseBars({
   );
 }
 
-function TxRow({ tx, privacy, first }: { tx: Transaction; privacy: boolean; first: boolean }) {
+function TxRow({ tx, privacy, first, delay = 0 }: { tx: Transaction; privacy: boolean; first: boolean; delay?: number }) {
   const pos = tx.type === "ingreso";
   const d = new Date(tx.dateISO + "T00:00:00");
   const dateLabel = d.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
   return (
     <div
-      className={`flex items-center gap-3 py-[11px] ${first ? "" : "border-t border-line"}`}
+      className={`animate-item flex items-center gap-3 py-[11px] ${first ? "" : "border-t border-line"}`}
+      style={{ animationDelay: `${delay}ms` }}
     >
       <div
         className={`w-[34px] h-[34px] rounded-[9px] bg-panel2 border border-line flex items-center justify-center shrink-0 text-[15px] ${pos ? "text-pos" : "text-neg"}`}

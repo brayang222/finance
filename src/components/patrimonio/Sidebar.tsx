@@ -1,8 +1,10 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { UserConfig } from "../../types";
+import type { UserConfig, ShareInfo } from "../../types";
+import { switchViewAs } from "../../../lib/actions";
 import {
   IconGrid,
   IconTrending,
@@ -13,6 +15,7 @@ import {
   IconBank,
   IconChart,
   IconTarget,
+  IconRepeat,
 } from "./utils";
 
 type NavItem = {
@@ -31,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/savings",      label: "Alto Rendimiento", icon: IconBank,     module: "showHys" },
   { href: "/analytics",    label: "Análisis",         icon: IconChart },
   { href: "/goals",        label: "Metas",            icon: IconTarget,   module: "showGoals" },
+  { href: "/recurrentes",  label: "Recurrentes",      icon: IconRepeat },
   { href: "/history",      label: "Historial",        icon: IconClock,    module: "showActivity" },
 ];
 
@@ -52,13 +56,26 @@ function initials(name?: string | null) {
 export default function Sidebar({
   user,
   config,
+  sharesReceived = [],
+  viewingAs = null,
+  onNavStart,
 }: {
   user?: { name?: string | null; email?: string | null } | null;
   config?: UserConfig | null;
+  sharesReceived?: ShareInfo[];
+  viewingAs?: { userId: string; name: string } | null;
+  onNavStart?: () => void;
 }) {
   const pathname = usePathname() || "";
   const router = useRouter();
   const items = filterNavItems(config);
+
+  const acceptedShares = sharesReceived.filter(s => s.status === "accepted");
+
+  const doSwitch = async (targetId: string | null) => {
+    await switchViewAs(targetId);
+    router.refresh();
+  };
 
   return (
     <aside className="w-[250px] shrink-0 sticky top-0 h-screen border-r border-line bg-panel flex flex-col px-4 py-[18px]">
@@ -75,34 +92,69 @@ export default function Sidebar({
         </span>
       </div>
 
+      {acceptedShares.length > 0 && (
+        <div className="mb-3 flex flex-col gap-0.5">
+          <div className="text-[11px] tracking-[0.08em] uppercase text-dim px-2 pb-1.5 font-medium">Cuenta</div>
+          <button
+            onClick={() => doSwitch(null)}
+            className={[
+              "flex items-center gap-2 w-full py-[7px] px-[10px] rounded-[10px] border-none cursor-pointer text-left text-[13px]",
+              !viewingAs ? "bg-panel2 font-medium text-fg" : "bg-transparent text-muted font-normal",
+            ].join(" ")}
+          >
+            <span className="w-4 text-center text-[10px]">{!viewingAs ? "●" : "○"}</span>
+            {user?.name?.split(" ")[0] ?? "Mis finanzas"}
+          </button>
+          {acceptedShares.map(s => {
+            const active = viewingAs?.userId === s.ownerId;
+            return (
+              <button
+                key={s.id}
+                onClick={() => doSwitch(s.ownerId)}
+                className={[
+                  "flex items-center gap-2 w-full py-[7px] px-[10px] rounded-[10px] border-none cursor-pointer text-left text-[13px]",
+                  active ? "bg-panel2 font-medium text-fg" : "bg-transparent text-muted font-normal",
+                ].join(" ")}
+              >
+                <span className="w-4 text-center text-[10px]">{active ? "●" : "○"}</span>
+                {s.ownerName ?? s.guestEmail}
+              </button>
+            );
+          })}
+          <div className="border-t border-line mt-1.5" />
+        </div>
+      )}
+
       <div className="text-[11px] tracking-[0.08em] uppercase text-dim px-2 pb-2 font-medium">General</div>
 
       <nav className="flex flex-col gap-0.5">
         {items.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
-            <button
+            <Link
               key={href}
-              onClick={() => router.push(href)}
+              href={href}
+              onClick={onNavStart}
               className={[
-                "relative flex items-center gap-[11px] w-full py-[9px] px-[10px] border-none cursor-pointer rounded-[10px] text-left text-[13.5px]",
+                "relative flex items-center gap-[11px] w-full py-[9px] px-[10px] rounded-[10px] no-underline text-[13.5px]",
                 active ? "font-medium bg-panel2 text-fg" : "font-normal bg-transparent text-muted",
               ].join(" ")}
             >
               {active && (
-                <span className="absolute left-[-16px] top-1/2 -translate-y-1/2 w-[2.5px] h-5 rounded-[2px] bg-accent" />
+                <span className="vt-nav-pill absolute left-[-16px] top-1/2 -translate-y-1/2 w-[2.5px] h-5 rounded-[2px] bg-accent" />
               )}
               <Icon size={18} />
               {label}
-            </button>
+            </Link>
           );
         })}
       </nav>
 
       {/* User */}
-      <button
-        onClick={() => router.push("/profile")}
-        className="mt-auto flex items-center gap-2.5 px-2 pt-3 pb-1 border-t border-line bg-transparent border-x-0 border-b-0 cursor-pointer w-full text-left hover:opacity-75 transition-opacity"
+      <Link
+        href="/profile"
+        onClick={onNavStart}
+        className="mt-auto flex items-center gap-2.5 px-2 pt-3 pb-1 border-t border-line w-full no-underline hover:opacity-75 transition-opacity"
       >
         <div className="w-[34px] h-[34px] rounded-[10px] bg-panel2 border border-line flex items-center justify-center text-[12.5px] font-semibold text-muted shrink-0">
           {initials(user?.name)}
@@ -113,7 +165,7 @@ export default function Sidebar({
           </div>
           <div className="text-[11.5px] text-dim">Ver perfil →</div>
         </div>
-      </button>
+      </Link>
     </aside>
   );
 }
