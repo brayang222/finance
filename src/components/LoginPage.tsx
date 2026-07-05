@@ -29,7 +29,7 @@ export default function LoginPage() {
 
     const res = await signIn("credentials", { identifier, password, redirect: false });
     if (res?.error) setError("Correo/celular o contraseña incorrectos");
-    else window.location.href = "/";
+    else window.location.href = "/summary";
     setLoading(false);
   };
 
@@ -47,7 +47,7 @@ export default function LoginPage() {
         </div>
 
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl: "/summary" })}
           className="w-full py-2.5 rounded-md text-[13px] font-medium cursor-pointer bg-white text-[#111] flex items-center justify-center gap-2.5 mb-5 border-none"
         >
           <svg width="16" height="16" viewBox="0 0 48 48">

@@ -34,12 +34,12 @@ export default function BottomNav({
             href={href}
             onClick={onNavStart}
             className={[
-              "flex-1 flex flex-col items-center gap-[3px] no-underline py-1 text-[10.5px]",
+              "flex-1 flex flex-col items-center gap-[3px] no-underline py-1 text-[10.5px] min-w-0",
               active ? "text-fg font-medium" : "text-dim font-normal",
             ].join(" ")}
           >
             <Icon size={20} />
-            {label}
+            <span className="w-full text-center truncate px-0.5">{label}</span>
           </Link>
         );
       })}

@@ -13,7 +13,7 @@ import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
 import FloatingCalc from "./FloatingCalc";
 import Onboarding from "./Onboarding";
-import { switchViewAs } from "../../../lib/actions";
+import { switchViewAs, addFinance } from "../../../lib/actions";
 import { ToastProvider, useToast } from "./Toast";
 import CommandPalette from "./CommandPalette";
 import CsvImport from "./CsvImport";
@@ -80,6 +80,7 @@ function AppShellInner({
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     try { localStorage.setItem("gfp-theme", theme); } catch {}
+    document.cookie = `gfp-theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
   }, [theme]);
 
   useEffect(() => {
@@ -110,6 +111,30 @@ function AppShellInner({
       `${overdue.length} recurrente${overdue.length > 1 ? "s" : ""} pendiente${overdue.length > 1 ? "s" : ""} de aplicar`,
       { label: "Ver", fn: () => router.push("/recurrentes") }
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // SW registration + offline queue flush on reconnect
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    const flush = async () => {
+      // small delay so the connection is stable before hitting the server
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const { flushQueue } = await import("../../../lib/offlineQueue");
+        const count = await flushQueue(addFinance);
+        if (count > 0) {
+          toast.success(`${count} movimiento${count > 1 ? "s" : ""} sincronizado${count > 1 ? "s" : ""}`);
+          router.refresh();
+        }
+      } catch {
+        toast.error("No se pudo sincronizar offline — se reintentará al reconectar.");
+      }
+    };
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

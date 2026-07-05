@@ -217,7 +217,7 @@ export default function ViewRecurrentes({ initialData }: { initialData: AllData 
             const overdue = days < 0;
             const soon = days >= 0 && days <= 3;
             return (
-              <div key={r.id} className="animate-item bg-panel rounded-2xl p-4 flex items-center gap-4" style={{ animationDelay: `${i * 55}ms` }}>
+              <div key={r.id} className="animate-item bg-panel rounded-2xl p-4 flex items-start gap-3 flex-wrap sm:flex-nowrap sm:items-center" style={{ animationDelay: `${i * 55}ms` }}>
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
                   style={{ background: r.type === "ingreso" ? "color-mix(in srgb, #10b981 15%, transparent)" : "color-mix(in srgb, #ef4444 15%, transparent)" }}
@@ -227,7 +227,7 @@ export default function ViewRecurrentes({ initialData }: { initialData: AllData 
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-text truncate">{r.desc}</span>
+                    <span className="font-medium truncate">{r.desc}</span>
                     <span className="text-xs text-dim bg-panel2 rounded-full px-2 py-0.5 shrink-0">{FREQ_LABELS[r.frequency]}</span>
                   </div>
                   <div className="text-sm text-muted mt-0.5">{r.category}</div>
@@ -241,11 +241,11 @@ export default function ViewRecurrentes({ initialData }: { initialData: AllData 
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
+                <div className="w-full sm:w-auto sm:text-right shrink-0 pl-[52px] sm:pl-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-3 sm:gap-0">
                   <div className={["font-semibold tabular-nums", r.type === "ingreso" ? "text-emerald-400" : "text-red-400"].join(" ")}>
                     {r.type === "egreso" ? "−" : "+"}{COP(r.amount)}
                   </div>
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2 sm:mt-2">
                     <button
                       onClick={() => apply(r)}
                       disabled={applying === r.id}
@@ -255,13 +255,13 @@ export default function ViewRecurrentes({ initialData }: { initialData: AllData 
                     </button>
                     <button
                       onClick={() => openEdit(r)}
-                      className="px-2 py-1 rounded-lg text-xs text-muted border border-border bg-transparent cursor-pointer"
+                      className="px-2 py-1 rounded-lg text-xs text-muted border border-line bg-transparent cursor-pointer"
                     >
                       Editar
                     </button>
                     <button
                       onClick={() => remove(r)}
-                      className="px-2 py-1 rounded-lg text-xs text-red-400 border border-border bg-transparent cursor-pointer"
+                      className="px-2 py-1 rounded-lg text-xs text-red-400 border border-line bg-transparent cursor-pointer"
                     >
                       ✕
                     </button>

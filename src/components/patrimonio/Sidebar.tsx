@@ -150,22 +150,39 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* User */}
-      <Link
-        href="/profile"
-        onClick={onNavStart}
-        className="mt-auto flex items-center gap-2.5 px-2 pt-3 pb-1 border-t border-line w-full no-underline hover:opacity-75 transition-opacity"
-      >
-        <div className="w-[34px] h-[34px] rounded-[10px] bg-panel2 border border-line flex items-center justify-center text-[12.5px] font-semibold text-muted shrink-0">
-          {initials(user?.name)}
-        </div>
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis text-fg">
-            {user?.name || "Usuario"}
+      {/* Help + User */}
+      <div className="mt-auto flex flex-col">
+        <Link
+          href="/help"
+          onClick={onNavStart}
+          className={
+            "flex items-center gap-3 w-full py-2 px-2.5 rounded-xl no-underline text-sm mb-1 " +
+            (isActive(pathname, "/help") ? "bg-panel2 text-fg font-medium" : "text-muted")
+          }
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Ayuda
+        </Link>
+        <Link
+          href="/profile"
+          onClick={onNavStart}
+          className="flex items-center gap-2.5 px-2 pt-3 pb-1 border-t border-line w-full no-underline hover:opacity-75 transition-opacity"
+        >
+          <div className="w-9 h-9 rounded-xl bg-panel2 border border-line flex items-center justify-center text-xs font-semibold text-muted shrink-0">
+            {initials(user?.name)}
           </div>
-          <div className="text-[11.5px] text-dim">Ver perfil →</div>
-        </div>
-      </Link>
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate text-fg">
+              {user?.name || "Usuario"}
+            </div>
+            <div className="text-xs text-dim">{"Ver perfil →"}</div>
+          </div>
+        </Link>
+      </div>
     </aside>
   );
 }

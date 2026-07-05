@@ -265,7 +265,7 @@ export function ViewAnalytics({ initialData }: { initialData: AllData }) {
         {/* Total + 3-column summary */}
         {totalAmount > 0 ? (
           <div className="mb-5">
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <div className="bg-panel2 rounded-xl p-3">
                 <div className="text-xs text-dim mb-1">Disponible</div>
                 <div className={`text-base font-medium font-mono ${overallOver ? "text-neg" : "text-pos"}`}>

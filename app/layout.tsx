@@ -1,4 +1,5 @@
 import "./globals.css";
+import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -7,10 +8,12 @@ export const metadata: Metadata = {
   description: "Control de finanzas personales",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const theme = (await cookies()).get("gfp-theme")?.value;
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning data-theme={theme || undefined}>
       <head>
+        <link rel="manifest" href="/manifest.json" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
@@ -18,10 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           rel="stylesheet"
         />
       </head>
-      <body>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('gfp-theme');if(t)document.documentElement.setAttribute('data-theme',t)})()` }} />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

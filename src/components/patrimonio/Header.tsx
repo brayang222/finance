@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import { IconEye, IconEyeOff, IconSun, IconMoon } from "./utils";
 
 const iconBtnClass =
@@ -34,18 +35,25 @@ export default function Header({
         background: "color-mix(in srgb, var(--bg) 82%, transparent)",
       }}
     >
-      <div className="max-w-[1180px] mx-auto px-7 py-4 flex items-center justify-between gap-4">
+      <div className="max-w-[1180px] mx-auto px-4 md:px-7 py-4 flex items-center justify-between gap-2 sm:gap-4">
         <div className="min-w-0">
           <h1
-            className="vt-page-title text-[22px] font-medium m-0 tracking-[-0.01em]"
+            className="vt-page-title text-[18px] sm:text-[22px] font-medium m-0 tracking-[-0.01em]"
             style={{ fontFamily: "Spectral, serif" }}
           >
             {pageTitle}
           </h1>
-          <div className="text-[12.5px] text-dim mt-0.5">{pageSub}</div>
+          <div className="text-[11px] sm:text-[12.5px] text-dim mt-0.5">{pageSub}</div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Link href="/help" className={`hidden sm:flex ${iconBtnClass}`} aria-label="Ayuda" title="Ayuda">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </Link>
           <button className={iconBtnClass} onClick={onTogglePrivacy} aria-label="Privacidad" title="Privacidad">
             {privacy ? <IconEyeOff /> : <IconEye />}
           </button>
@@ -69,9 +77,10 @@ export default function Header({
           {showRegistrar && (
             <button
               onClick={onOpenModal}
-              className="h-[38px] px-[15px] rounded-[10px] border-none cursor-pointer bg-accent text-accentFg text-[13px] font-medium"
+              className="h-[38px] w-[38px] sm:w-auto sm:px-[15px] rounded-[10px] border-none cursor-pointer bg-accent text-accentFg text-[13px] font-medium flex items-center justify-center"
             >
-              Registrar
+              <span className="hidden sm:inline">Registrar</span>
+              <span className="sm:hidden text-[18px] leading-none">+</span>
             </button>
           )}
         </div>
