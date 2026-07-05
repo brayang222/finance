@@ -672,13 +672,13 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
             <>
               <button
                 onClick={() => setPendingDelete(null)}
-                className="flex-1 h-[42px] rounded-xl border border-line bg-panel text-fg cursor-pointer text-[13.5px] font-medium"
+                className="flex-1 h-10.5 rounded-xl border border-line bg-panel text-fg cursor-pointer text-[13.5px] font-medium"
               >
                 Cancelar
               </button>
               <button
                 onClick={() => { handleDelete(pendingDelete); setPendingDelete(null); }}
-                className="flex-1 h-[42px] rounded-xl border-none text-[13.5px] font-medium cursor-pointer"
+                className="flex-1 h-10.5 rounded-xl border-none text-[13.5px] font-medium cursor-pointer"
                 style={{ background: "var(--neg)", color: "#fff" }}
               >
                 Eliminar

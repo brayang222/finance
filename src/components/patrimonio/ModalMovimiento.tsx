@@ -709,13 +709,13 @@ export default function ModalMovimiento({
         </div>
       )}
 
-      <div className="flex bg-panel2 rounded-xl p-[3px]">
+      <div className="flex bg-panel2 rounded-xl p-0.75">
         {(["ingreso", "egreso"] as TxType[]).map(t => (
           <button
             key={t}
             onClick={() => switchType(t)}
             className={[
-              "flex-1 h-[34px] rounded-[9px] border-none cursor-pointer text-[13px] font-medium capitalize",
+              "flex-1 h-8.5 rounded-[9px] border-none cursor-pointer text-[13px] font-medium capitalize",
               type === t ? "bg-accent text-accentFg" : "bg-transparent text-muted",
             ].join(" ")}
           >
