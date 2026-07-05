@@ -129,8 +129,9 @@ export default function LandingPage() {
   const toggleTheme = () => {
     const next = !isLight;
     setIsLight(next);
-    if (next) document.documentElement.setAttribute("data-theme", "light");
-    else document.documentElement.removeAttribute("data-theme");
+    const val = next ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", val);
+    document.cookie = `gfp-theme=${val}; path=/; max-age=31536000; SameSite=Lax`;
   };
 
   return (

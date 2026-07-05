@@ -1,4 +1,4 @@
-const CACHE = "finance-v2";
+const CACHE = "finance-v3";
 
 self.addEventListener("install", e => {
   e.waitUntil(
@@ -22,29 +22,23 @@ self.addEventListener("fetch", e => {
   // Auth and API routes always go to network
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
-  // Immutable static chunks: cache-first
-  if (url.pathname.startsWith("/_next/static/")) {
-    e.respondWith(
-      caches.open(CACHE).then(async cache => {
-        const hit = await cache.match(e.request);
-        if (hit) return hit;
-        const res = await fetch(e.request);
-        if (res.ok) cache.put(e.request, res.clone());
-        return res;
-      })
-    );
-    return;
-  }
-
-  // Navigation + RSC: cache-first with network update in background
   e.respondWith(
     caches.open(CACHE).then(async cache => {
       const hit = await cache.match(e.request);
-      const fromNet = fetch(e.request).then(res => {
+      if (hit) return hit;
+      // Cache miss: fetch from network, cache on success, return
+      try {
+        const res = await fetch(e.request);
         if (res.ok) cache.put(e.request, res.clone());
         return res;
-      }).catch(() => null);
-      return hit ?? await fromNet;
+      } catch {
+        // Offline and no cache — return a minimal offline response for navigations
+        if (e.request.mode === "navigate") {
+          const root = await cache.match("/");
+          if (root) return root;
+        }
+        return new Response("Offline", { status: 503 });
+      }
     })
   );
 });

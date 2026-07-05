@@ -420,9 +420,13 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
     const fid = t.financeId;
     setDeletedIds(prev => new Set([...prev, fid]));
     const tid = setTimeout(async () => {
-      await deleteFinance(fid);
-      router.refresh();
-      // ponytail: don't clear deletedIds here — avoids flash while refresh is in-flight
+      try {
+        await deleteFinance(fid);
+        router.refresh();
+      } catch {
+        setDeletedIds(prev => { const s = new Set(prev); s.delete(fid); return s; });
+        toast.error("No se pudo eliminar. Intenta de nuevo.");
+      }
     }, 4500);
     toast.success(`"${t.desc}" eliminado`, {
       label: "Deshacer",
@@ -492,24 +496,27 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
     <div className="flex flex-col gap-3.5">
       {/* Filters row */}
       <div className="flex items-end gap-3 flex-wrap">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium">Desde</span>
-            {from !== oldestDate && (
-              <button
-                onClick={() => { setFrom(oldestDate); setPage(1); }}
-                className="text-[10px] text-accent border-none bg-transparent cursor-pointer p-0 ml-2"
-              >
-                Desde el inicio
-              </button>
-            )}
+        {/* Dates always stay side-by-side as a unit */}
+        <div className="flex items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium">Desde</span>
+              {from !== oldestDate && (
+                <button
+                  onClick={() => { setFrom(oldestDate); setPage(1); }}
+                  className="text-[10px] text-accent border-none bg-transparent cursor-pointer p-0 ml-2"
+                >
+                  Inicio
+                </button>
+              )}
+            </div>
+            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className={inputCls} />
           </div>
-          <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className={inputCls} />
+          <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
+            Hasta
+            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className={inputCls} />
+          </label>
         </div>
-        <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium">
-          Hasta
-          <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className={inputCls} />
-        </label>
         <label className="flex flex-col gap-1 text-[11px] tracking-[0.08em] uppercase text-dim font-medium flex-1 min-w-40">
           Buscar
           <input
@@ -594,7 +601,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
                       {privacy ? "••••••" : `${pos ? "+" : "−"}${COP(t.amount)}`}
                     </td>
                     <td className={`${tdClass} text-right whitespace-nowrap`}>
-                      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => setEditId(t.financeId!)}
                           className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg"

@@ -233,7 +233,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
       </div>
     ),
     kpis: (
-      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))" }}>
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         {(config?.showStocks ?? true) && (
           <KpiCard
             label="Inversiones · bolsa"

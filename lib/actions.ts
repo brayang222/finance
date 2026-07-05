@@ -25,6 +25,19 @@ async function logActivity(
 
 // ── LOAD ALL ──
 export async function loadAll() {
+  try {
+    return await _loadAll();
+  } catch (e: any) {
+    // Neon cold start: retry once after 2s
+    if (e?.code === "P1001") {
+      await new Promise(r => setTimeout(r, 2000));
+      return await _loadAll();
+    }
+    throw e;
+  }
+}
+
+async function _loadAll() {
   const session = await auth();
   if (!session?.user?.id) throw new Error("No autenticado");
   const userId = session.user.id;
@@ -58,7 +71,7 @@ export async function loadAll() {
       prisma.target.findMany({ where: { userId: targetUserId } }),
       prisma.cash.findUnique({ where: { userId: targetUserId } }),
       prisma.userConfig.findUnique({ where: { userId: targetUserId } }),
-      prisma.bankAccount.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
+      prisma.bankAccount.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true, bank: true, type: true, balance: true, color: true } }),
       prisma.activityLog.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'desc' }, take: 100 }),
       prisma.budget.findMany({ where: { userId: targetUserId }, orderBy: { category: 'asc' } }),
       prisma.budgetConfig.findMany({ where: { userId: targetUserId } }),

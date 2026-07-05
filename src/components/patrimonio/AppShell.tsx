@@ -80,6 +80,7 @@ function AppShellInner({
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     try { localStorage.setItem("gfp-theme", theme); } catch {}
+    document.cookie = `gfp-theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
   }, [theme]);
 
   useEffect(() => {
@@ -119,11 +120,17 @@ function AppShellInner({
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
     const flush = async () => {
-      const { flushQueue } = await import("../../../lib/offlineQueue");
-      const count = await flushQueue(addFinance);
-      if (count > 0) {
-        toast.success(`${count} movimiento${count > 1 ? "s" : ""} sincronizado${count > 1 ? "s" : ""}`);
-        router.refresh();
+      // small delay so the connection is stable before hitting the server
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const { flushQueue } = await import("../../../lib/offlineQueue");
+        const count = await flushQueue(addFinance);
+        if (count > 0) {
+          toast.success(`${count} movimiento${count > 1 ? "s" : ""} sincronizado${count > 1 ? "s" : ""}`);
+          router.refresh();
+        }
+      } catch {
+        toast.error("No se pudo sincronizar offline — se reintentará al reconectar.");
       }
     };
     window.addEventListener("online", flush);

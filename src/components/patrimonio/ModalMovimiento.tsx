@@ -639,16 +639,28 @@ export default function ModalMovimiento({
       if (isEdit) {
         await updateFinance(editId!, item);
         router.refresh();
+        onClose();
       } else {
+        // Online path: try server action first
+        if (navigator.onLine) {
+          try {
+            await addFinance(item);
+            router.refresh();
+            onClose();
+            return;
+          } catch {
+            // fall through to local queue
+          }
+        }
+        // Offline or server action failed — queue locally
         try {
-          await addFinance(item);
-          router.refresh();
-        } catch {
           await enqueue(item);
           toast.info("Guardado offline — se sincronizará al conectarse");
+          onClose();
+        } catch {
+          toast.error("No se pudo guardar. Verifica tu conexión e intenta de nuevo.");
         }
       }
-      onClose();
     } finally {
       setSaving(false);
     }
