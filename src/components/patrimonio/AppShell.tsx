@@ -117,7 +117,13 @@ function AppShellInner({
   // SW registration + offline queue flush on reconnect
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/sw.js").then(() => {
+        // Warm key routes so they're available offline.
+        // SW intercepts these fetches and caches by pathname — same key as navigate requests.
+        ["/transactions", "/summary", "/accounts"].forEach(route => {
+          fetch(route).catch(() => {});
+        });
+      }).catch(() => {});
     }
     const flush = async () => {
       // small delay so the connection is stable before hitting the server
