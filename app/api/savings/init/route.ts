@@ -6,15 +6,14 @@ import { todayISO } from "@/lib/db";
 export async function POST(req: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(req);
-    const { initialBalance, rate } = await req.json();
+    const { initialBalance, rate, name = "Nubank", currency = "COP" } = await req.json();
     const today = todayISO();
-    await prisma.$transaction([
-      prisma.hys.upsert({ where: { userId }, update: { rate }, create: { userId, rate } }),
-      prisma.hysMovement.deleteMany({ where: { userId } }),
-      prisma.hysMovement.create({
-        data: { id: crypto.randomUUID(), userId, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
-      }),
-    ]);
-    return NextResponse.json({ ok: true });
+    const hys = await prisma.hys.create({
+      data: { userId, name, currency, rate, openedAt: today },
+    });
+    await prisma.hysMovement.create({
+      data: { id: crypto.randomUUID(), userId, hysId: hys.id, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
+    });
+    return NextResponse.json({ id: hys.id });
   } catch (e) { return apiError(e); }
 }

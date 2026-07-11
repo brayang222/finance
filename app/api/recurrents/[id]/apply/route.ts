@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserIdFromRequest, apiError, notFound } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { adjustBalance, autoSaveCategory, logActivity, advanceDate } from "@/lib/db";
+import { adjustBalance, autoSaveCategory, logActivity, advanceDate, todayISO } from "@/lib/db";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: {
         id: crypto.randomUUID(), userId,
         type: r.type, category: r.category, desc: r.desc,
-        amount: r.amount, date: r.nextDate,
+        amount: r.amount, date: todayISO(),
         accountId: r.accountId, accountName: r.accountName,
       },
     });

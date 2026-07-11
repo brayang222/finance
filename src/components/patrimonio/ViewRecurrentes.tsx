@@ -53,7 +53,9 @@ function RecurringModal({
       const acct = bankAccounts.find(b => b.id === accountId);
       const payload = {
         type, category: category.trim(), desc: desc.trim(), amount: monto, frequency, nextDate,
-        accountId: acct?.id, accountName: acct?.name, active,
+        accountId: accountId === "cash" ? "cash" : acct?.id,
+        accountName: accountId === "cash" ? "Efectivo" : acct?.name,
+        active,
       };
       if (isEdit) {
         await updateRecurring(item.id, payload);
@@ -132,15 +134,14 @@ function RecurringModal({
         <input type="date" value={nextDate} onChange={e => setNextDate(e.target.value)} className={fieldClass} />
       </div>
 
-      {bankAccounts.length > 0 && (
-        <div>
-          <label className={labelClass}>Cuenta (opcional)</label>
-          <select value={accountId} onChange={e => setAccountId(e.target.value)} className={fieldClass}>
-            <option value="">— Sin cuenta —</option>
-            {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </div>
-      )}
+      <div>
+        <label className={labelClass}>Cuenta</label>
+        <select value={accountId} onChange={e => setAccountId(e.target.value)} className={fieldClass}>
+          <option value="">— Sin cuenta —</option>
+          {!bankAccounts.some(b => b.name.toLowerCase().includes('efectivo')) && <option value="cash">Efectivo</option>}
+          {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      </div>
 
       {isEdit && (
         <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
@@ -163,12 +164,22 @@ export default function ViewRecurrentes({ initialData }: { initialData: AllData 
   const [editing, setEditing]     = useState<Recurring | undefined>(undefined);
   const [applying, setApplying]   = useState<string | null>(null);
 
-  const { recurrings, bankAccounts, categories } = initialData;
+  const { recurrings, bankAccounts, categories, finances } = initialData;
 
   const active   = recurrings.filter(r => r.active);
   const inactive = recurrings.filter(r => !r.active);
 
   const apply = async (r: Recurring) => {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const alreadyThisMonth = finances.some(
+      f => f.category === r.category
+        && Math.abs(f.amount - r.amount) < 1
+        && f.date.startsWith(ym)
+    );
+    if (alreadyThisMonth) {
+      if (!confirm(`Ya registraste "${r.desc}" este mes. ¿Registrar de nuevo?`)) return;
+    }
     setApplying(r.id);
     try {
       await applyRecurring(r.id);

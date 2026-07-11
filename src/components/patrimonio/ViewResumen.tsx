@@ -61,14 +61,20 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   // now is null on SSR → hysBalance stays 0 to avoid hydration mismatch (Date.now() differs server/client)
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => { setNow(Date.now()); }, []);
-  const hysBalance = useMemo(() => {
-    if (!now) return 0;
-    const hys = initialData.hys;
-    if (!hys || !hys.movements.length) return 0;
-    const last = hys.movements[hys.movements.length - 1];
-    const days = (now - new Date(last.date).getTime()) / 86400000;
-    return last.balance * Math.pow(1 + hys.rate / 100, days / 365);
-  }, [now, initialData.hys]);
+  const trm = config?.trm ?? null;
+  const hysAccounts = initialData.hysAccounts ?? [];
+  const hysEntries = useMemo(() => {
+    if (!now) return [];
+    return hysAccounts.map(a => {
+      if (!a.movements.length) return { name: a.name, currency: a.currency, balance: 0 };
+      const sorted = [...a.movements].sort((x, y) => x.date.localeCompare(y.date));
+      const last = sorted[sorted.length - 1];
+      const days = (now - new Date(last.date).getTime()) / 86400000;
+      const bal = last.balance * Math.pow(1 + a.rate / 100, days / 365);
+      return { name: a.name, currency: a.currency, balance: bal };
+    });
+  }, [now, hysAccounts]);
+  const hysBalance = useMemo(() => hysEntries.reduce((s, e) => s + (e.currency === "USD" && trm ? e.balance * trm : e.balance), 0), [hysEntries, trm]);
   const cash = bankTotal + hysBalance;
   const total = stockValue + cryptoValue + cash;
 
@@ -271,14 +277,18 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
                   </span>
                 </div>
               ))}
-              {hysBalance > 0 && (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-dim">Alto rendimiento</span>
-                  <span className="text-dim tabular-nums shrink-0">
-                    {privacy ? "••••" : COP(hysBalance)}
-                  </span>
-                </div>
-              )}
+              {hysEntries.map(e => {
+                const copVal = e.currency === "USD" && trm ? e.balance * trm : e.balance;
+                if (copVal <= 0) return null;
+                return (
+                  <div key={e.name} className="flex items-center justify-between gap-2">
+                    <span className="text-dim truncate">{e.name}{e.currency === "USD" ? " (USD)" : ""}</span>
+                    <span className="text-dim tabular-nums shrink-0">
+                      {privacy ? "••••" : COP(copVal)}
+                    </span>
+                  </div>
+                );
+              })}
               {liquidAccounts.length === 0 && hysBalance === 0 && (
                 <span className="text-dim">0 cuentas</span>
               )}

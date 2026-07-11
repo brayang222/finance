@@ -21,7 +21,7 @@ model User {
   stocks        Stock[]
   crypto        Crypto[]
   finances      Finance[]
-  hys           Hys?
+  hysAccounts   Hys[]
   hysMovements  HysMovement[]
   prices        Price[]
   targets       Target[]
@@ -119,21 +119,29 @@ model Finance {
 }
 
 model Hys {
-  id     String @id @default(cuid())
-  userId String @unique
-  rate   Float
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String        @id @default(cuid())
+  userId    String
+  name      String
+  currency  String        @default("COP")
+  rate      Float
+  openedAt  String?
+  movements HysMovement[]
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
 }
 
 model HysMovement {
   id      String  @id
   userId  String
+  hysId   String?
   date    String
   type    String
   amount  Float
   balance Float
   note    String?
   rate    Float
+  hys     Hys?    @relation(fields: [hysId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 

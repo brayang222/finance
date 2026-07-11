@@ -6,13 +6,13 @@ export async function GET(req: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(req);
 
-    const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config,
+    const [stocks, crypto, finances, hysAccounts, hysMovements, prices, targets, cash, config,
       bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings] =
       await Promise.all([
         prisma.stock.findMany({ where: { userId } }),
         prisma.crypto.findMany({ where: { userId } }),
         prisma.finance.findMany({ where: { userId } }),
-        prisma.hys.findUnique({ where: { userId } }),
+        prisma.hys.findMany({ where: { userId }, include: { movements: { orderBy: { date: "asc" } } } }),
         prisma.hysMovement.findMany({ where: { userId } }),
         prisma.price.findMany({ where: { userId } }),
         prisma.target.findMany({ where: { userId } }),
@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
       stocks,
       crypto,
       finances,
-      hys: hys ? { rate: hys.rate, movements: hysMovements } : null,
+      hys: hysAccounts[0] ? { rate: hysAccounts[0].rate, movements: hysMovements } : null,
+      hysAccounts: hysAccounts.map(a => ({
+        id: a.id, name: a.name, currency: a.currency, rate: a.rate,
+        openedAt: a.openedAt, movements: a.movements,
+      })),
       prices: Object.fromEntries(prices.map(p => [p.ticker, p.value])),
       targets: Object.fromEntries(targets.map(t => [t.ticker, t.value])),
       cash,

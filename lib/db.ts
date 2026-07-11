@@ -28,18 +28,26 @@ export async function adjustBalance(
   delta: number
 ) {
   if (!accountId || Math.abs(delta) < 0.01) return;
+  if (accountId === "cash") {
+    await prisma.cash.upsert({
+      where: { userId },
+      create: { userId, banco: Math.max(0, delta) },
+      update: { banco: { increment: delta } },
+    });
+    return;
+  }
   if (accountId === "hys") {
-    const hys = await prisma.hys.findUnique({ where: { userId } });
+    const hys = await prisma.hys.findFirst({ where: { userId } });
     if (!hys) return;
     const todayStr = new Date().toISOString().slice(0, 10);
-    const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+    const last = await prisma.hysMovement.findFirst({ where: { hysId: hys.id }, orderBy: { date: "desc" } });
     const base = last
       ? last.balance * (1 + hys.rate / 100) **
           (Math.max(0, Math.floor((new Date(todayStr).getTime() - new Date(last.date).getTime()) / 86400000)) / 365)
       : 0;
     await prisma.hysMovement.create({
       data: {
-        id: crypto.randomUUID(), userId,
+        id: crypto.randomUUID(), userId, hysId: hys.id,
         date: todayStr,
         type: delta >= 0 ? "deposito" : "retiro",
         amount: Math.abs(delta),
@@ -64,8 +72,8 @@ export function compound(B: number, tea: number, dateL: string, dateT: string) {
   return days <= 0 ? B : B * (1 + tea / 100) ** (days / 365);
 }
 
-export async function replayBalances(userId: string, fromDate: string) {
-  const all = await prisma.hysMovement.findMany({ where: { userId }, orderBy: { date: "asc" } });
+export async function replayBalances(userId: string, fromDate: string, hysId?: string) {
+  const all = await prisma.hysMovement.findMany({ where: hysId ? { hysId } : { userId }, orderBy: { date: "asc" } });
   const pivotIdx = all.findIndex(m => m.date >= fromDate);
   if (pivotIdx <= 0) return;
   let prev = all[pivotIdx - 1];

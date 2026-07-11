@@ -7,7 +7,7 @@ import type { AllData, Stock, Crypto } from "../../types";
 import { Bal } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance, hysDeleteAccount } from "../../../lib/actions";
 import { useToast } from "./Toast";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
@@ -403,8 +403,11 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
     : yearStart;
   // Deep-link from the command palette: /transactions?q=...
   const initialQ = useSearchParams().get("q") ?? "";
+  const latestDate = transactions.length
+    ? transactions.map(t => t.dateISO).sort().at(-1)!
+    : today();
   const [from, setFrom]       = React.useState(initialQ ? oldestDate : yearStart);
-  const [to, setTo]           = React.useState(today());
+  const [to, setTo]           = React.useState(latestDate > today() ? latestDate : today());
   const [filter, setFilter]   = React.useState<"todos" | "ingresos" | "egresos">("todos");
   const [search, setSearch]   = React.useState(initialQ);
   const [catFilter, setCatFilter] = React.useState("todas");
@@ -699,7 +702,7 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
         if (!f) return null;
         const allAccounts = [
           ...initialData.bankAccounts,
-          ...(initialData.hys ? [{ id: "hys", name: "Alto Rendimiento", type: "otro", balance: 0 }] : []),
+          ...(initialData.hysAccounts ?? []).map(a => ({ id: a.id, name: a.name, type: "otro" as const, balance: 0 })),
         ];
         return (
           <ModalMovimiento
@@ -777,17 +780,20 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const stockTotal  = holdings.reduce((s, a) => s + a.qty * a.price, 0);
   const cryptoTotal = cryptoAssets.reduce((s, a) => s + a.qty * a.price, 0);
 
-  // HYS balance uses Date.now() — defer to client to avoid SSR/client mismatch
+  // HYS balances — defer Date.now() to client to avoid SSR/client mismatch
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => { setNow(Date.now()); }, []);
-  const hysBalance = (() => {
-    if (!now) return 0;
-    const hys = initialData.hys;
-    if (!hys || hys.movements.length === 0) return 0;
-    const last = hys.movements[hys.movements.length - 1];
+  const hysAccounts = initialData.hysAccounts ?? [];
+  const trm = initialData.config?.trm ?? null;
+  const hysBalances = hysAccounts.map(a => {
+    if (!now || !a.movements.length) return 0;
+    const sorted = [...a.movements].sort((x, y) => x.date.localeCompare(y.date));
+    const last = sorted[sorted.length - 1];
     const days = (now - new Date(last.date).getTime()) / 86400000;
-    return last.balance * Math.pow(1 + hys.rate / 100, days / 365);
-  })();
+    const bal = last.balance * Math.pow(1 + a.rate / 100, days / 365);
+    return a.currency === "USD" && trm ? bal * trm : bal;
+  });
+  const hysBalance = hysBalances.reduce((s, b) => s + b, 0);
 
   // Group bank accounts by type
   const bankAccounts   = initialData.bankAccounts.filter(a => a.type === "banco" || a.type === "otro" || !a.type);
@@ -870,21 +876,40 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
       </div>
 
       {/* Alto rendimiento */}
-      {initialData.hys && (
+      {hysAccounts.length > 0 && (
         <Section title="Alto rendimiento">
-          <div className={`${cardClass} cursor-pointer`} onClick={() => router.push("/savings")}>
-            <div className="flex items-center justify-between mb-3.5">
-              <div>
-                <div className="text-[14px] font-medium">Alto Rendimiento</div>
-                <div className="text-[11.5px] text-dim">TEA {initialData.hys.rate.toFixed(2)}% · Ver detalle →</div>
+          {hysAccounts.map((a, i) => {
+            const bal = hysBalances[i];
+            return (
+              <div key={a.id} className={`${cardClass} cursor-pointer`} onClick={() => router.push("/savings")}>
+                <div className="flex items-center justify-between mb-3.5">
+                  <div>
+                    <div className="text-[14px] font-medium">{a.name}</div>
+                    <div className="text-[11.5px] text-dim">
+                      TEA {a.rate.toFixed(2)}% · {a.currency} · Ver detalle →
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
+                      style={{ background: "#f59e0b22", color: "#f59e0b" }}>HYS</span>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!window.confirm(`¿Cerrar la cuenta "${a.name}"? Se eliminarán todos los movimientos.`)) return;
+                        await hysDeleteAccount(a.id);
+                        router.refresh();
+                      }}
+                      className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg"
+                      title="Cerrar cuenta"
+                    ><IconTrash /></button>
+                  </div>
+                </div>
+                <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
+                  <Bal n={bal} privacy={privacy} />
+                </div>
               </div>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm"
-                style={{ background: "#f59e0b22", color: "#f59e0b" }}>HYS</span>
-            </div>
-            <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
-              <Bal n={hysBalance} privacy={privacy} />
-            </div>
-          </div>
+            );
+          })}
         </Section>
       )}
 

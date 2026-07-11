@@ -633,8 +633,8 @@ export default function ModalMovimiento({
         desc: desc.trim(),
         category: finalCat,
         date: dateISO,
-        accountId: acct?.id,
-        accountName: acct?.name,
+        accountId: accountId === "cash" ? "cash" : acct?.id,
+        accountName: accountId === "cash" ? "Efectivo" : acct?.name,
       };
       if (isEdit) {
         await updateFinance(editId!, item);
@@ -768,15 +768,14 @@ export default function ModalMovimiento({
         <input type="date" value={dateISO} onChange={e => setDateISO(e.target.value)} className={fieldClass} />
       </div>
 
-      {bankAccounts.length > 0 && (
-        <div>
-          <label className={labelClass}>Cuenta (opcional)</label>
-          <select value={accountId} onChange={e => setAccountId(e.target.value)} className={fieldClass}>
-            <option value="">— Sin cuenta —</option>
-            {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </div>
-      )}
+      <div>
+        <label className={labelClass}>Cuenta</label>
+        <select value={accountId} onChange={e => setAccountId(e.target.value)} className={fieldClass}>
+          <option value="">— Sin cuenta —</option>
+          {!bankAccounts.some(b => b.name.toLowerCase().includes('efectivo')) && <option value="cash">Efectivo</option>}
+          {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      </div>
 
       {duplicateWarning && (
         <div

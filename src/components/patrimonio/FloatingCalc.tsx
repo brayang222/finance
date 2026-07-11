@@ -234,25 +234,57 @@ function CalcNormal() {
 }
 
 // ── 2. Alto rendimiento ───────────────────────────────────────────────────────
-function CalcHYS() {
+function CalcHYS({ storedTrm }: { storedTrm?: number | null }) {
   const [capital, setCapital] = useState("");
   const [tea, setTea]         = useState("");
   const [dias, setDias]       = useState("");
+  const [retiro, setRetiro]   = useState("");
+  const [currency, setCurrency] = useState<"COP"|"USD">("COP");
+  const [trm, setTrm]         = useState(storedTrm ? String(Math.round(storedTrm)) : "");
 
-  const C = NUM(capital), T = NUM(tea), D = NUM(dias);
+  const C = NUM(capital), T = NUM(tea), D = NUM(dias), R = NUM(retiro), TRM = NUM(trm);
   const saldo   = C > 0 && T > 0 && D > 0 ? C * Math.pow(1 + T / 100, D / 365) : null;
   const interes = saldo !== null ? saldo - C : null;
+  const neto    = saldo !== null ? saldo - R : null;
+
+  const fmtVal = (n: number) => currency === "USD"
+    ? `USD ${n.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : fmt(n);
 
   return (
     <div className="flex flex-col gap-3">
-      <MoneyField label="Capital inicial" value={capital} onChange={setCapital} />
+      <div className="flex gap-2">
+        {(["COP", "USD"] as const).map(c => (
+          <button key={c} onClick={() => setCurrency(c)}
+            className="flex-1 h-8 rounded-lg text-xs font-medium cursor-pointer border-none"
+            style={currency === c
+              ? { background: "var(--accent)", color: "var(--accentFg)" }
+              : { background: "var(--panel2)", color: "var(--muted)" }}>
+            {c}
+          </button>
+        ))}
+      </div>
+      <MoneyField label={`Capital inicial (${currency})`} value={capital} onChange={setCapital} />
       <NumField label="Tasa efectiva anual (TEA %)" value={tea} onChange={setTea} suffix="%" placeholder="9,25" />
       <NumField label="Días" value={dias} onChange={setDias} placeholder="365" />
+      <MoneyField label={`Retiro simulado (${currency})`} value={retiro} onChange={setRetiro} />
+      {currency === "USD" && (
+        <NumField label="TRM futuro (COP por 1 USD)" value={trm} onChange={setTrm} placeholder="4200" />
+      )}
       {saldo !== null && (
         <div className="flex flex-col gap-2 mt-1">
-          <Result label="Saldo final" value={fmt(saldo)} highlight />
-          <Result label="Interés ganado" value={fmt(interes!)} />
+          <Result label="Saldo final" value={fmtVal(saldo)} highlight />
+          {currency === "USD" && TRM > 0 && (
+            <Result label="Saldo en COP" value={fmt(saldo * TRM)} />
+          )}
+          <Result label="Interés ganado" value={fmtVal(interes!)} />
+          {currency === "USD" && TRM > 0 && (
+            <Result label="Interés en COP" value={fmt(interes! * TRM)} />
+          )}
           <Result label="Rentabilidad" value={`${((interes! / C) * 100).toFixed(3)}%`} />
+          {R > 0 && neto !== null && (
+            <Result label="Saldo tras retiro" value={fmtVal(neto)} />
+          )}
         </div>
       )}
     </div>
@@ -401,7 +433,7 @@ export default function FloatingCalc({ trm }: { trm?: number | null }) {
 
   const activeCalc = {
     normal:   <CalcNormal />,
-    hys:      <CalcHYS />,
+    hys:      <CalcHYS storedTrm={trm} />,
     accion:   <CalcAccion />,
     prestamo: <CalcPrestamo />,
     trm:      <CalcTRM storedTrm={trm} />,
