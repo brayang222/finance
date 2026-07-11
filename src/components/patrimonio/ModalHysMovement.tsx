@@ -8,9 +8,9 @@ import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./Mo
 import type { HysMovement } from "../../types";
 
 type Props =
-  | { mode: "deposit" | "withdraw"; onClose: () => void; editItem?: undefined }
-  | { mode: "rate"; currentRate: number; onClose: () => void; editItem?: undefined }
-  | { mode: "edit"; editItem: HysMovement; onClose: () => void };
+  | { mode: "deposit" | "withdraw"; hysId: string; onClose: () => void; editItem?: undefined }
+  | { mode: "rate"; hysId: string; currentRate: number; onClose: () => void; editItem?: undefined }
+  | { mode: "edit"; hysId?: string; editItem: HysMovement; onClose: () => void };
 
 export default function ModalHysMovement(props: Props) {
   const { mode, onClose } = props;
@@ -41,9 +41,9 @@ export default function ModalHysMovement(props: Props) {
   const save = async () => {
     setSaving(true);
     try {
-      if (mode === "deposit") await hysDeposit(amountVal, note || undefined);
-      else if (mode === "withdraw") await hysWithdraw(amountVal, note || undefined);
-      else if (mode === "rate") await hysChangeRate(rateVal);
+      if (mode === "deposit") await hysDeposit(props.hysId, amountVal, note || undefined);
+      else if (mode === "withdraw") await hysWithdraw(props.hysId, amountVal, note || undefined);
+      else if (mode === "rate") await hysChangeRate(props.hysId, rateVal);
       else if (mode === "edit") {
         const patch: { amount?: number; note?: string; date?: string } = {};
         if (amountVal !== props.editItem.amount) patch.amount = amountVal;

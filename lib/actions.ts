@@ -60,12 +60,12 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hys, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, sharesGiven, sharesReceived] =
+  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, sharesGiven, sharesReceived] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
       prisma.finance.findMany({ where: { userId: targetUserId } }),
-      prisma.hys.findUnique({ where: { userId: targetUserId } }),
+      prisma.hys.findMany({ where: { userId: targetUserId }, include: { movements: { orderBy: { date: "asc" } } } }),
       prisma.hysMovement.findMany({ where: { userId: targetUserId } }),
       prisma.price.findMany({ where: { userId: targetUserId } }),
       prisma.target.findMany({ where: { userId: targetUserId } }),
@@ -93,9 +93,16 @@ async function _loadAll() {
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
   const targetsMap = Object.fromEntries(targets.map(t => [t.ticker, t.value]));
-  const hysData = hys
-    ? { rate: hys.rate, movements: hysMovements.map(m => ({ ...m, note: m.note ?? undefined })) }
+  const firstHys = hysAccountsRaw[0];
+  const hysData = firstHys
+    ? { rate: firstHys.rate, movements: hysMovements.map(m => ({ ...m, note: m.note ?? undefined })) }
     : null;
+
+  const typedHysAccounts = hysAccountsRaw.map(h => ({
+    id: h.id, name: h.name, currency: h.currency, rate: h.rate,
+    openedAt: h.openedAt ?? undefined,
+    movements: h.movements.map(m => ({ ...m, note: m.note ?? undefined })),
+  }));
 
   const typedFinances = finances.map(f => ({
     ...f,
@@ -143,6 +150,7 @@ async function _loadAll() {
     crypto: typedCrypto,
     finances: typedFinances,
     hys: hysData,
+    hysAccounts: typedHysAccounts,
     prices: pricesMap,
     targets: targetsMap,
     cash: typedCash,
@@ -208,10 +216,10 @@ async function _loadAll() {
 async function adjustBalance(userId: string, accountId: string | undefined | null, delta: number) {
   if (!accountId || Math.abs(delta) < 0.01) return;
   if (accountId === "hys") {
-    const hys = await prisma.hys.findUnique({ where: { userId } });
+    const hys = await prisma.hys.findFirst({ where: { userId } });
     if (!hys) return;
     const todayStr = new Date().toISOString().slice(0, 10);
-    const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+    const last = await prisma.hysMovement.findFirst({ where: { hysId: hys.id }, orderBy: { date: "desc" } });
     const base = last ? last.balance * (1 + hys.rate / 100) ** (
       Math.max(0, Math.floor((new Date(todayStr).getTime() - new Date(last.date).getTime()) / 86400000)) / 365
     ) : 0;
@@ -220,6 +228,7 @@ async function adjustBalance(userId: string, accountId: string | undefined | nul
       data: {
         id: crypto.randomUUID(),
         userId,
+        hysId: hys.id,
         date: todayStr,
         type: delta >= 0 ? "deposito" : "retiro",
         amount: Math.abs(delta),
@@ -436,17 +445,13 @@ export async function saveFinances(items: Finance[]) {
 // ── HYS ──
 export async function saveHys({ rate, movements }: Hys) {
   const userId = await getUserId();
-  await prisma.$transaction([
-    prisma.hys.upsert({
-      where: { userId },
-      update: { rate },
-      create: { userId, rate },
-    }),
-    prisma.hysMovement.deleteMany({ where: { userId } }),
-    prisma.hysMovement.createMany({
-      data: movements.map(m => ({ ...m, userId })),
-    }),
-  ]);
+  let hys = await prisma.hys.findFirst({ where: { userId } });
+  if (!hys) hys = await prisma.hys.create({ data: { userId, name: "Nubank", rate } });
+  else await prisma.hys.update({ where: { id: hys.id }, data: { rate } });
+  await prisma.hysMovement.deleteMany({ where: { hysId: hys.id } });
+  await prisma.hysMovement.createMany({
+    data: movements.map(m => ({ ...m, userId, hysId: hys.id })),
+  });
 }
 
 // ── HYS GRANULAR ACTIONS ──
@@ -467,8 +472,8 @@ function compound(B: number, tea: number, dateL: string, dateT: string): number 
 }
 
 /** After changing or deleting a movement, replay the series to fix subsequent balances. */
-async function replayBalances(userId: string, fromDate: string) {
-  const all = await prisma.hysMovement.findMany({ where: { userId }, orderBy: { date: "asc" } });
+async function replayBalancesForAccount(hysId: string, fromDate: string) {
+  const all = await prisma.hysMovement.findMany({ where: { hysId }, orderBy: { date: "asc" } });
   const pivotIdx = all.findIndex(m => m.date >= fromDate);
   if (pivotIdx <= 0) return; // nothing before to base from, or nothing after
   let prev = all[pivotIdx - 1];
@@ -485,57 +490,56 @@ async function replayBalances(userId: string, fromDate: string) {
   }
 }
 
-export async function initHys(initialBalance: number, rate: number) {
+export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP") {
   const userId = await getUserId();
   const today = todayISO();
-  await prisma.$transaction([
-    prisma.hys.upsert({ where: { userId }, update: { rate }, create: { userId, rate } }),
-    prisma.hysMovement.deleteMany({ where: { userId } }),
-    prisma.hysMovement.create({
-      data: { id: crypto.randomUUID(), userId, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
-    }),
-  ]);
+  const hys = await prisma.hys.create({
+    data: { userId, name, currency, rate, openedAt: today },
+  });
+  await prisma.hysMovement.create({
+    data: { id: crypto.randomUUID(), userId, hysId: hys.id, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
+  });
+  return hys.id;
 }
 
-export async function hysDeposit(amount: number, note?: string) {
+export async function hysDeposit(hysId: string, amount: number, note?: string) {
   const userId = await getUserId();
   const today = todayISO();
-  const hys = await prisma.hys.findUnique({ where: { userId } });
-  if (!hys) throw new Error("Cuenta no inicializada");
-  const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
+  if (!hys) throw new Error("Cuenta no encontrada");
+  const last = await prisma.hysMovement.findFirst({ where: { hysId }, orderBy: { date: "desc" } });
   const base = last ? compound(last.balance, last.rate, last.date, today) : amount;
   const newBalance = base + amount;
   await prisma.hysMovement.create({
-    data: { id: crypto.randomUUID(), userId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
+    data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
   });
 }
 
-export async function hysWithdraw(amount: number, note?: string) {
+export async function hysWithdraw(hysId: string, amount: number, note?: string) {
   const userId = await getUserId();
   const today = todayISO();
-  const hys = await prisma.hys.findUnique({ where: { userId } });
-  if (!hys) throw new Error("Cuenta no inicializada");
-  const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
+  if (!hys) throw new Error("Cuenta no encontrada");
+  const last = await prisma.hysMovement.findFirst({ where: { hysId }, orderBy: { date: "desc" } });
   const base = last ? compound(last.balance, last.rate, last.date, today) : 0;
   const newBalance = base - amount;
   await prisma.hysMovement.create({
-    data: { id: crypto.randomUUID(), userId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },
+    data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },
   });
 }
 
-export async function hysChangeRate(newRate: number) {
+export async function hysChangeRate(hysId: string, newRate: number) {
   const userId = await getUserId();
   const today = todayISO();
-  const hys = await prisma.hys.findUnique({ where: { userId } });
-  if (!hys) throw new Error("Cuenta no inicializada");
-  const last = await prisma.hysMovement.findFirst({ where: { userId }, orderBy: { date: "desc" } });
+  const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
+  if (!hys) throw new Error("Cuenta no encontrada");
+  const last = await prisma.hysMovement.findFirst({ where: { hysId }, orderBy: { date: "desc" } });
   const accrued = last ? compound(last.balance, last.rate, last.date, today) : 0;
-  // snapshot accrual with old rate, then update rate
   await prisma.$transaction([
     prisma.hysMovement.create({
-      data: { id: crypto.randomUUID(), userId, date: today, type: "rendimiento", amount: 0, balance: accrued, rate: hys.rate },
+      data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "rendimiento", amount: 0, balance: accrued, rate: hys.rate },
     }),
-    prisma.hys.update({ where: { userId }, data: { rate: newRate } }),
+    prisma.hys.update({ where: { id: hysId }, data: { rate: newRate } }),
   ]);
 }
 
@@ -544,16 +548,24 @@ export async function hysEditMovement(id: string, patch: { amount?: number; note
   const movement = await prisma.hysMovement.findFirst({ where: { id, userId } });
   if (!movement) throw new Error("Movimiento no encontrado");
   const updated = await prisma.hysMovement.update({ where: { id }, data: patch });
-  await replayBalances(userId, updated.date);
+  await replayBalancesForAccount(movement.hysId!, updated.date);
 }
 
 export async function hysDeleteMovement(id: string) {
   const userId = await getUserId();
   const movement = await prisma.hysMovement.findFirst({ where: { id, userId } });
   if (!movement) throw new Error("Movimiento no encontrado");
+  const hysId = movement.hysId;
   const date = movement.date;
   await prisma.hysMovement.delete({ where: { id } });
-  await replayBalances(userId, date);
+  if (hysId) await replayBalancesForAccount(hysId, date);
+}
+
+export async function hysDeleteAccount(hysId: string) {
+  const userId = await getUserId();
+  const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
+  if (!hys) throw new Error("Cuenta no encontrada");
+  await prisma.hys.delete({ where: { id: hysId } });
 }
 
 // ── PRICES ──
@@ -623,7 +635,7 @@ export async function seedUserData(data: any) { // TODO: type
     prisma.crypto.createMany({ data: data.crypto.map((c: any) => ({ ...c, userId })) }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     prisma.finance.createMany({ data: data.finances.map((f: any) => ({ ...f, userId })) }),
-    prisma.hys.create({ data: { userId, rate: data.hys.rate } }),
+    prisma.hys.create({ data: { userId, name: "Nubank", rate: data.hys.rate } }),
     prisma.hysMovement.createMany({
       data: data.hys.movements.map((m: any) => ({ ...m, userId })),
     }),
@@ -742,10 +754,10 @@ export async function saveCurrency(baseCurrency: string) {
 
 export async function refreshTrm() {
   const userId = await getUserId();
-  const res = await fetch("https://open.er-api.com/v6/latest/USD", { next: { revalidate: 0 } });
+  const res = await fetch("https://latest.currency-api.pages.dev/v1/currencies/usd.json", { next: { revalidate: 0 } });
   if (!res.ok) throw new Error("No se pudo consultar la tasa de cambio");
   const json = await res.json();
-  const cop = json?.rates?.COP;
+  const cop = json?.usd?.cop;
   if (!cop || cop <= 0) throw new Error("TRM no disponible");
   const now = new Date();
   await prisma.userConfig.upsert({
@@ -887,7 +899,7 @@ export async function applyRecurring(id: string) {
     data: {
       id: crypto.randomUUID(), userId,
       type: r.type, category: r.category, desc: r.desc,
-      amount: r.amount, date: r.nextDate,
+      amount: r.amount, date: todayISO(),
       accountId: r.accountId, accountName: r.accountName,
     },
   });

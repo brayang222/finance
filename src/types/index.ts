@@ -36,6 +36,15 @@ export interface HysMovement {
   rate: number
 }
 
+export interface HysAccount {
+  id: string
+  name: string
+  currency: string
+  rate: number
+  openedAt?: string
+  movements: HysMovement[]
+}
+
 export interface Hys {
   rate: number
   movements: HysMovement[]
@@ -136,6 +145,7 @@ export interface AllData {
   crypto: Crypto[]
   finances: Finance[]
   hys: Hys | null
+  hysAccounts: HysAccount[]
   prices: Record<string, number>
   targets: Record<string, number>
   cash: Cash | null
