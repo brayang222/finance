@@ -90,7 +90,7 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, sharesGiven, sharesReceived] =
+  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, sharesGiven, sharesReceived] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
@@ -108,6 +108,7 @@ async function _loadAll() {
       prisma.category.findMany({ where: { userId: targetUserId }, orderBy: { name: 'asc' } }),
       prisma.goal.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
       prisma.recurring.findMany({ where: { userId: targetUserId }, orderBy: { nextDate: 'asc' } }),
+      prisma.transfer.findMany({ where: { userId: targetUserId }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
       // Sharing metadata always from the real user
       prisma.shareInvite.findMany({
         where: { ownerId: userId, status: { not: "revoked" } },
@@ -138,6 +139,11 @@ async function _loadAll() {
         prisma.cashClose.findMany({ where: { userId: targetUserId }, orderBy: { date: "desc" }, take: 60 }),
       ])
     : [[], [], [], []] as const;
+
+  // showCommerce lives on the real user, not the shadow
+  const realUserConfig = targetUserId !== userId
+    ? await prisma.userConfig.findUnique({ where: { userId } })
+    : null;
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
   const targetsMap = Object.fromEntries(targets.map(t => [t.ticker, t.value]));
@@ -214,6 +220,8 @@ async function _loadAll() {
       trm: config.trm,
       trmUpdatedAt: config.trmUpdatedAt?.toISOString() ?? null,
       summaryWidgets: config.summaryWidgets ? JSON.parse(config.summaryWidgets) : null,
+      showCommerce: realUserConfig?.showCommerce ?? config.showCommerce,
+      telegramId: config.telegramId,
       salesGoal: config.salesGoal,
     } : null,
     bankAccounts: typedBankAccounts,
@@ -284,6 +292,12 @@ async function _loadAll() {
       id: c.id, date: c.date, expectedCash: c.expectedCash, countedCash: c.countedCash,
       diff: c.diff, note: c.note ?? undefined,
       summary: c.summary ? JSON.parse(c.summary) : null,
+    })),
+    transfers: transfers.map(t => ({
+      id: t.id, date: t.date, amount: t.amount,
+      fromAccountId: t.fromAccountId, fromAccountName: t.fromAccountName ?? undefined,
+      toAccountId: t.toAccountId, toAccountName: t.toAccountName ?? undefined,
+      note: t.note ?? undefined,
     })),
   };
 }
@@ -389,6 +403,70 @@ export async function deleteCrypto(id: string) {
   await prisma.crypto.delete({ where: { id, userId } });
   if (row?.accountId) await adjustBalance(userId, row.accountId, row.priceCOP * row.qty + row.commission);
   await logActivity(userId, "crypto_delete", `Eliminación cripto: ${row?.ticker ?? id}`, { ticker: row?.ticker });
+}
+
+// ── TRANSFERS (rotación de capital) ──
+export async function addTransfer(opts: {
+  fromAccountId: string; fromAccountName?: string;
+  toAccountId: string; toAccountName?: string;
+  amount: number; note?: string; date?: string;
+}) {
+  const userId = await getUserId();
+  const date = opts.date ?? todayISO();
+  await adjustBalance(userId, opts.fromAccountId, -opts.amount);
+  await adjustBalance(userId, opts.toAccountId, opts.amount);
+  await prisma.transfer.create({
+    data: {
+      userId, date, amount: opts.amount, note: opts.note,
+      fromAccountId: opts.fromAccountId, fromAccountName: opts.fromAccountName,
+      toAccountId: opts.toAccountId, toAccountName: opts.toAccountName,
+    },
+  });
+  await logActivity(userId, "transfer", `Transferencia: ${opts.fromAccountName ?? opts.fromAccountId} → ${opts.toAccountName ?? opts.toAccountId}`, { amount: opts.amount });
+}
+
+export async function deleteTransfer(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.transfer.findFirst({ where: { id, userId } });
+  if (!row) return;
+  await adjustBalance(userId, row.fromAccountId, row.amount);
+  await adjustBalance(userId, row.toAccountId, -row.amount);
+  await prisma.transfer.delete({ where: { id } });
+  await logActivity(userId, "transfer_delete", `Transferencia eliminada`, { amount: row.amount });
+}
+
+export async function sellStock(id: string, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+  const userId = await getUserId();
+  const row = await prisma.stock.findFirst({ where: { id, userId } });
+  if (!row) throw new Error("Acción no encontrada");
+  const d = date ?? todayISO();
+  await prisma.stock.delete({ where: { id } });
+  await adjustBalance(userId, toAccountId, sellPriceCOP);
+  await prisma.transfer.create({
+    data: {
+      userId, date: d, amount: sellPriceCOP, note: `Venta ${row.ticker} (${row.qty} uds)`,
+      fromAccountId: `stock:${row.ticker}`, fromAccountName: `Acción ${row.ticker}`,
+      toAccountId, toAccountName,
+    },
+  });
+  await logActivity(userId, "stock_sell", `Venta acción: ${row.ticker}`, { amount: sellPriceCOP, ticker: row.ticker, accountName: toAccountName });
+}
+
+export async function sellCrypto(id: string, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+  const userId = await getUserId();
+  const row = await prisma.crypto.findFirst({ where: { id, userId } });
+  if (!row) throw new Error("Cripto no encontrada");
+  const d = date ?? todayISO();
+  await prisma.crypto.delete({ where: { id } });
+  await adjustBalance(userId, toAccountId, sellPriceCOP);
+  await prisma.transfer.create({
+    data: {
+      userId, date: d, amount: sellPriceCOP, note: `Venta ${row.ticker} (${row.qty} uds)`,
+      fromAccountId: `crypto:${row.ticker}`, fromAccountName: `Cripto ${row.ticker}`,
+      toAccountId, toAccountName,
+    },
+  });
+  await logActivity(userId, "crypto_sell", `Venta cripto: ${row.ticker}`, { amount: sellPriceCOP, ticker: row.ticker, accountName: toAccountName });
 }
 
 // ── BANK ACCOUNTS ──
@@ -769,6 +847,7 @@ export async function updateModules(modules: {
   showHys: boolean;
   showActivity: boolean;
   showGoals: boolean;
+  showCommerce: boolean;
 }) {
   const userId = await getUserId();
   await prisma.userConfig.upsert({

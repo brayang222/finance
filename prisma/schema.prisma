@@ -41,6 +41,7 @@ model User {
   products       Product[]
   sales          Sale[]
   cashCloses     CashClose[]
+  transfers      Transfer[]
 
   // Perfil comercio: usuario sombra vinculado al dueño real
   businessOwnerId String?
@@ -199,6 +200,7 @@ model UserConfig {
   trmUpdatedAt   DateTime?
   summaryWidgets String?
   telegramId     String?
+  showCommerce   Boolean   @default(false)
   salesGoal      Float?    // meta de ventas mensual (perfil comercio)
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -382,4 +384,19 @@ model CashClose {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
+}
+
+// Rotación de capital: transferencias entre cuentas, ventas de inversión
+model Transfer {
+  id              String   @id @default(cuid())
+  userId          String
+  date            String
+  fromAccountId   String   // "cash", "hys", bankAccountId, "stock:TICKER", "crypto:TICKER"
+  fromAccountName String?
+  toAccountId     String   // "cash", "hys", bankAccountId
+  toAccountName   String?
+  amount          Float
+  note            String?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { UserConfig, Category, ShareInfo } from "../../types";
+import type { UserConfig, Category, ShareInfo, Finance, Transfer } from "../../types";
 import {
   updateModules,
   addCategory,
@@ -16,8 +16,10 @@ import {
   saveTelegramId,
 } from "../../../lib/actions";
 import { fieldClass } from "./ModalShell";
+import { COP } from "../../data/mock";
 
 const MODULE_OPTIONS = [
+  { key: "showCommerce", label: "Perfil de comercio",      sub: "Ventas, inventario y clientes" },
   { key: "showStocks",   label: "Portafolio de acciones",  sub: "Bolsa de valores y BVC" },
   { key: "showCrypto",   label: "Criptomonedas",           sub: "Bitcoin, Ethereum y activos digitales" },
   { key: "showHys",      label: "Alto rendimiento",        sub: "Cuenta con intereses" },
@@ -61,17 +63,21 @@ const cardTitle = "text-[11.5px] tracking-[0.08em] uppercase text-dim font-mediu
 
 export default function ProfileSettings({
   config, categories, sharesGiven = [], sharesReceived = [],
+  finances = [], transfers = [],
 }: {
   config: UserConfig | null;
   categories: Category[];
   sharesGiven?: ShareInfo[];
   sharesReceived?: ShareInfo[];
+  finances?: Finance[];
+  transfers?: Transfer[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
   // ── Modules ──
   const [mods, setMods] = useState({
+    showCommerce: config?.showCommerce ?? false,
     showStocks:   config?.showStocks   ?? true,
     showCrypto:   config?.showCrypto   ?? true,
     showHys:      config?.showHys      ?? true,
@@ -196,6 +202,27 @@ export default function ProfileSettings({
   const pendingReceived = sharesReceived.filter(s => s.status === "pending");
   const acceptedReceived = sharesReceived.filter(s => s.status === "accepted");
 
+  // ── Profile top tabs ──
+  const [profileTab, setProfileTab] = useState<"config" | "tributario">("config");
+
+  // ── DIAN Tributario ──
+  // DIAN mide "consignaciones bancarias": cada depósito/crédito que ENTRA a una cuenta.
+  // Egresos NO suman (dinero sale). Transferencias SÍ (dinero entra a la cuenta destino).
+  // Período = año gravable (calendario).
+  const currentYear = new Date().getFullYear();
+  const yearStr = String(currentYear);
+
+  const yearFinances = finances.filter(f => f.date.startsWith(yearStr));
+  const yearTransfers = transfers.filter(t => t.date.startsWith(yearStr));
+
+  const totalIngresos = yearFinances.filter(f => f.type === "ingreso").reduce((s, f) => s + f.amount, 0);
+  const totalTransfers = yearTransfers.reduce((s, t) => s + t.amount, 0);
+  // ponytail: consignaciones = ingresos + transferencias (cada entrada a cuenta). Egresos no cuentan.
+  const consignaciones = totalIngresos + totalTransfers;
+  const DIAN_THRESHOLD = 69_718_000;
+  const rotacionPct = Math.min((consignaciones / DIAN_THRESHOLD) * 100, 100);
+  const debeDeclarar = consignaciones >= DIAN_THRESHOLD;
+
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
     if (!email || inviteBusy) return;
@@ -226,6 +253,111 @@ export default function ProfileSettings({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Profile tabs */}
+      <div className="flex bg-panel2 rounded-xl p-[3px] border border-line">
+        {([["config", "Configuración"], ["tributario", "Tributario"]] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => setProfileTab(tab)}
+            className={[
+              "flex-1 h-[34px] rounded-[9px] border-none cursor-pointer text-[13px] font-medium transition-colors",
+              profileTab === tab ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {profileTab === "tributario" && (
+        <>
+          {/* DIAN Consignaciones */}
+          <div className={cardClass}>
+            <div className={cardTitle}>Consignaciones {currentYear}</div>
+            <div className="text-xs text-muted -mt-2">
+              La DIAN suma cada depósito que entra a tus cuentas. Si supera ~$69.7M COP en el año, debes declarar renta.
+            </div>
+
+            {/* Progress bar */}
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-end">
+                <div className="text-[22px] font-semibold tabular-nums">{COP(consignaciones)}</div>
+                <div className="text-xs text-muted">de {COP(DIAN_THRESHOLD)}</div>
+              </div>
+              <div className="h-3 rounded-full bg-panel2 border border-line overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${debeDeclarar ? "bg-red-500" : rotacionPct > 70 ? "bg-amber-400" : "bg-accent"}`}
+                  style={{ width: `${rotacionPct}%` }}
+                />
+              </div>
+              <div className={`text-[13px] font-medium ${debeDeclarar ? "text-red-400" : rotacionPct > 70 ? "text-amber-400" : "text-pos"}`}>
+                {debeDeclarar
+                  ? "Superas el umbral — debes declarar renta"
+                  : `${rotacionPct.toFixed(1)}% del umbral`}
+              </div>
+            </div>
+          </div>
+
+          {/* Breakdown */}
+          <div className={cardClass}>
+            <div className={cardTitle}>Desglose</div>
+            <div className="flex flex-col gap-3">
+              {[
+                { label: "Ingresos recibidos", sub: "Dinero que entró a tus cuentas", value: totalIngresos, color: "text-pos" },
+                { label: "Transferencias entre cuentas", sub: "Cada movimiento cuenta como consignación", value: totalTransfers, color: "text-accent" },
+              ].map(r => (
+                <div key={r.label} className="flex items-center justify-between gap-4">
+                  <div>
+                    <span className="text-[13.5px]">{r.label}</span>
+                    <div className="text-[11px] text-dim">{r.sub}</div>
+                  </div>
+                  <span className={`text-[14px] font-medium tabular-nums shrink-0 ${r.color}`}>{COP(r.value)}</span>
+                </div>
+              ))}
+              <div className="border-t border-line pt-3 flex items-center justify-between">
+                <span className="text-[13.5px] font-medium">Total consignaciones</span>
+                <span className="text-[15px] font-semibold tabular-nums">{COP(consignaciones)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly breakdown */}
+          <div className={cardClass}>
+            <div className={cardTitle}>Por mes</div>
+            <div className="flex flex-col gap-1.5">
+              {Array.from({ length: 12 }, (_, i) => {
+                const mm = String(i + 1).padStart(2, "0");
+                const prefix = `${yearStr}-${mm}`;
+                const mFin = yearFinances.filter(f => f.type === "ingreso" && f.date.startsWith(prefix)).reduce((s, f) => s + f.amount, 0);
+                const mTr = yearTransfers.filter(t => t.date.startsWith(prefix)).reduce((s, t) => s + t.amount, 0);
+                const mTotal = mFin + mTr;
+                if (mTotal === 0) return null;
+                const monthName = new Date(currentYear, i).toLocaleString("es-CO", { month: "short" });
+                const barW = consignaciones > 0 ? (mTotal / consignaciones) * 100 : 0;
+                return (
+                  <div key={mm} className="flex items-center gap-3">
+                    <span className="text-[12px] text-muted w-8 shrink-0 capitalize">{monthName}</span>
+                    <div className="flex-1 h-5 bg-panel2 rounded overflow-hidden">
+                      <div className="h-full bg-accent/60 rounded" style={{ width: `${barW}%` }} />
+                    </div>
+                    <span className="text-[12px] tabular-nums text-muted w-24 text-right shrink-0">{COP(mTotal)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Disclaimer */}
+          <div className="rounded-xl border border-line bg-panel2/50 px-4 py-3 text-[12px] text-dim leading-relaxed">
+            Este cálculo solo incluye los movimientos registrados en la app.
+            Tu cifra real puede ser mayor si tienes consignaciones en cuentas bancarias que no registraste aquí.
+            Consulta tus extractos bancarios o el portal de la DIAN para verificar el dato exacto.
+            El umbral de 1.400 UVT puede variar cada año.
+          </div>
+        </>
+      )}
+
+      {profileTab === "config" && <>
       {/* Currency */}
       <div className={cardClass}>
         <div className={cardTitle}>Moneda</div>
@@ -531,6 +663,7 @@ export default function ProfileSettings({
           </div>
         </div>
       </div>
+      </>}
     </div>
   );
 }

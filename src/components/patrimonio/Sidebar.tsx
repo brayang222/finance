@@ -120,21 +120,23 @@ export default function Sidebar({
         </span>
       </div>
 
-      {/* Switch de perfil: Personal ⇄ Comercio */}
-      <div className="flex gap-1 p-1 mb-4 rounded-xl border border-line bg-panel2">
-        {([["personal", "Personal"], ["business", "Comercio"]] as const).map(([p, label]) => (
-          <button
-            key={p}
-            onClick={() => doProfileSwitch(p)}
-            className={[
-              "flex-1 py-[6px] rounded-lg text-[12px] border-none cursor-pointer font-medium",
-              profile === p ? "bg-accent text-accentFg" : "bg-transparent text-muted",
-            ].join(" ")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Switch de perfil: Personal ⇄ Comercio (solo si comercio está activado) */}
+      {config?.showCommerce && (
+        <div className="flex gap-1 p-1 mb-4 rounded-xl border border-line bg-panel2">
+          {([["personal", "Personal"], ["business", "Comercio"]] as const).map(([p, label]) => (
+            <button
+              key={p}
+              onClick={() => doProfileSwitch(p)}
+              className={[
+                "flex-1 py-[6px] rounded-lg text-[12px] border-none cursor-pointer font-medium",
+                profile === p ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+              ].join(" ")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!isBusiness && acceptedShares.length > 0 && (
         <div className="mb-3 flex flex-col gap-0.5">

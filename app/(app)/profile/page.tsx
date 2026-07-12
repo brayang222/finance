@@ -29,7 +29,7 @@ export default async function Page() {
       </div>
 
       {/* Perfil activo: personal / comercio */}
-      <ProfileSwitch profile={data.profile} />
+      {data.config?.showCommerce && <ProfileSwitch profile={data.profile} />}
 
       {/* Theme */}
       <div className="border border-line bg-panel rounded-[18px] p-[22px] flex flex-col gap-4">
@@ -49,6 +49,8 @@ export default async function Page() {
         categories={data.categories}
         sharesGiven={data.sharesGiven}
         sharesReceived={data.sharesReceived}
+        finances={data.finances}
+        transfers={data.transfers}
       />
 
       {/* Sign out */}

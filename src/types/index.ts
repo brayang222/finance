@@ -68,6 +68,7 @@ export interface UserConfig {
   trm: number | null
   trmUpdatedAt: string | null
   summaryWidgets: string[] | null
+  showCommerce: boolean
   telegramId?: string | null
   salesGoal?: number | null
 }
@@ -203,6 +204,17 @@ export interface CashClose {
   summary: { byMethod: Record<string, number>; gastos: number; ventas: number } | null
 }
 
+export interface Transfer {
+  id: string
+  date: string
+  fromAccountId: string
+  fromAccountName?: string
+  toAccountId: string
+  toAccountName?: string
+  amount: number
+  note?: string
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -228,4 +240,5 @@ export interface AllData {
   products: Product[]
   sales: Sale[]
   cashCloses: CashClose[]
+  transfers: Transfer[]
 }
