@@ -82,10 +82,11 @@ export default function Sidebar({
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-1.5 pt-1 pb-5">
         <div
-          className="w-7.5 h-7.5 rounded-lg bg-accent text-accentFg flex items-center justify-center font-semibold text-[15px]"
+          className="w-7.5 h-7.5 rounded-lg flex items-center justify-center "
           style={{ fontFamily: "Spectral, serif" }}
         >
-          P
+          
+        <img src="/favicon-96x96.png" alt="" className="w-full h-full" />
         </div>
         <span style={{ fontFamily: "Spectral, serif" }} className="text-[18px] font-medium tracking-[-0.01em]">
           Patrimonio

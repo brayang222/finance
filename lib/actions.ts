@@ -490,7 +490,7 @@ async function replayBalancesForAccount(hysId: string, fromDate: string) {
   }
 }
 
-export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP") {
+export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP", accountId?: string, sourceAmount?: number) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.create({
@@ -499,10 +499,11 @@ export async function initHys(initialBalance: number, rate: number, name = "Nuba
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId: hys.id, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
   });
+  if (accountId) await adjustBalance(userId, accountId, -(sourceAmount ?? initialBalance));
   return hys.id;
 }
 
-export async function hysDeposit(hysId: string, amount: number, note?: string) {
+export async function hysDeposit(hysId: string, amount: number, note?: string, accountId?: string) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
@@ -513,9 +514,10 @@ export async function hysDeposit(hysId: string, amount: number, note?: string) {
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
   });
+  if (accountId) await adjustBalance(userId, accountId, -amount);
 }
 
-export async function hysWithdraw(hysId: string, amount: number, note?: string) {
+export async function hysWithdraw(hysId: string, amount: number, note?: string, accountId?: string) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
@@ -526,6 +528,7 @@ export async function hysWithdraw(hysId: string, amount: number, note?: string) 
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },
   });
+  if (accountId) await adjustBalance(userId, accountId, amount);
 }
 
 export async function hysChangeRate(hysId: string, newRate: number) {

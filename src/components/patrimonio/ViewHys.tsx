@@ -88,13 +88,14 @@ function parseInput(formatted: string): number {
   return Number(formatted.replace(/\D/g, "")) || 0;
 }
 
-function SetupCard({ onCreated, trm }: { onCreated?: () => void; trm?: number | null }) {
+function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; trm?: number | null; bankAccounts: { id: string; name: string }[] }) {
   const router = useRouter();
   const [balanceRaw, setBalanceRaw] = useState("");
   const [rate, setRate] = useState("");
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("COP");
   const [customTrm, setCustomTrm] = useState(trm?.toFixed(2) ?? "");
+  const [accountId, setAccountId] = useState(bankAccounts[0]?.id ?? "cash");
   const [saving, setSaving] = useState(false);
 
   const activeTrm = parseFloat(customTrm) || 0;
@@ -109,7 +110,8 @@ function SetupCard({ onCreated, trm }: { onCreated?: () => void; trm?: number | 
       const initialBalance = currency === "USD"
         ? Math.round(usdAmount * 100) / 100
         : copAmount;
-      await initHys(initialBalance, parseFloat(rate), name.trim(), currency);
+      const sourceAmount = currency === "USD" ? copAmount : undefined;
+      await initHys(initialBalance, parseFloat(rate), name.trim(), currency, accountId, sourceAmount);
       router.refresh();
       onCreated?.();
     } finally {
@@ -195,6 +197,21 @@ function SetupCard({ onCreated, trm }: { onCreated?: () => void; trm?: number | 
           onChange={e => setRate(e.target.value)}
           placeholder="Ej: 14.00"
         />
+      </div>
+      <div>
+        <label className={`${microLabel} mb-1.5 block`}>Origen del dinero</label>
+        <select
+          className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
+          value={accountId}
+          onChange={e => setAccountId(e.target.value)}
+        >
+          {bankAccounts.map(a => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+          {!bankAccounts.some(a => a.name.toLowerCase().includes("efectivo")) && (
+            <option value="cash">Efectivo</option>
+          )}
+        </select>
       </div>
       <button
         disabled={!canSave || saving}
@@ -327,7 +344,7 @@ function GrowthChart({ movements, rate, currency, trm }: { movements: HysMovemen
 
 // ── single account view ──────────────────────────────────────────────────────
 
-function AccountView({ account, trm, privacy }: { account: HysAccount; trm?: number | null; privacy: boolean }) {
+function AccountView({ account, trm, privacy, bankAccounts }: { account: HysAccount; trm?: number | null; privacy: boolean; bankAccounts: { id: string; name: string }[] }) {
   const router = useRouter();
   const [modal, setModal] = useState<ModalState>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -564,10 +581,10 @@ function AccountView({ account, trm, privacy }: { account: HysAccount; trm?: num
 
       {/* Modals */}
       {modal?.kind === "deposit" && (
-        <ModalHysMovement mode="deposit" hysId={hysId} onClose={() => setModal(null)} />
+        <ModalHysMovement mode="deposit" hysId={hysId} onClose={() => setModal(null)} bankAccounts={bankAccounts} />
       )}
       {modal?.kind === "withdraw" && (
-        <ModalHysMovement mode="withdraw" hysId={hysId} onClose={() => setModal(null)} />
+        <ModalHysMovement mode="withdraw" hysId={hysId} onClose={() => setModal(null)} bankAccounts={bankAccounts} />
       )}
       {modal?.kind === "rate" && (
         <ModalHysMovement mode="rate" hysId={hysId} currentRate={modal.currentRate} onClose={() => setModal(null)} />
@@ -592,7 +609,7 @@ export default function ViewHys({ initialData }: { initialData: AllData }) {
   if (accounts.length === 0 && !showCreate) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <SetupCard onCreated={() => setShowCreate(false)} trm={trm} />
+        <SetupCard onCreated={() => setShowCreate(false)} trm={trm} bankAccounts={initialData.bankAccounts} />
       </div>
     );
   }
@@ -642,10 +659,10 @@ export default function ViewHys({ initialData }: { initialData: AllData }) {
 
       {showCreate ? (
         <div className="flex justify-center">
-          <SetupCard onCreated={() => setShowCreate(false)} trm={trm} />
+          <SetupCard onCreated={() => setShowCreate(false)} trm={trm} bankAccounts={initialData.bankAccounts} />
         </div>
       ) : accounts[activeIdx] ? (
-        <AccountView account={accounts[activeIdx]} trm={trm} privacy={privacy} />
+        <AccountView account={accounts[activeIdx]} trm={trm} privacy={privacy} bankAccounts={initialData.bankAccounts} />
       ) : null}
     </div>
   );
