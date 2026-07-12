@@ -18,11 +18,11 @@ import { ToastProvider, useToast } from "./Toast";
 import CommandPalette from "./CommandPalette";
 import CsvImport from "./CsvImport";
 
-type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals" | "recurrentes";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals" | "recurrentes" | "clientes" | "proveedores" | "productos" | "caja";
 
 function sectionFromPath(path: string): Section {
   const seg = path.split("/")[1] || "transactions";
-  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals", "recurrentes"].includes(seg)) {
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals", "recurrentes", "clientes", "proveedores", "productos", "caja"].includes(seg)) {
     return seg as Section;
   }
   return "transactions";
@@ -41,6 +41,17 @@ const PAGE_META: Record<Section, { title: string; sub: string }> = {
   analytics:    { title: "Análisis",           sub: "Presupuesto, categorías y tendencias" },
   goals:        { title: "Metas",              sub: "Objetivos de ahorro" },
   recurrentes:  { title: "Recurrentes",        sub: "Arriendo, salario, suscripciones" },
+  clientes:     { title: "Clientes y fiado",   sub: "Cuentas por cobrar de tu negocio" },
+  proveedores:  { title: "Proveedores",        sub: "Cuentas por pagar y vencimientos" },
+  productos:    { title: "Productos",          sub: "Catálogo, inventario y márgenes" },
+  caja:         { title: "Cierre de caja",     sub: "Arqueo diario del efectivo" },
+};
+
+const BUSINESS_PAGE_META: Partial<Record<Section, { title: string; sub: string }>> = {
+  summary:      { title: "Resumen del negocio", sub: "Ventas, gastos y utilidad de un vistazo" },
+  transactions: { title: "Ventas y gastos",     sub: "Movimientos de tu negocio" },
+  accounts:     { title: "Cuentas",             sub: "Caja y bancos del negocio" },
+  recurrentes:  { title: "Recurrentes",         sub: "Arriendo, nómina, servicios" },
 };
 
 const REGISTRAR_SECTIONS: Section[] = ["transactions", "investments", "crypto", "accounts"];
@@ -224,7 +235,8 @@ function AppShellInner({
     return () => { document.removeEventListener("keydown", handler); clearTimeout(timer); };
   }, [router]);
 
-  const meta = PAGE_META[section];
+  const isBusiness = data.profile === "business";
+  const meta = (isBusiness && BUSINESS_PAGE_META[section]) || PAGE_META[section];
   const isViewingAs = !!data.viewingAs;
   const showRegistrar = REGISTRAR_SECTIONS.includes(section) && !isViewingAs;
 
@@ -280,6 +292,7 @@ function AppShellInner({
             config={data.config}
             sharesReceived={data.sharesReceived}
             viewingAs={data.viewingAs}
+            profile={data.profile}
             onNavStart={onNavStart}
           />
         )}
@@ -316,7 +329,7 @@ function AppShellInner({
           </div>
         </main>
 
-        {isMobile && <BottomNav config={data.config} onNavStart={onNavStart} />}
+        {isMobile && <BottomNav config={data.config} profile={data.profile} onNavStart={onNavStart} />}
 
         {modal}
 

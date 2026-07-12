@@ -8,13 +8,15 @@ import { filterNavItems, isActive } from "./Sidebar";
 
 export default function BottomNav({
   config,
+  profile,
   onNavStart,
 }: {
   config?: UserConfig | null;
+  profile?: "personal" | "business";
   onNavStart?: () => void;
 }) {
   const pathname = usePathname() || "";
-  const items = filterNavItems(config);
+  const items = filterNavItems(config, profile);
 
   return (
     <nav

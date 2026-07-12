@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { loadAll } from "../../../lib/actions";
 import ThemeSelector from "../../../src/components/patrimonio/ThemeSelector";
 import ProfileSettings from "../../../src/components/patrimonio/ProfileSettings";
+import ProfileSwitch from "../../../src/components/patrimonio/ProfileSwitch";
 
 export default async function Page() {
   const session = await auth();
@@ -27,6 +28,9 @@ export default async function Page() {
         </div>
       </div>
 
+      {/* Perfil activo: personal / comercio */}
+      {data.config?.showCommerce && <ProfileSwitch profile={data.profile} />}
+
       {/* Theme */}
       <div className="border border-line bg-panel rounded-[18px] p-[22px] flex flex-col gap-4">
         <div className="text-[11.5px] tracking-[0.08em] uppercase text-dim font-medium">Apariencia</div>
@@ -45,6 +49,8 @@ export default async function Page() {
         categories={data.categories}
         sharesGiven={data.sharesGiven}
         sharesReceived={data.sharesReceived}
+        finances={data.finances}
+        transfers={data.transfers}
       />
 
       {/* Sign out */}

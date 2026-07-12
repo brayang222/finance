@@ -2,14 +2,40 @@
 
 import { auth } from "../auth";
 import { prisma } from "./prisma";
+import {
+  resolveBusinessUser, adjustBalance,
+  createSale, removeSale, createPurchase, closeCashDay,
+  type SaleItemInput, type PurchaseItemInput,
+} from "./db";
 import { cookies } from "next/headers";
 import type { Stock, Crypto, Finance, Hys, Cash, BankAccount } from '../src/types';
 import { GENERIC_CATS_IN, GENERIC_CATS_OUT } from '../src/data/constants';
 
-async function getUserId() {
+async function getSessionUserId() {
   const session = await auth();
   if (!session?.user?.id) throw new Error("No autenticado");
   return session.user.id;
+}
+
+async function getUserId() {
+  const userId = await getSessionUserId();
+  const cookieStore = await cookies();
+  if (cookieStore.get("gfp-profile")?.value === "business") {
+    return (await resolveBusinessUser(userId)).id;
+  }
+  return userId;
+}
+
+export async function switchProfile(profile: "personal" | "business") {
+  const userId = await getSessionUserId();
+  const cookieStore = await cookies();
+  if (profile === "business") {
+    await resolveBusinessUser(userId);
+    cookieStore.set("gfp-profile", "business", { httpOnly: true, sameSite: "lax", path: "/" });
+    cookieStore.delete("gfp-view-as");
+  } else {
+    cookieStore.delete("gfp-profile");
+  }
 }
 
 async function logActivity(
@@ -43,13 +69,17 @@ async function _loadAll() {
   const userId = session.user.id;
   const userEmail = session.user.email ?? "";
 
-  // Resolve view-as cookie
+  // Resolve profile + view-as cookies
   const cookieStore = await cookies();
+  const profile: "personal" | "business" =
+    cookieStore.get("gfp-profile")?.value === "business" ? "business" : "personal";
   const viewAsId = cookieStore.get("gfp-view-as")?.value;
   let targetUserId = userId;
   let viewingAs: { userId: string; name: string } | null = null;
 
-  if (viewAsId && viewAsId !== userId) {
+  if (profile === "business") {
+    targetUserId = (await resolveBusinessUser(userId)).id;
+  } else if (viewAsId && viewAsId !== userId) {
     const share = await prisma.shareInvite.findFirst({
       where: { ownerId: viewAsId, guestId: userId, status: "accepted" },
       include: { owner: { select: { name: true, email: true } } },
@@ -60,7 +90,7 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, sharesGiven, sharesReceived] =
+  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, sharesGiven, sharesReceived] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
@@ -78,6 +108,7 @@ async function _loadAll() {
       prisma.category.findMany({ where: { userId: targetUserId }, orderBy: { name: 'asc' } }),
       prisma.goal.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
       prisma.recurring.findMany({ where: { userId: targetUserId }, orderBy: { nextDate: 'asc' } }),
+      prisma.transfer.findMany({ where: { userId: targetUserId }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
       // Sharing metadata always from the real user
       prisma.shareInvite.findMany({
         where: { ownerId: userId, status: { not: "revoked" } },
@@ -90,6 +121,29 @@ async function _loadAll() {
         orderBy: { createdAt: "desc" },
       }),
     ]);
+
+  const [customers, products, sales, cashCloses] = profile === "business"
+    ? await Promise.all([
+        prisma.customer.findMany({
+          where: { userId: targetUserId },
+          include: { movements: { orderBy: { date: "asc" } } },
+          orderBy: { name: "asc" },
+        }),
+        prisma.product.findMany({ where: { userId: targetUserId }, orderBy: { name: "asc" } }),
+        prisma.sale.findMany({
+          where: { userId: targetUserId },
+          include: { items: true },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          take: 400,
+        }),
+        prisma.cashClose.findMany({ where: { userId: targetUserId }, orderBy: { date: "desc" }, take: 60 }),
+      ])
+    : [[], [], [], []] as const;
+
+  // showCommerce lives on the real user, not the shadow
+  const realUserConfig = targetUserId !== userId
+    ? await prisma.userConfig.findUnique({ where: { userId } })
+    : null;
 
   const pricesMap = Object.fromEntries(prices.map(p => [p.ticker, p.value]));
   const targetsMap = Object.fromEntries(targets.map(t => [t.ticker, t.value]));
@@ -166,6 +220,9 @@ async function _loadAll() {
       trm: config.trm,
       trmUpdatedAt: config.trmUpdatedAt?.toISOString() ?? null,
       summaryWidgets: config.summaryWidgets ? JSON.parse(config.summaryWidgets) : null,
+      showCommerce: realUserConfig?.showCommerce ?? config.showCommerce,
+      telegramId: config.telegramId,
+      salesGoal: config.salesGoal,
     } : null,
     bankAccounts: typedBankAccounts,
     activityLogs: typedActivityLogs,
@@ -208,41 +265,46 @@ async function _loadAll() {
       status: s.status as "pending" | "accepted",
     })),
     viewingAs,
+    profile,
+    customers: customers.map(c => ({
+      id: c.id, name: c.name, phone: c.phone ?? undefined, note: c.note ?? undefined,
+      kind: (c.kind ?? "customer") as "customer" | "supplier",
+      movements: c.movements.map(m => ({
+        id: m.id, customerId: m.customerId, date: m.date,
+        type: m.type as "fiado" | "abono", amount: m.amount, note: m.note ?? undefined,
+        dueDate: m.dueDate ?? undefined,
+      })),
+    })),
+    products: products.map(p => ({
+      id: p.id, name: p.name, category: p.category ?? undefined,
+      cost: p.cost, price: p.price, stock: p.stock, minStock: p.minStock, active: p.active,
+    })),
+    sales: sales.map(s => ({
+      id: s.id, date: s.date, total: s.total, cost: s.cost,
+      payMethod: s.payMethod, customerId: s.customerId ?? undefined, note: s.note ?? undefined,
+      createdAt: s.createdAt.toISOString(),
+      items: s.items.map(i => ({
+        id: i.id, productId: i.productId ?? undefined, name: i.name,
+        qty: i.qty, price: i.price, cost: i.cost,
+      })),
+    })),
+    cashCloses: cashCloses.map(c => ({
+      id: c.id, date: c.date, expectedCash: c.expectedCash, countedCash: c.countedCash,
+      diff: c.diff, note: c.note ?? undefined,
+      summary: c.summary ? JSON.parse(c.summary) : null,
+    })),
+    transfers: transfers.map(t => ({
+      id: t.id, date: t.date, amount: t.amount,
+      fromAccountId: t.fromAccountId, fromAccountName: t.fromAccountName ?? undefined,
+      toAccountId: t.toAccountId, toAccountName: t.toAccountName ?? undefined,
+      note: t.note ?? undefined,
+    })),
   };
 }
 
 // ── BALANCE ADJUSTMENT HELPER ──
 // delta > 0 = credit (money in), delta < 0 = debit (money out)
-async function adjustBalance(userId: string, accountId: string | undefined | null, delta: number) {
-  if (!accountId || Math.abs(delta) < 0.01) return;
-  if (accountId === "hys") {
-    const hys = await prisma.hys.findFirst({ where: { userId } });
-    if (!hys) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const last = await prisma.hysMovement.findFirst({ where: { hysId: hys.id }, orderBy: { date: "desc" } });
-    const base = last ? last.balance * (1 + hys.rate / 100) ** (
-      Math.max(0, Math.floor((new Date(todayStr).getTime() - new Date(last.date).getTime()) / 86400000)) / 365
-    ) : 0;
-    const newBal = Math.max(0, base + delta);
-    await prisma.hysMovement.create({
-      data: {
-        id: crypto.randomUUID(),
-        userId,
-        hysId: hys.id,
-        date: todayStr,
-        type: delta >= 0 ? "deposito" : "retiro",
-        amount: Math.abs(delta),
-        balance: newBal,
-        rate: hys.rate,
-      },
-    });
-  } else {
-    await prisma.bankAccount.updateMany({
-      where: { id: accountId, userId },
-      data: { balance: { increment: delta } },
-    });
-  }
-}
+// adjustBalance vive en lib/db.ts (maneja "cash", "hys" y cuentas bancarias)
 
 // ── ADD SINGLE ENTRIES ──
 export async function updateFinance(id: string, item: Omit<Finance, "id">) {
@@ -341,6 +403,70 @@ export async function deleteCrypto(id: string) {
   await prisma.crypto.delete({ where: { id, userId } });
   if (row?.accountId) await adjustBalance(userId, row.accountId, row.priceCOP * row.qty + row.commission);
   await logActivity(userId, "crypto_delete", `Eliminación cripto: ${row?.ticker ?? id}`, { ticker: row?.ticker });
+}
+
+// ── TRANSFERS (rotación de capital) ──
+export async function addTransfer(opts: {
+  fromAccountId: string; fromAccountName?: string;
+  toAccountId: string; toAccountName?: string;
+  amount: number; note?: string; date?: string;
+}) {
+  const userId = await getUserId();
+  const date = opts.date ?? todayISO();
+  await adjustBalance(userId, opts.fromAccountId, -opts.amount);
+  await adjustBalance(userId, opts.toAccountId, opts.amount);
+  await prisma.transfer.create({
+    data: {
+      userId, date, amount: opts.amount, note: opts.note,
+      fromAccountId: opts.fromAccountId, fromAccountName: opts.fromAccountName,
+      toAccountId: opts.toAccountId, toAccountName: opts.toAccountName,
+    },
+  });
+  await logActivity(userId, "transfer", `Transferencia: ${opts.fromAccountName ?? opts.fromAccountId} → ${opts.toAccountName ?? opts.toAccountId}`, { amount: opts.amount });
+}
+
+export async function deleteTransfer(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.transfer.findFirst({ where: { id, userId } });
+  if (!row) return;
+  await adjustBalance(userId, row.fromAccountId, row.amount);
+  await adjustBalance(userId, row.toAccountId, -row.amount);
+  await prisma.transfer.delete({ where: { id } });
+  await logActivity(userId, "transfer_delete", `Transferencia eliminada`, { amount: row.amount });
+}
+
+export async function sellStock(id: string, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+  const userId = await getUserId();
+  const row = await prisma.stock.findFirst({ where: { id, userId } });
+  if (!row) throw new Error("Acción no encontrada");
+  const d = date ?? todayISO();
+  await prisma.stock.delete({ where: { id } });
+  await adjustBalance(userId, toAccountId, sellPriceCOP);
+  await prisma.transfer.create({
+    data: {
+      userId, date: d, amount: sellPriceCOP, note: `Venta ${row.ticker} (${row.qty} uds)`,
+      fromAccountId: `stock:${row.ticker}`, fromAccountName: `Acción ${row.ticker}`,
+      toAccountId, toAccountName,
+    },
+  });
+  await logActivity(userId, "stock_sell", `Venta acción: ${row.ticker}`, { amount: sellPriceCOP, ticker: row.ticker, accountName: toAccountName });
+}
+
+export async function sellCrypto(id: string, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+  const userId = await getUserId();
+  const row = await prisma.crypto.findFirst({ where: { id, userId } });
+  if (!row) throw new Error("Cripto no encontrada");
+  const d = date ?? todayISO();
+  await prisma.crypto.delete({ where: { id } });
+  await adjustBalance(userId, toAccountId, sellPriceCOP);
+  await prisma.transfer.create({
+    data: {
+      userId, date: d, amount: sellPriceCOP, note: `Venta ${row.ticker} (${row.qty} uds)`,
+      fromAccountId: `crypto:${row.ticker}`, fromAccountName: `Cripto ${row.ticker}`,
+      toAccountId, toAccountName,
+    },
+  });
+  await logActivity(userId, "crypto_sell", `Venta cripto: ${row.ticker}`, { amount: sellPriceCOP, ticker: row.ticker, accountName: toAccountName });
 }
 
 // ── BANK ACCOUNTS ──
@@ -490,7 +616,7 @@ async function replayBalancesForAccount(hysId: string, fromDate: string) {
   }
 }
 
-export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP") {
+export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP", accountId?: string, sourceAmount?: number) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.create({
@@ -499,10 +625,11 @@ export async function initHys(initialBalance: number, rate: number, name = "Nuba
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId: hys.id, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
   });
+  if (accountId) await adjustBalance(userId, accountId, -(sourceAmount ?? initialBalance));
   return hys.id;
 }
 
-export async function hysDeposit(hysId: string, amount: number, note?: string) {
+export async function hysDeposit(hysId: string, amount: number, note?: string, accountId?: string) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
@@ -513,9 +640,10 @@ export async function hysDeposit(hysId: string, amount: number, note?: string) {
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
   });
+  if (accountId) await adjustBalance(userId, accountId, -amount);
 }
 
-export async function hysWithdraw(hysId: string, amount: number, note?: string) {
+export async function hysWithdraw(hysId: string, amount: number, note?: string, accountId?: string) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
@@ -526,6 +654,7 @@ export async function hysWithdraw(hysId: string, amount: number, note?: string) 
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },
   });
+  if (accountId) await adjustBalance(userId, accountId, amount);
 }
 
 export async function hysChangeRate(hysId: string, newRate: number) {
@@ -718,6 +847,7 @@ export async function updateModules(modules: {
   showHys: boolean;
   showActivity: boolean;
   showGoals: boolean;
+  showCommerce: boolean;
 }) {
   const userId = await getUserId();
   await prisma.userConfig.upsert({
@@ -937,4 +1067,103 @@ export async function importFinances(items: Array<{
   for (const item of items) {
     await autoSaveCategory(userId, item.category, item.type);
   }
+}
+
+// ── COMERCIO: CLIENTES Y FIADO ──
+
+export async function addCustomer(name: string, phone?: string, note?: string, kind: "customer" | "supplier" = "customer") {
+  const userId = await getUserId();
+  const c = await prisma.customer.create({ data: { userId, name: name.trim(), phone, note, kind } });
+  return c.id;
+}
+
+export async function updateCustomer(id: string, patch: { name?: string; phone?: string; note?: string }) {
+  const userId = await getUserId();
+  await prisma.customer.updateMany({ where: { id, userId }, data: patch });
+}
+
+export async function deleteCustomer(id: string) {
+  const userId = await getUserId();
+  await prisma.customer.deleteMany({ where: { id, userId } });
+}
+
+// Clientes: "fiado" = queda debiendo, "abono" = paga (entra plata).
+// Proveedores: "fiado" = les debes, "abono" = les pagas (sale plata).
+export async function addFiadoMovement(
+  customerId: string,
+  type: "fiado" | "abono",
+  amount: number,
+  note?: string,
+  accountId?: string,
+  dueDate?: string,
+) {
+  const userId = await getUserId();
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, userId } });
+  if (!customer) throw new Error("Cliente no encontrado");
+  await prisma.fiadoMovement.create({
+    data: { userId, customerId, date: todayISO(), type, amount, note, dueDate },
+  });
+  const isSupplier = customer.kind === "supplier";
+  if (type === "abono" && accountId) {
+    await adjustBalance(userId, accountId, isSupplier ? -amount : amount);
+  }
+  await logActivity(
+    userId, type,
+    isSupplier
+      ? `${type === "fiado" ? "Deuda con" : "Pago a"} ${customer.name}`
+      : `${type === "fiado" ? "Fiado a" : "Abono de"} ${customer.name}`,
+    { amount },
+  );
+}
+
+export async function deleteFiadoMovement(id: string) {
+  const userId = await getUserId();
+  await prisma.fiadoMovement.deleteMany({ where: { id, userId } });
+}
+
+// ── COMERCIO: PRODUCTOS, VENTAS, COMPRAS Y CAJA ──
+
+export async function addProduct(data: { name: string; category?: string; cost: number; price: number; stock: number; minStock?: number }) {
+  const userId = await getUserId();
+  const p = await prisma.product.create({ data: { userId, ...data, name: data.name.trim() } });
+  return p.id;
+}
+
+export async function updateProduct(id: string, patch: { name?: string; category?: string; cost?: number; price?: number; stock?: number; minStock?: number; active?: boolean }) {
+  const userId = await getUserId();
+  await prisma.product.updateMany({ where: { id, userId }, data: patch });
+}
+
+export async function deleteProduct(id: string) {
+  const userId = await getUserId();
+  await prisma.product.deleteMany({ where: { id, userId } });
+}
+
+export async function registerSale(items: SaleItemInput[], payMethod: string, customerId?: string, note?: string) {
+  const userId = await getUserId();
+  return createSale(userId, items, payMethod, customerId, note);
+}
+
+export async function deleteSale(id: string) {
+  const userId = await getUserId();
+  await removeSale(userId, id);
+}
+
+export async function registerPurchase(items: PurchaseItemInput[], opts: { accountId?: string; supplierId?: string; dueDate?: string; note?: string }) {
+  const userId = await getUserId();
+  await createPurchase(userId, items, opts);
+}
+
+export async function closeCash(countedCash: number, note?: string) {
+  const userId = await getUserId();
+  await closeCashDay(userId, countedCash, note);
+}
+
+export async function setSalesGoal(amount: number | null) {
+  const userId = await getUserId();
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, salesGoal: amount },
+    update: { salesGoal: amount },
+  });
 }

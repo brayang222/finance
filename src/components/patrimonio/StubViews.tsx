@@ -7,7 +7,9 @@ import type { AllData, Stock, Crypto } from "../../types";
 import { Bal } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance, hysDeleteAccount } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer } from "../../../lib/actions";
+import ModalTransfer from "./ModalTransfer";
+import ModalSellInvestment from "./ModalSellInvestment";
 import { useToast } from "./Toast";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
@@ -242,6 +244,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
     : initialData.stocks.filter(t => t.ticker.toUpperCase() === selected);
 
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
+  const [sellItem, setSellItem] = useState<Stock | Crypto | null>(null);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("¿Eliminar esta operación?")) return;
@@ -274,6 +277,15 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
                 <div className="text-muted text-[13px]">{asset.name}</div>
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              {rawTrades.length > 0 && (
+                <button
+                  onClick={() => setSellItem(rawTrades[0])}
+                  className="border border-line bg-panel2 text-fg text-[12px] px-3 py-1.5 rounded-lg cursor-pointer hover:border-accent"
+                >
+                  Vender
+                </button>
+              )}
             <div className="text-right">
               <div className="text-[28px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
                 {privacy ? "••••••" : COP(asset.price)}
@@ -281,6 +293,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               <div className={`text-[13px] ${asset.dayPct >= 0 ? "text-pos" : "text-neg"}`}>
                 {PCT(asset.dayPct)} hoy
               </div>
+            </div>
             </div>
           </div>
 
@@ -358,6 +371,16 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
       )}
       {editItem && !isCrypto && (
         <ModalAccion editItem={editItem as Stock} onClose={() => setEditItem(null)} />
+      )}
+      {sellItem && (
+        <ModalSellInvestment
+          item={sellItem}
+          kind={isCrypto ? "crypto" : "stock"}
+          bankAccounts={initialData.bankAccounts}
+          hasHys={!!initialData.hys}
+          currentPrice={asset?.price}
+          onClose={() => setSellItem(null)}
+        />
       )}
     </div>
   );
@@ -773,6 +796,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const router = useRouter();
   const [editItem, setEditItem] = useState<typeof initialData.bankAccounts[0] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showTransfer, setShowTransfer] = useState<string | null>(null);
 
   // Compute balances
   const holdings    = toAssets(initialData.stocks, initialData.prices);
@@ -949,10 +973,16 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
       <div>
         <div className="flex items-center justify-between mb-2.5">
           <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase">Cuentas bancarias</div>
-          <button onClick={() => setShowAdd(true)}
-            className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer">
-            + Agregar cuenta
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowTransfer("cash")}
+              className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer">
+              ⇄ Transferir
+            </button>
+            <button onClick={() => setShowAdd(true)}
+              className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer">
+              + Agregar cuenta
+            </button>
+          </div>
         </div>
         {bankAccounts.length === 0 ? (
           <div className={`${cardClass} text-muted text-[13px]`}>
@@ -969,8 +999,46 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         )}
       </div>
 
+      {/* Transferencias recientes */}
+      {initialData.transfers.length > 0 && (
+        <div>
+          <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase mb-2.5">Transferencias recientes</div>
+          <div className={cardClass}>
+            {initialData.transfers.slice(0, 15).map((t, idx) => (
+              <div key={t.id} className={`flex items-center justify-between text-[13px] py-2.5 ${idx > 0 ? "border-t border-line" : ""}`}>
+                <div className="min-w-0">
+                  <div className="truncate">{t.fromAccountName ?? t.fromAccountId} → {t.toAccountName ?? t.toAccountId}</div>
+                  <div className="text-[11px] text-dim">{t.date}{t.note ? ` · ${t.note}` : ""}</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="tabular-nums text-muted" style={monoStyle}>{privacy ? "••••" : COP(t.amount)}</span>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm("¿Eliminar transferencia? Se revierten los saldos.")) return;
+                      await deleteTransfer(t.id);
+                      router.refresh();
+                    }}
+                    className="text-[11px] text-dim border-none bg-transparent cursor-pointer hover:text-neg p-0"
+                    title="Eliminar"
+                  >✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {showAdd && <ModalCuenta onClose={() => setShowAdd(false)} />}
       {editItem && <ModalCuenta editItem={editItem} onClose={() => setEditItem(null)} />}
+      {showTransfer !== null && (
+        <ModalTransfer
+          bankAccounts={initialData.bankAccounts}
+          cash={initialData.cash}
+          hasHys={!!initialData.hys}
+          fromAccountId={showTransfer || undefined}
+          onClose={() => setShowTransfer(null)}
+        />
+      )}
     </div>
   );
 }

@@ -8,12 +8,13 @@ import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./Mo
 import type { HysMovement } from "../../types";
 
 type Props =
-  | { mode: "deposit" | "withdraw"; hysId: string; onClose: () => void; editItem?: undefined }
-  | { mode: "rate"; hysId: string; currentRate: number; onClose: () => void; editItem?: undefined }
-  | { mode: "edit"; hysId?: string; editItem: HysMovement; onClose: () => void };
+  | { mode: "deposit" | "withdraw"; hysId: string; onClose: () => void; editItem?: undefined; bankAccounts?: { id: string; name: string }[] }
+  | { mode: "rate"; hysId: string; currentRate: number; onClose: () => void; editItem?: undefined; bankAccounts?: { id: string; name: string }[] }
+  | { mode: "edit"; hysId?: string; editItem: HysMovement; onClose: () => void; bankAccounts?: { id: string; name: string }[] };
 
 export default function ModalHysMovement(props: Props) {
   const { mode, onClose } = props;
+  const bankAccounts = props.bankAccounts ?? [];
   const router = useRouter();
   const [amount, setAmount] = useState(props.mode === "edit" ? String(Math.round(props.editItem.amount)) : "");
   const [note, setNote] = useState(props.mode === "edit" ? (props.editItem.note ?? "") : "");
@@ -21,6 +22,7 @@ export default function ModalHysMovement(props: Props) {
   const [rate, setRate] = useState(
     props.mode === "rate" ? String(props.currentRate) : ""
   );
+  const [accountId, setAccountId] = useState(bankAccounts[0]?.id ?? "cash");
   const [saving, setSaving] = useState(false);
 
   const amountVal = Number(amount.replace(/\./g, "")) || 0;
@@ -41,8 +43,8 @@ export default function ModalHysMovement(props: Props) {
   const save = async () => {
     setSaving(true);
     try {
-      if (mode === "deposit") await hysDeposit(props.hysId, amountVal, note || undefined);
-      else if (mode === "withdraw") await hysWithdraw(props.hysId, amountVal, note || undefined);
+      if (mode === "deposit") await hysDeposit(props.hysId, amountVal, note || undefined, accountId);
+      else if (mode === "withdraw") await hysWithdraw(props.hysId, amountVal, note || undefined, accountId);
       else if (mode === "rate") await hysChangeRate(props.hysId, rateVal);
       else if (mode === "edit") {
         const patch: { amount?: number; note?: string; date?: string } = {};
@@ -101,6 +103,21 @@ export default function ModalHysMovement(props: Props) {
               placeholder="Descripción..."
             />
           </div>
+          {(mode === "deposit" || mode === "withdraw") && (
+            <div>
+              <label className={labelClass}>
+                {mode === "deposit" ? "Origen del dinero" : "Destino del dinero"}
+              </label>
+              <select className={fieldClass} value={accountId} onChange={e => setAccountId(e.target.value)}>
+                {bankAccounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+                {!bankAccounts.some(a => a.name.toLowerCase().includes("efectivo")) && (
+                  <option value="cash">Efectivo</option>
+                )}
+              </select>
+            </div>
+          )}
         </>
       )}
     </ModalShell>

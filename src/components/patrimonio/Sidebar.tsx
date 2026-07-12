@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { UserConfig, ShareInfo } from "../../types";
-import { switchViewAs } from "../../../lib/actions";
+import { switchViewAs, switchProfile } from "../../../lib/actions";
 import {
   IconGrid,
   IconTrending,
@@ -16,6 +16,9 @@ import {
   IconChart,
   IconTarget,
   IconRepeat,
+  IconUsers,
+  IconStore,
+  IconTruck,
 } from "./utils";
 
 type NavItem = {
@@ -38,7 +41,21 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/history",      label: "Historial",        icon: IconClock,    module: "showActivity" },
 ];
 
-export function filterNavItems(config?: UserConfig | null) {
+export const BUSINESS_NAV_ITEMS: NavItem[] = [
+  { href: "/summary",      label: "Resumen",          icon: IconGrid },
+  { href: "/productos",    label: "Productos",        icon: IconStore },
+  { href: "/transactions", label: "Ventas y gastos",  icon: IconArrows },
+  { href: "/clientes",     label: "Clientes y fiado", icon: IconUsers },
+  { href: "/proveedores",  label: "Proveedores",      icon: IconTruck },
+  { href: "/caja",         label: "Caja",             icon: IconBank },
+  { href: "/accounts",     label: "Cuentas",          icon: IconCard },
+  { href: "/analytics",    label: "Análisis",         icon: IconChart },
+  { href: "/recurrentes",  label: "Recurrentes",      icon: IconRepeat },
+  { href: "/history",      label: "Historial",        icon: IconClock },
+];
+
+export function filterNavItems(config?: UserConfig | null, profile?: "personal" | "business") {
+  if (profile === "business") return BUSINESS_NAV_ITEMS;
   return NAV_ITEMS.filter(item => !item.module || !config || config[item.module]);
 }
 
@@ -58,17 +75,20 @@ export default function Sidebar({
   config,
   sharesReceived = [],
   viewingAs = null,
+  profile = "personal",
   onNavStart,
 }: {
   user?: { name?: string | null; email?: string | null } | null;
   config?: UserConfig | null;
   sharesReceived?: ShareInfo[];
   viewingAs?: { userId: string; name: string } | null;
+  profile?: "personal" | "business";
   onNavStart?: () => void;
 }) {
   const pathname = usePathname() || "";
   const router = useRouter();
-  const items = filterNavItems(config);
+  const items = filterNavItems(config, profile);
+  const isBusiness = profile === "business";
 
   const acceptedShares = sharesReceived.filter(s => s.status === "accepted");
 
@@ -77,22 +97,48 @@ export default function Sidebar({
     router.refresh();
   };
 
+  const doProfileSwitch = async (p: "personal" | "business") => {
+    if (p === profile) return;
+    await switchProfile(p);
+    router.push("/summary");
+    router.refresh();
+  };
+
   return (
     <aside className="w-[250px] shrink-0 sticky top-0 h-screen border-r border-line bg-panel flex flex-col px-4 py-[18px]">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-1.5 pt-1 pb-5">
         <div
-          className="w-7.5 h-7.5 rounded-lg bg-accent text-accentFg flex items-center justify-center font-semibold text-[15px]"
+          className="w-7.5 h-7.5 rounded-lg flex items-center justify-center "
           style={{ fontFamily: "Spectral, serif" }}
         >
-          P
+          
+        <img src="/favicon-96x96.png" alt="" className="w-full h-full" />
         </div>
         <span style={{ fontFamily: "Spectral, serif" }} className="text-[18px] font-medium tracking-[-0.01em]">
-          Patrimonio
+          {isBusiness ? "Mi Negocio" : "Patrimonio"}
         </span>
       </div>
 
-      {acceptedShares.length > 0 && (
+      {/* Switch de perfil: Personal ⇄ Comercio (solo si comercio está activado) */}
+      {config?.showCommerce && (
+        <div className="flex gap-1 p-1 mb-4 rounded-xl border border-line bg-panel2">
+          {([["personal", "Personal"], ["business", "Comercio"]] as const).map(([p, label]) => (
+            <button
+              key={p}
+              onClick={() => doProfileSwitch(p)}
+              className={[
+                "flex-1 py-[6px] rounded-lg text-[12px] border-none cursor-pointer font-medium",
+                profile === p ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+              ].join(" ")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!isBusiness && acceptedShares.length > 0 && (
         <div className="mb-3 flex flex-col gap-0.5">
           <div className="text-[11px] tracking-[0.08em] uppercase text-dim px-2 pb-1.5 font-medium">Cuenta</div>
           <button
@@ -125,7 +171,9 @@ export default function Sidebar({
         </div>
       )}
 
-      <div className="text-[11px] tracking-[0.08em] uppercase text-dim px-2 pb-2 font-medium">General</div>
+      <div className="text-[11px] tracking-[0.08em] uppercase text-dim px-2 pb-2 font-medium">
+        {isBusiness ? "Negocio" : "General"}
+      </div>
 
       <nav className="flex flex-col gap-0.5">
         {items.map(({ href, label, icon: Icon }) => {

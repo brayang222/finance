@@ -36,6 +36,17 @@ model User {
   recurrings     Recurring[]
   sharesGiven    ShareInvite[] @relation("SharesGiven")
   sharesReceived ShareInvite[] @relation("SharesReceived")
+  customers      Customer[]
+  fiadoMovements FiadoMovement[]
+  products       Product[]
+  sales          Sale[]
+  cashCloses     CashClose[]
+  transfers      Transfer[]
+
+  // Perfil comercio: usuario sombra vinculado al dueño real
+  businessOwnerId String?
+  businessOwner   User?   @relation("BusinessProfile", fields: [businessOwnerId], references: [id], onDelete: Cascade)
+  businessProfiles User[] @relation("BusinessProfile")
 }
 
 model Account {
@@ -115,6 +126,7 @@ model Finance {
   amount      Float
   accountId   String?
   accountName String?
+  saleId      String?
   user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -188,6 +200,8 @@ model UserConfig {
   trmUpdatedAt   DateTime?
   summaryWidgets String?
   telegramId     String?
+  showCommerce   Boolean   @default(false)
+  salesGoal      Float?    // meta de ventas mensual (perfil comercio)
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -285,4 +299,104 @@ model BudgetConfig {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, period])
+}
+
+// ── Comercio: clientes y fiado ──
+model Customer {
+  id        String          @id @default(cuid())
+  userId    String
+  name      String
+  phone     String?
+  note      String?
+  kind      String          @default("customer") // customer | supplier
+  createdAt DateTime        @default(now())
+  movements FiadoMovement[]
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FiadoMovement {
+  id         String   @id @default(cuid())
+  userId     String
+  customerId String
+  date       String
+  type       String   // "fiado" (debe) | "abono" (pago)
+  amount     Float
+  note       String?
+  dueDate    String?  // vencimiento (cuentas por pagar)
+  saleId     String?  // venta fiada que originó la deuda
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Comercio: productos, ventas y caja ──
+model Product {
+  id        String     @id @default(cuid())
+  userId    String
+  name      String
+  category  String?
+  cost      Float      @default(0) // costo unitario
+  price     Float      // precio de venta
+  stock     Float      @default(0)
+  minStock  Float      @default(0) // alerta de stock bajo
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  saleItems SaleItem[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Sale {
+  id         String     @id @default(cuid())
+  userId     String
+  date       String
+  total      Float
+  cost       Float      @default(0) // costo total de lo vendido (margen)
+  payMethod  String     // "cash" | "fiado" | bankAccountId
+  customerId String?    // cliente si fue fiado
+  note       String?
+  createdAt  DateTime   @default(now())
+  items      SaleItem[]
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SaleItem {
+  id        String   @id @default(cuid())
+  saleId    String
+  productId String?
+  name      String   // snapshot del nombre
+  qty       Float
+  price     Float    // snapshot precio unitario
+  cost      Float    @default(0)
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+model CashClose {
+  id           String   @id @default(cuid())
+  userId       String
+  date         String
+  expectedCash Float    // efectivo esperado según la app
+  countedCash  Float    // efectivo contado físicamente
+  diff         Float    // countedCash - expectedCash
+  summary      String?  // JSON: ventas/gastos del día por método
+  note         String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+// Rotación de capital: transferencias entre cuentas, ventas de inversión
+model Transfer {
+  id              String   @id @default(cuid())
+  userId          String
+  date            String
+  fromAccountId   String   // "cash", "hys", bankAccountId, "stock:TICKER", "crypto:TICKER"
+  fromAccountName String?
+  toAccountId     String   // "cash", "hys", bankAccountId
+  toAccountName   String?
+  amount          Float
+  note            String?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
