@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { loadAll } from "../../../lib/actions";
 import ThemeSelector from "../../../src/components/patrimonio/ThemeSelector";
 import ProfileSettings from "../../../src/components/patrimonio/ProfileSettings";
+import ProfileSwitch from "../../../src/components/patrimonio/ProfileSwitch";
 
 export default async function Page() {
   const session = await auth();
@@ -26,6 +27,9 @@ export default async function Page() {
           <div className="text-[13px] text-muted mt-0.5">{session.user.email}</div>
         </div>
       </div>
+
+      {/* Perfil activo: personal / comercio */}
+      <ProfileSwitch profile={data.profile} />
 
       {/* Theme */}
       <div className="border border-line bg-panel rounded-[18px] p-[22px] flex flex-col gap-4">

@@ -7,7 +7,8 @@ export async function GET(req: NextRequest) {
     const userId = await getUserIdFromRequest(req);
 
     const [stocks, crypto, finances, hysAccounts, hysMovements, prices, targets, cash, config,
-      bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings] =
+      bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, customers,
+      products, sales, cashCloses] =
       await Promise.all([
         prisma.stock.findMany({ where: { userId } }),
         prisma.crypto.findMany({ where: { userId } }),
@@ -26,6 +27,10 @@ export async function GET(req: NextRequest) {
         prisma.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
         prisma.goal.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
         prisma.recurring.findMany({ where: { userId }, orderBy: { nextDate: "asc" } }),
+        prisma.customer.findMany({ where: { userId }, include: { movements: { orderBy: { date: "asc" } } }, orderBy: { name: "asc" } }),
+        prisma.product.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+        prisma.sale.findMany({ where: { userId }, include: { items: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 400 }),
+        prisma.cashClose.findMany({ where: { userId }, orderBy: { date: "desc" }, take: 60 }),
       ]);
 
     return NextResponse.json({
@@ -52,6 +57,12 @@ export async function GET(req: NextRequest) {
       categories,
       goals: goals.map(g => ({ ...g, createdAt: g.createdAt.toISOString() })),
       recurrings,
+      customers: customers.map(c => ({ ...c, createdAt: c.createdAt.toISOString(),
+        movements: c.movements.map(m => ({ ...m, createdAt: m.createdAt.toISOString() })) })),
+      products,
+      sales: sales.map(s => ({ ...s, createdAt: s.createdAt.toISOString() })),
+      cashCloses: cashCloses.map(c => ({ ...c, createdAt: c.createdAt.toISOString(),
+        summary: c.summary ? JSON.parse(c.summary) : null })),
     });
   } catch (e) {
     return apiError(e);

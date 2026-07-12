@@ -254,7 +254,7 @@ export default function ProfileSettings({
             <div className="text-[13.5px] font-medium">
               TRM {trm ? `· $${Math.round(trm).toLocaleString("es-CO")}` : "· sin datos"}
             </div>
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-muted mt-0.5" suppressHydrationWarning>
               {trmError || (trmAgeLabel ? `Actualizada ${trmAgeLabel}` : "Tasa USD → COP para conversiones")}
             </div>
           </div>

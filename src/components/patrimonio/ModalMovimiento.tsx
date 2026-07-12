@@ -439,7 +439,7 @@ export default function ModalMovimiento({
   const initCustomCat = (!initCatInList && editInitial?.category) ? editInitial.category : "";
 
   const [type, setType]           = useState<TxType>(initType);
-  const [amount, setAmount]       = useState(editInitial ? String(Math.round(editInitial.amount)) : "");
+  const [amount, setAmount]       = useState(editInitial?.amount ? String(Math.round(editInitial.amount)) : "");
   const [desc, setDesc]           = useState(editInitial?.desc ?? "");
   const [dateISO, setDateISO]     = useState(editInitial?.date ?? today());
   const [accountId, setAccountId] = useState(editInitial?.accountId ?? "");

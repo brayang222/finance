@@ -24,6 +24,7 @@ export interface Finance {
   amount: number
   accountId?: string
   accountName?: string
+  saleId?: string | null
 }
 
 export interface HysMovement {
@@ -68,6 +69,7 @@ export interface UserConfig {
   trmUpdatedAt: string | null
   summaryWidgets: string[] | null
   telegramId?: string | null
+  salesGoal?: number | null
 }
 
 export interface Goal {
@@ -140,6 +142,67 @@ export interface ShareInfo {
   status: "pending" | "accepted"
 }
 
+export interface FiadoMovement {
+  id: string
+  customerId: string
+  date: string
+  type: "fiado" | "abono"
+  amount: number
+  note?: string
+  dueDate?: string
+}
+
+export interface Customer {
+  id: string
+  name: string
+  phone?: string
+  note?: string
+  kind: "customer" | "supplier"
+  movements: FiadoMovement[]
+}
+
+export interface Product {
+  id: string
+  name: string
+  category?: string
+  cost: number
+  price: number
+  stock: number
+  minStock: number
+  active: boolean
+}
+
+export interface SaleItem {
+  id: string
+  productId?: string
+  name: string
+  qty: number
+  price: number
+  cost: number
+}
+
+export interface Sale {
+  id: string
+  date: string
+  total: number
+  cost: number
+  payMethod: string // "cash" | "fiado" | bankAccountId
+  customerId?: string
+  note?: string
+  createdAt: string
+  items: SaleItem[]
+}
+
+export interface CashClose {
+  id: string
+  date: string
+  expectedCash: number
+  countedCash: number
+  diff: number
+  note?: string
+  summary: { byMethod: Record<string, number>; gastos: number; ventas: number } | null
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -160,4 +223,9 @@ export interface AllData {
   sharesGiven: ShareInfo[]
   sharesReceived: ShareInfo[]
   viewingAs: { userId: string; name: string } | null
+  profile: "personal" | "business"
+  customers: Customer[]
+  products: Product[]
+  sales: Sale[]
+  cashCloses: CashClose[]
 }
