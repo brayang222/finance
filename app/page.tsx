@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
@@ -9,121 +9,283 @@ const FloatingCalc = dynamic(
   { ssr: false }
 );
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const COP = (n: number) => "$" + Math.round(n).toLocaleString("es-CO");
-
-// ── Chart data ───────────────────────────────────────────────────────────────
-const MONTHS = ["Ago","Sep","Oct","Nov","Dic","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago"];
-const VALUES  = [28.5,31.2,33.8,35.1,38.4,41.2,44.8,48.3,51.9,55.7,59.8,64.1,68.7];
-const SPLIT   = 6; // last historical point index (Feb)
-const MIN_V = 28.5, MAX_V = 68.7, RANGE = MAX_V - MIN_V;
-const PW = 760, PH = 110, PX = 10, PY = 8;
-const pts = VALUES.map((v, i) => ({
-  x: PX + (i / (VALUES.length - 1)) * PW,
-  y: PY + PH - ((v - MIN_V) / RANGE) * PH,
-}));
-const histPath = "M " + pts.slice(0, SPLIT+1).map(p => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L ");
-const projPath = "M " + pts.slice(SPLIT).map(p => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L ");
-const histArea = histPath + ` L ${pts[SPLIT].x.toFixed(1)} ${PY+PH} L ${PX} ${PY+PH} Z`;
-const projArea = projPath + ` L ${pts[pts.length-1].x.toFixed(1)} ${PY+PH} L ${pts[SPLIT].x.toFixed(1)} ${PY+PH} Z`;
-
-// ── Demo data ────────────────────────────────────────────────────────────────
-const TXNS = [
-  { pos: true,  desc: "Nómina",        cat: "Ingreso · Salario",  amt: 4_500_000 },
-  { pos: false, desc: "Arriendo",       cat: "Vivienda",            amt: 1_200_000 },
-  { pos: false, desc: "Supermercado",   cat: "Alimentación",        amt:   320_000 },
-  { pos: true,  desc: "Freelance",      cat: "Ingreso · Servicios", amt: 1_800_000 },
-  { pos: false, desc: "Spotify",        cat: "Entretenimiento",     amt:    32_000 },
-];
-
-// ── Animated counter ─────────────────────────────────────────────────────────
-function useCountUp(target: number, duration = 1400) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    const start = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      setVal(Math.round(target * (1 - Math.pow(1 - t, 3))));
-      if (t < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, [target, duration]);
-  return val;
+const globalCss = `
+html{scroll-behavior:smooth;}
+:root,:root[data-theme="dark"]{
+  --indigo:#6366f1;
+  --indigo-b:#818cf8;
+  --nav-bg:rgba(14,15,19,0.88);
+  --glow:rgba(99,102,241,0.12);
+  --phone-shadow:0 40px 90px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04);
 }
+[data-theme="light"]{
+  --indigo:#5254d8;
+  --indigo-b:#4344bb;
+  --nav-bg:rgba(245,244,241,0.88);
+  --glow:rgba(83,85,216,0.07);
+  --phone-shadow:0 40px 80px rgba(0,0,0,0.18),0 0 0 1px rgba(0,0,0,0.07);
+}
+@keyframes fl0{0%,100%{transform:rotate(-8deg) translateY(0);}50%{transform:rotate(-8deg) translateY(-12px);}}
+@keyframes fl1{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-16px);}}
+@keyframes fl2{0%,100%{transform:rotate(8deg) translateY(0);}50%{transform:rotate(8deg) translateY(-12px);}}
+.fl0{animation:fl0 7s ease-in-out infinite;}
+.fl1{animation:fl1 7s ease-in-out infinite 1.2s;}
+.fl2{animation:fl2 7s ease-in-out infinite 2.4s;}
+.fi-fade{opacity:0;transform:translateY(24px);transition:opacity 0.65s ease,transform 0.65s ease;}
+.fi-fade.fi-vis{opacity:1;transform:translateY(0);}
+.fi-fade.fi-vis.d1{transition-delay:0.1s;}
+.fi-fade.fi-vis.d2{transition-delay:0.2s;}
+.fi-fade.fi-vis.d3{transition-delay:0.3s;}
+.fi-nav{position:fixed;top:0;left:0;right:0;z-index:200;background:transparent;border-bottom:1px solid transparent;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:background 0.3s,border-color 0.3s;}
+.landing-page a:not(.btn-fill):not(.btn-outline):not(.nav-link){color:var(--indigo);text-decoration:none;}
+.landing-page a:not(.btn-fill):not(.btn-outline):not(.nav-link):hover{color:var(--indigo-b);}
+.btn-fill{display:inline-flex;align-items:center;gap:8px;background:var(--indigo);color:#fff;border:none;padding:14px 28px;border-radius:100px;font-family:'IBM Plex Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;transition:background 0.2s,transform 0.15s;}
+.btn-fill:hover{background:var(--indigo-b);transform:translateY(-1px);color:#fff;}
+.btn-outline{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--fg);border:1.5px solid var(--line);padding:14px 28px;border-radius:100px;font-family:'IBM Plex Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;transition:border-color 0.2s,transform 0.15s,background 0.2s;}
+.btn-outline:hover{border-color:var(--dim);background:var(--panel);transform:translateY(-1px);color:var(--fg);}
+.nav-link{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;transition:color 0.2s;}
+.nav-link:hover{color:var(--fg);}
+.feat-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px;transition:border-color 0.25s,transform 0.25s;cursor:default;}
+.feat-card:hover{border-color:var(--dim);transform:translateY(-2px);}
+@media(max-width:1200px){
+  .hero-inner{flex-direction:column !important;gap:32px !important;align-items:center !important;text-align:center !important;}
+  .hero-text p{margin-left:auto !important;margin-right:auto !important;}
+  .hero-ctas{justify-content:center !important;}
+  .hero-section{min-height:auto !important;padding-bottom:40px !important;}
+  .phone-fan{transform:scale(0.82);transform-origin:top center;width:700px !important;height:560px !important;margin-bottom:-100px !important;}
+  .nav-links{display:none !important;}
+}
+@media(max-width:900px){
+  .landing-section{padding-left:24px !important;padding-right:24px !important;}
+  .fi-nav>div{padding-left:16px !important;padding-right:16px !important;}
+  .split-row{flex-direction:column !important;gap:48px !important;}
+  .split-row[style*="row-reverse"]{flex-direction:column !important;}
+  .split-mock{max-width:400px !important;margin:0 auto !important;}
+  .feat-grid{grid-template-columns:1fr 1fr !important;}
+  .stats-grid{grid-template-columns:repeat(2,1fr) !important;}
+  .dl-btns{flex-direction:column !important;align-items:center !important;}
+  .phone-fan{transform:scale(0.62);height:560px !important;margin-bottom:-210px !important;}
+  .dash-grid-patrimony{grid-template-columns:1fr !important;}
+  .dash-grid-bottom{grid-template-columns:1fr !important;}
+}
+@media(max-width:540px){
+  .landing-section{padding-left:16px !important;padding-right:16px !important;padding-top:80px !important;padding-bottom:80px !important;}
+  .hero-section{padding-top:72px !important;padding-bottom:24px !important;}
+  .feat-grid{grid-template-columns:1fr !important;}
+  .stats-grid{grid-template-columns:1fr 1fr !important;}
+  .hero-text h1{font-size:36px !important;letter-spacing:-1px !important;}
+  .hero-text>p{font-size:15px !important;margin-bottom:28px !important;}
+  .hero-platforms{display:none !important;}
+  .hero-inner{gap:24px !important;}
+  .phone-fan{transform:scale(0.48);transform-origin:top center;height:560px !important;margin-bottom:-290px !important;}
+  .dash-kpis{grid-template-columns:1fr !important;}
+  .dash-grid-patrimony{grid-template-columns:1fr !important;}
+  .dash-grid-bottom{grid-template-columns:1fr !important;}
+  .btn-fill,.btn-outline{padding:12px 22px !important;font-size:14px !important;}
+  .split-mock{max-width:100% !important;}
+  .fi-nav>div{height:52px !important;}
+}
+`;
 
-// ── Micro-components ─────────────────────────────────────────────────────────
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function Bullet({ color = "var(--indigo)", children }: { color?: string; children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold uppercase mb-2.5 m-0" style={{ color: "var(--indigo)", letterSpacing: "0.12em" }}>
-      {children}
-    </p>
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div style={{ width: 18, height: 18, background: color, borderRadius: "50%", flexShrink: 0, marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </div>
+      <span style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.55 }}>{children}</span>
+    </div>
   );
 }
 
-function SectionHeadline({ children }: { children: React.ReactNode }) {
+function TabBar({ active }: { active: 0 | 1 | 2 | 3 }) {
+  const strokes = [0, 1, 2, 3].map(i => i === active ? "#6366f1" : "#5f6672");
   return (
-    <h2
-      className="font-light m-0 mb-3.5 leading-tight"
-      style={{ fontFamily: "Spectral, serif", fontSize: "clamp(28px, 4vw, 40px)", letterSpacing: "-0.025em" }}
-    >
+    <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", padding: "10px 0 4px", borderTop: "1px solid #1b1e25", marginTop: 8 }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[0]} strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9,22 9,12 15,12 15,22" /></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[1]} strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[2]} strokeWidth="2" strokeLinecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[3]} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M6 20v-2a6 6 0 0112 0v2" /></svg>
+    </div>
+  );
+}
+
+function PhoneShell({ w, h, children }: { w: number; h: number; children: React.ReactNode }) {
+  return (
+    <div style={{ width: w, height: h, background: "#0d0d10", borderRadius: 38, border: "2px solid #2e2e34", boxShadow: "var(--phone-shadow)", overflow: "hidden", position: "relative" }}>
+      <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", width: 108, height: 30, background: "#000", borderRadius: 17, zIndex: 10 }} />
+      <div style={{ padding: "54px 15px 12px", height: "100%", display: "flex", flexDirection: "column" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PhoneAccounts() {
+  const accounts = [
+    { bg: "#f7c94822", color: "#f7c948", label: "BC", name: "Bancolombia", sub: "Ahorros", amount: "$18.5M" },
+    { bg: "#a855f722", color: "#a855f7", label: "NQ", name: "Nequi", sub: "Corriente", amount: "$2.34M" },
+    { bg: "#ec489922", color: "#ec4899", label: "Nu", name: "Nu Colombia", sub: "Tarjeta", amount: "$890k" },
+  ];
+  return (
+    <PhoneShell w={220} h={460}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: "#5f6672", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3 }}>Cuentas</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: "#eceef1", fontFamily: "'IBM Plex Mono',monospace" }}>$21.730.000</div>
+        <div style={{ fontSize: 11, color: "#5cae87", marginTop: 2 }}>3 cuentas activas</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+        {accounts.map(a => (
+          <div key={a.name} style={{ background: "#15171c", border: "1px solid #262a33", borderRadius: 12, padding: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <div style={{ width: 28, height: 28, background: a.bg, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: a.color, fontFamily: "'IBM Plex Mono',monospace" }}>{a.label}</div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "#eceef1" }}>{a.name}</div>
+                  <div style={{ fontSize: 10, color: "#5f6672" }}>{a.sub}</div>
+                </div>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#eceef1", fontFamily: "'IBM Plex Mono',monospace" }}>{a.amount}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <TabBar active={0} />
+    </PhoneShell>
+  );
+}
+
+function PhoneSummary({ w = 252, h = 520 }: { w?: number; h?: number }) {
+  const txns = [
+    { icon: "🛒", name: "Mercado", sub: "Hoy", amount: "−$87k", color: "#d67c78" },
+    { icon: "💼", name: "Nómina", sub: "Ayer", amount: "+$5.8M", color: "#5cae87" },
+    { icon: "🏠", name: "Arriendo", sub: "Jul 1", amount: "−$1.2M", color: "#d67c78" },
+  ];
+  return (
+    <PhoneShell w={w} h={h}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 10, color: "#5f6672", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 2 }}>Resumen · Jul 2026</div>
+        <div style={{ fontSize: 26, fontWeight: 600, color: "#eceef1", fontFamily: "'IBM Plex Mono',monospace", lineHeight: 1.1 }}>$82.340.000</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+          <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="#5cae87" /></svg>
+          <span style={{ fontSize: 11, color: "#5cae87", fontFamily: "'IBM Plex Mono',monospace" }}>+8.4% este año</span>
+        </div>
+      </div>
+      <div style={{ background: "#15171c", borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
+        <svg width="100%" height="44" viewBox="0 0 222 44" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="pcg-s" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d="M0,38 C18,35 36,30 54,26 C72,22 90,29 108,23 C126,17 144,10 162,8 C180,6 198,9 222,4 L222,44 L0,44 Z" fill="url(#pcg-s)" />
+          <path d="M0,38 C18,35 36,30 54,26 C72,22 90,29 108,23 C126,17 144,10 162,8 C180,6 198,9 222,4" fill="none" stroke="#6366f1" strokeWidth={2} strokeLinecap="round" />
+        </svg>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <div style={{ background: "#15171c", borderRadius: 9, padding: 10 }}>
+          <div style={{ fontSize: 9, color: "#5f6672", marginBottom: 3, fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase" }}>Ingresos</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#5cae87", fontFamily: "'IBM Plex Mono',monospace" }}>$8.45M</div>
+        </div>
+        <div style={{ background: "#15171c", borderRadius: 9, padding: 10 }}>
+          <div style={{ fontSize: 9, color: "#5f6672", marginBottom: 3, fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase" }}>Gastos</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#d67c78", fontFamily: "'IBM Plex Mono',monospace" }}>$4.12M</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7, flex: 1 }}>
+        {txns.map(t => (
+          <div key={t.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#15171c", borderRadius: 9, padding: "9px 10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 26, height: 26, background: "#1b1e25", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{t.icon}</div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 500, color: "#eceef1" }}>{t.name}</div>
+                <div style={{ fontSize: 9, color: "#5f6672" }}>{t.sub}</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 11, color: t.color, fontFamily: "'IBM Plex Mono',monospace" }}>{t.amount}</span>
+          </div>
+        ))}
+      </div>
+      <TabBar active={0} />
+    </PhoneShell>
+  );
+}
+
+function PhoneInvestments() {
+  const assets = [
+    { bg: "#f7931a1a", color: "#f7931a", label: "₿", name: "Bitcoin", amount: "$9.84M", pct: "+14.2%" },
+    { bg: "#627eea1a", color: "#627eea", label: "Ξ", name: "Ethereum", amount: "$4.23M", pct: "+7.8%" },
+    { bg: "#1b1e25", color: "#5cae87", label: "S&P", name: "S&P 500", amount: "$12.65M", pct: "+21.3%" },
+    { bg: "#1b1e25", color: "#9ba1ab", label: "CDT", name: "CDT 12%", amount: "$20M", pct: "12% E.A." },
+  ];
+  return (
+    <PhoneShell w={220} h={460}>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 10, color: "#5f6672", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 2 }}>Inversiones</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: "#eceef1", fontFamily: "'IBM Plex Mono',monospace" }}>$46.720.000</div>
+        <div style={{ fontSize: 11, color: "#5cae87", marginTop: 2 }}>+16.4% total</div>
+      </div>
+      <div style={{ background: "#15171c", borderRadius: 9, padding: "8px 10px", marginBottom: 10 }}>
+        <svg width="100%" height="36" viewBox="0 0 192 36" preserveAspectRatio="none">
+          <path d="M0,30 L24,27 L48,24 L72,18 L96,20 L120,13 L144,10 L168,7 L192,4" fill="none" stroke="#5cae87" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+        {assets.map(a => (
+          <div key={a.name} style={{ background: "#15171c", border: "1px solid #1b1e25", borderRadius: 10, padding: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 26, height: 26, background: a.bg, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: a.color, fontFamily: "'IBM Plex Mono',monospace" }}>{a.label}</div>
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#eceef1" }}>{a.name}</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: "#eceef1", fontFamily: "'IBM Plex Mono',monospace" }}>{a.amount}</div>
+                <div style={{ fontSize: 10, color: "#5cae87" }}>{a.pct}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <TabBar active={2} />
+    </PhoneShell>
+  );
+}
+
+function SectionLabel({ children, color = "var(--indigo)" }: { children: React.ReactNode; color?: string }) {
+  return <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color, marginBottom: 16, fontFamily: "'IBM Plex Mono',monospace" }}>{children}</div>;
+}
+
+function SectionTitle({ children, align = "left", maxW }: { children: React.ReactNode; align?: "left" | "center"; maxW?: number }) {
+  return (
+    <h2 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(34px,4vw,56px)", fontWeight: 300, letterSpacing: -1.5, color: "var(--fg)", lineHeight: 1.1, maxWidth: maxW, ...(align === "center" ? { textAlign: "center", marginLeft: "auto", marginRight: "auto" } : {}) } as React.CSSProperties}>
       {children}
     </h2>
   );
 }
 
-function SectionSub({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-sm font-light m-0 leading-relaxed" style={{ color: "var(--muted)", maxWidth: 340 }}>
-      {children}
-    </p>
-  );
-}
-
-function Bullet({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2 text-sm" style={{ color: "var(--muted)" }}>
-      <svg className="mt-0.5 shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-      </svg>
-      {children}
-    </div>
-  );
-}
-
-function MockCard({ title, badge, children }: { title: React.ReactNode; badge?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--line)", background: "var(--panel)" }}>
-      <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: "1px solid var(--line)" }}>
-        <span style={{ fontFamily: "Spectral, serif", fontSize: 13, color: "var(--muted)" }}>{title}</span>
-        {badge}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
-
-// Split layout — rev swaps visual order on desktop
-function Split({ a, b, rev = false }: { a: React.ReactNode; b: React.ReactNode; rev?: boolean }) {
-  return (
-    <div className="grid items-center gap-14" style={{ gridTemplateColumns: "1fr 1fr" }}>
-      {rev ? <>{b}{a}</> : <>{a}{b}</>}
-    </div>
-  );
-}
-
-// ── Page ─────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const [scrolled, setScrolled] = useState(false);
   const [isLight, setIsLight] = useState(false);
-  const patrimony = useCountUp(44_800_000);
-  const projected  = useCountUp(68_700_000, 1800);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const el = document.documentElement;
-    setIsLight(el.getAttribute("data-theme") === "light");
-    const onScroll = () => setScrolled(window.scrollY > 10);
+    setIsLight(document.documentElement.getAttribute("data-theme") === "light");
+
+    const onScroll = () => {
+      if (!navRef.current) return;
+      const s = window.scrollY > 20;
+      navRef.current.style.background = s ? "var(--nav-bg)" : "transparent";
+      navRef.current.style.borderBottomColor = s ? "var(--line)" : "transparent";
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+
+    const obs = new IntersectionObserver(
+      entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fi-vis"); }),
+      { threshold: 0.08, rootMargin: "0px 0px -32px 0px" }
+    );
+    document.querySelectorAll(".fi-fade").forEach(el => obs.observe(el));
+
+    return () => { window.removeEventListener("scroll", onScroll); obs.disconnect(); };
   }, []);
 
   const toggleTheme = () => {
@@ -135,683 +297,440 @@ export default function LandingPage() {
   };
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{
-        "--indigo":       "#6366f1",
-        "--indigo-bright":"#818cf8",
-        "--indigo-dim":   "rgba(99,102,241,0.15)",
-        background: "var(--bg)",
-        color: "var(--fg)",
-      } as React.CSSProperties}
-    >
+    <>
+      <style dangerouslySetInnerHTML={{ __html: globalCss }} />
 
-      {/* ── NAV ── */}
-      <nav
-        className="sticky top-0 z-50 transition-all duration-300"
-        style={{
-          borderBottom: scrolled ? "1px solid var(--line)" : "1px solid transparent",
-          background: scrolled ? (isLight ? "rgba(245,244,241,0.88)" : "rgba(14,15,19,0.85)") : "transparent",
-          backdropFilter: scrolled ? "blur(18px) saturate(1.4)" : "none",
-        }}
-      >
-        <div className="max-w-4xl mx-auto px-6 flex items-center justify-between" style={{ height: 56 }}>
-          <Link href="/" className="no-underline" style={{ fontFamily: "Spectral, serif", fontSize: 18, fontWeight: 400, letterSpacing: "-0.02em", color: "var(--fg)" }}>
-            Finance
-          </Link>
-          <div className="flex items-center gap-5">
-            <Link href="/help" className="text-sm no-underline transition-colors hover:opacity-70" style={{ color: "var(--muted)" }}>
-              Ayuda
-            </Link>
-            <button
-              onClick={toggleTheme}
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer"
-              style={{ border: "1px solid var(--line)", background: "transparent", color: "var(--muted)" }}
-              title="Cambiar tema"
-            >
-              {isLight ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-              )}
-            </button>
-            <Link
-              href="/login"
-              className="text-sm font-medium no-underline flex items-center px-4 py-1.5 rounded-md transition-opacity hover:opacity-85"
-              style={{ background: "var(--fg)", color: "var(--bg)" }}
-            >
-              Entrar
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <div className="landing-page" style={{ background: "var(--bg)", color: "var(--fg)", fontFamily: "'IBM Plex Sans',sans-serif", minHeight: "100vh", overflowX: "hidden" }}>
 
-      {/* ── HERO ── */}
-      <section className="flex flex-col justify-center px-6 py-20" style={{ minHeight: "calc(100vh - 56px)" }}>
-        <div className="max-w-4xl mx-auto w-full">
-          <p className="text-xs font-semibold uppercase mb-5 m-0" style={{ color: "var(--indigo)", letterSpacing: "0.1em" }}>
-            Finanzas personales · Colombia
-          </p>
-          <h1
-            className="font-light m-0 mb-5 leading-none"
-            style={{ fontFamily: "Spectral, serif", fontSize: "clamp(50px, 7.5vw, 84px)", letterSpacing: "-0.03em", lineHeight: 1.04 }}
-          >
-            Tu patrimonio,<br />
-            <em style={{ fontStyle: "italic" }}>bajo control.</em>
-          </h1>
-          <p className="font-light m-0 mb-8 leading-relaxed" style={{ color: "var(--muted)", fontSize: 15, maxWidth: 460 }}>
-            Registra por voz, conecta tus inversiones y proyecta tu futuro financiero — todo en un solo lugar, en español, pensado para Colombia.
-          </p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 text-sm font-medium no-underline px-5 py-3 rounded-lg transition-opacity hover:opacity-90"
-            style={{ background: "var(--indigo)", color: "#fff" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            Comenzar gratis
-          </Link>
-          {/* Stats strip */}
-          <div className="flex mt-14 rounded-xl overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-            {[
-              { label: "Registro en segundos", val: "Voz · Texto · CSV" },
-              { label: "Proyecciones reales",   val: "Desde tu historial" },
-              { label: "Multi-canal",            val: "Web · Telegram · App" },
-            ].map(({ label, val }, i) => (
-              <div
-                key={label}
-                className="flex-1 py-4 px-5 text-center"
-                style={{ borderRight: i < 2 ? "1px solid var(--line)" : "none" }}
-              >
-                <div className="text-xs" style={{ color: "var(--muted)" }}>{label}</div>
-                <div className="text-xs font-semibold mt-1 uppercase" style={{ color: "var(--indigo-bright)", letterSpacing: "0.04em" }}>{val}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRODUCT DEMO ── */}
-      <section className="pb-24 px-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--line)", background: "var(--panel)" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between flex-wrap gap-2.5 px-5 py-4" style={{ borderBottom: "1px solid var(--line)" }}>
-              <span style={{ fontFamily: "Spectral, serif", fontSize: 13, color: "var(--muted)" }}>Resumen · Julio 2026</span>
-              <div className="hidden sm:flex gap-5">
-                {[
-                  { label: "Ingresos",    val: "$6.300.000",  pos: true },
-                  { label: "Egresos",     val: "$1.552.000",  pos: false },
-                  { label: "Ahorro neto", val: "$4.748.000",  pos: true },
-                ].map(({ label, val, pos }) => (
-                  <span key={label} className="text-xs" style={{ color: "var(--muted)" }}>
-                    {label} <span style={{ color: pos ? "var(--pos)" : "var(--neg)", fontWeight: 500 }}>{val}</span>
-                  </span>
-                ))}
-              </div>
+        {/* NAV */}
+        <nav ref={navRef} className="fi-nav">
+          <div style={{ maxWidth: 1240, margin: "0 auto", padding: "0 40px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Link href="/" style={{ fontFamily: "'Spectral',serif", fontSize: 22, fontWeight: 600, color: "var(--fg)", letterSpacing: -0.3 }}>Finance</Link>
+            <div className="nav-links" style={{ display: "flex", gap: 32 }}>
+              <a href="#funciones" className="nav-link">Funciones</a>
+              <a href="#descargar" className="nav-link">Descargar</a>
+              <Link href="/help" className="nav-link">Ayuda</Link>
             </div>
-            {/* Body */}
-            <div className="p-5">
-              {/* KPI grid */}
-              <div className="grid grid-cols-2 gap-2.5 mb-3.5">
-                {[
-                  { name: "Patrimonio neto",    val: COP(patrimony), sub: null,           pos: true },
-                  { name: "Proyección 6 meses", val: COP(projected), sub: "+53% estimado", pos: true },
-                ].map(({ name, val, sub }) => (
-                  <div key={name} className="rounded-xl p-3.5" style={{ background: "var(--panel2)", border: "1px solid var(--line)" }}>
-                    <div className="uppercase mb-1.5" style={{ fontSize: 9, color: "var(--muted)", letterSpacing: "0.08em" }}>{name}</div>
-                    <div className="font-light leading-none" style={{ fontFamily: "Spectral, serif", fontSize: 21, color: "var(--pos)" }}>{val}</div>
-                    {sub && <div className="mt-1" style={{ fontSize: 10, color: "var(--pos)" }}>{sub}</div>}
-                  </div>
-                ))}
-              </div>
-              {/* Investment strip */}
-              <div className="flex mb-3.5 rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-                {[
-                  { name: "Acciones",          val: "$12.400.000", pct: "↑2.3%" },
-                  { name: "Cripto",             val: "$3.100.000",  pct: "↑5.1%" },
-                  { name: "Alto rendimiento",  val: "$8.200.000",  pct: "+0.6% mes" },
-                ].map(({ name, val, pct }, i) => (
-                  <div key={name} className="flex-1 py-2.5 px-3" style={{ borderRight: i < 2 ? "1px solid var(--line)" : "none" }}>
-                    <div className="mb-0.5" style={{ fontSize: 9, color: "var(--muted)" }}>{name}</div>
-                    <div className="text-sm font-medium">
-                      {val} <span style={{ fontSize: 10, color: "var(--pos)" }}>{pct}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {/* Chart */}
-              <div className="mb-3.5" style={{ height: 130 }}>
-                <svg viewBox={`0 0 780 ${PH + PY + 20}`} className="w-full h-full" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--indigo)" stopOpacity="0.2"/>
-                      <stop offset="100%" stopColor="var(--indigo)" stopOpacity="0"/>
-                    </linearGradient>
-                    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--indigo)" stopOpacity="0.08"/>
-                      <stop offset="100%" stopColor="var(--indigo)" stopOpacity="0"/>
-                    </linearGradient>
-                  </defs>
-                  {pts.map((p, i) => i % 2 === 0 && (
-                    <text key={i} x={p.x} y={PY + PH + 16} textAnchor="middle" fontSize="9" fill="var(--dim)">{MONTHS[i]}</text>
-                  ))}
-                  <path d={histArea} fill="url(#hg)"/>
-                  <path d={projArea} fill="url(#pg)"/>
-                  <path d={histPath} fill="none" stroke="var(--indigo)" strokeWidth="1.75" strokeLinecap="round"/>
-                  <path d={projPath} fill="none" stroke="var(--indigo-bright)" strokeWidth="1.75" strokeDasharray="5 4" strokeLinecap="round"/>
-                  <line x1={pts[SPLIT].x} y1={PY} x2={pts[SPLIT].x} y2={PY + PH} stroke="var(--dim)" strokeWidth="1" strokeDasharray="3 3"/>
-                  <text x={pts[SPLIT].x + 4} y={PY + 12} fontSize="9" fill="var(--muted)">Hoy</text>
-                </svg>
-              </div>
-              {/* Transactions */}
-              <div>
-                {TXNS.map((tx, i) => (
-                  <div key={i} className="flex items-center justify-between py-2" style={{ borderBottom: i < TXNS.length - 1 ? "1px solid var(--line)" : "none" }}>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm">{tx.desc}</span>
-                      <span className="inline-block px-1.5 py-0.5 rounded" style={{ fontSize: 9, color: "var(--muted)", background: "var(--panel2)", border: "1px solid var(--line)" }}>{tx.cat}</span>
-                    </div>
-                    <span className="font-medium" style={{ fontFamily: "Spectral, serif", fontSize: 13, color: tx.pos ? "var(--pos)" : "var(--neg)" }}>
-                      {tx.pos ? "+" : "−"}{COP(tx.amt)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button onClick={toggleTheme} style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 100, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--muted)" }}>
+                {!isLight
+                  ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
+                  : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+                }
+              </button>
+              <Link href="/login" className="btn-fill" style={{ padding: "10px 22px", fontSize: 14 }}>Entrar</Link>
             </div>
           </div>
-        </div>
-      </section>
+        </nav>
 
-      {/* ── VOICE ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <Split
-            a={
-              <div>
-                <SectionLabel>Registro</SectionLabel>
-                <SectionHeadline>Di lo que gastaste.<br /><em>La app lo entiende.</em></SectionHeadline>
-                <SectionSub>Habla o escribe en español natural. Finance detecta tipo, monto, descripción y categoría automáticamente — incluyendo números en palabras como "quinientos mil" o "un millón".</SectionSub>
-                <div className="flex flex-col gap-2.5 mt-6">
-                  {[
-                    { inp: '"35.000 almuerzo"',              res: <><strong style={{ color: "var(--indigo-bright)" }}>$35.000</strong> · Alimentación</> },
-                    { inp: '"ingreso de un millón salario"', res: <>Ingreso · <strong style={{ color: "var(--indigo-bright)" }}>$1.000.000</strong> · Salario</> },
-                    { inp: '"quinientos mil arriendo"',      res: <><strong style={{ color: "var(--indigo-bright)" }}>$500.000</strong> · Vivienda</> },
-                  ].map(({ inp, res }) => (
-                    <div key={inp} className="flex items-center gap-2.5 flex-wrap">
-                      <span className="text-xs px-2 py-1 rounded-md" style={{ fontFamily: "monospace", background: "var(--panel2)", border: "1px solid var(--line)", whiteSpace: "nowrap" }}>{inp}</span>
-                      <span style={{ color: "var(--dim)", fontSize: 11 }}>→</span>
-                      <span className="text-sm" style={{ color: "var(--muted)" }}>{res}</span>
-                    </div>
-                  ))}
-                </div>
+        {/* HERO */}
+        <section className="landing-section hero-section" style={{ minHeight: "100vh", display: "flex", alignItems: "center", padding: "120px 40px 80px", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: "30%", right: "25%", width: 500, height: 500, background: "radial-gradient(circle,var(--glow) 0%,transparent 70%)", pointerEvents: "none" }} />
+          <div className="hero-inner" style={{ maxWidth: 1240, margin: "0 auto", width: "100%", display: "flex", alignItems: "center", gap: 80, position: "relative", zIndex: 1 }}>
+            <div className="hero-text" style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 100, padding: "6px 16px", marginBottom: 32 }}>
+                <span style={{ width: 6, height: 6, background: "var(--indigo)", borderRadius: "50%", display: "inline-block", flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--muted)", fontFamily: "'IBM Plex Mono',monospace" }}>Finanzas personales · Colombia</span>
               </div>
-            }
-            b={
-              <MockCard title="Nuevo movimiento">
-                <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl mb-3" style={{ border: "1px solid var(--line)", background: "var(--panel2)" }}>
-                  <span className="flex-1 text-sm" style={{ color: "var(--dim)" }}>Dicta o escribe...</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" strokeWidth="1.75" strokeLinecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                </div>
-                <div className="flex gap-2 mb-3">
-                  {[
-                    { lbl: "Tipo",      val: "Egreso",       c: "var(--neg)" },
-                    { lbl: "Monto",     val: "$35.000",      c: "var(--fg)" },
-                    { lbl: "Categoría", val: "Alimentación", c: "var(--indigo-bright)" },
-                  ].map(({ lbl, val, c }) => (
-                    <div key={lbl} className="flex-1 rounded-xl p-2.5" style={{ background: "var(--panel2)", border: "1px solid var(--line)" }}>
-                      <div className="uppercase mb-1" style={{ fontSize: 9, color: "var(--muted)", letterSpacing: "0.07em" }}>{lbl}</div>
-                      <div className="text-xs font-medium" style={{ color: c }}>{val}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <button className="flex-1 py-2.5 rounded-lg text-sm font-medium cursor-pointer" style={{ background: "var(--indigo)", color: "#fff", border: "none" }}>Guardar</button>
-                  <button className="px-3.5 py-2.5 rounded-lg text-sm cursor-pointer" style={{ background: "var(--panel2)", border: "1px solid var(--line)", color: "var(--muted)" }}>Editar</button>
-                </div>
-              </MockCard>
-            }
-          />
-        </div>
-      </section>
+              <h1 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(48px,5.5vw,88px)", fontWeight: 300, lineHeight: 1.05, letterSpacing: -2.5, color: "var(--fg)", marginBottom: 24 } as React.CSSProperties}>
+                Tu patrimonio,<br /><em style={{ fontStyle: "italic" }}>bajo control.</em>
+              </h1>
+              <p style={{ fontSize: 18, lineHeight: 1.68, color: "var(--muted)", maxWidth: 440, marginBottom: 40 }}>
+                Registra ingresos, gastos e inversiones en segundos. Conecta cuentas, define metas y visualiza tu riqueza en tiempo real.
+              </p>
+              <div className="hero-ctas" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <Link href="/login" className="btn-fill">Comenzar gratis</Link>
+                <a href="#descargar" className="btn-outline">Descargar app</a>
+              </div>
+              <p className="hero-platforms" style={{ marginTop: 28, fontSize: 13, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace" }}>Web · iOS · Android · Telegram</p>
+            </div>
 
-      {/* ── CUENTAS ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <Split
-            rev
-            a={
-              <div>
-                <SectionLabel>Cuentas</SectionLabel>
-                <SectionHeadline>Todos tus bancos<br /><em>en una vista.</em></SectionHeadline>
-                <SectionSub>Organiza por banco y tipo — corriente, ahorro, efectivo, cartera, bolsa o cripto. El KPI de efectivo disponible excluye inversiones para que siempre sepas con qué cuentas realmente.</SectionSub>
-                <div className="flex flex-col gap-2 mt-6">
-                  {[
-                    { c: "var(--indigo)",  label: "Cuenta corriente · Ahorros · Efectivo" },
-                    { c: "var(--dim)",     label: "Cartera · Bolsa · Cripto (excluidos del efectivo)" },
-                  ].map(({ c, label }) => (
-                    <div key={label} className="flex items-center gap-2 text-sm" style={{ color: "var(--muted)" }}>
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c }}/>
-                      {label}
-                    </div>
-                  ))}
-                </div>
+            {/* Phone fan — desktop */}
+            <div className="phone-fan" style={{ flexShrink: 0, position: "relative", width: 700, height: 560 }}>
+              <div className="fl0" style={{ position: "absolute", left: 20, bottom: 0, zIndex: 1, opacity: 0.82 }}>
+                <PhoneAccounts />
               </div>
-            }
-            b={
-              <MockCard title="Cuentas" badge={<span style={{ fontSize: 10, color: "var(--muted)" }}>5 cuentas</span>}>
+              <div className="fl1" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 0, zIndex: 3 }}>
+                <PhoneSummary />
+              </div>
+              <div className="fl2" style={{ position: "absolute", right: 20, bottom: 0, zIndex: 2, opacity: 0.82 }}>
+                <PhoneInvestments />
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        {/* DASHBOARD OVERVIEW */}
+        <section id="funciones" className="landing-section" style={{ padding: "120px 40px", background: "var(--panel)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+            <div className="fi-fade" style={{ textAlign: "center", marginBottom: 64 }}>
+              <SectionLabel>Panel principal</SectionLabel>
+              <SectionTitle align="center">Todo en un vistazo.</SectionTitle>
+              <p style={{ fontSize: 17, color: "var(--muted)", marginTop: 16, maxWidth: 460, margin: "16px auto 0", lineHeight: 1.65 }}>El panel central muestra patrimonio, movimientos e inversiones sin navegar entre pantallas.</p>
+            </div>
+
+            <div className="fi-fade" style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 20, padding: 28, maxWidth: 920, margin: "0 auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
                 <div>
-                  {[
-                    { icon: "Bc", name: "Bancolombia",  type: "Cuenta de ahorros",   amt: "$8.400.000",  inv: false },
-                    { icon: "Nq", name: "Nequi",         type: "Billetera digital",   amt: "$1.200.000",  inv: false },
-                    { icon: "Ef", name: "Efectivo",      type: "Billetera física",    amt: "$350.000",    inv: false },
-                    { icon: "Et", name: "ETF Local",     type: "Cartera de inversión",amt: "$12.400.000", inv: true  },
-                    { icon: "₿",  name: "Binance",       type: "Cripto",              amt: "$3.100.000",  inv: true  },
-                  ].map((acc, i, arr) => (
-                    <div key={acc.name} className="flex items-center justify-between py-2.5" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none" }}>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs" style={{ border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--muted)", fontFamily: "Spectral, serif" }}>{acc.icon}</div>
-                        <div>
-                          <div className="text-sm">{acc.name}</div>
-                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 1 }}>{acc.type}</div>
-                        </div>
-                      </div>
-                      <div className="text-sm" style={{ fontFamily: "Spectral, serif", color: acc.inv ? "var(--muted)" : "var(--fg)" }}>{acc.amt}</div>
-                    </div>
-                  ))}
+                  <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>Resumen</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: "var(--fg)" }}>Julio 2026</div>
                 </div>
-                <div className="flex justify-between items-center mt-3.5 px-3.5 py-3 rounded-xl" style={{ background: "var(--indigo-dim)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                  <span style={{ fontSize: 11, color: "var(--indigo-bright)" }}>Efectivo disponible</span>
-                  <span style={{ fontFamily: "Spectral, serif", fontSize: 15, fontWeight: 500, color: "var(--indigo-bright)" }}>$9.950.000</span>
-                </div>
-              </MockCard>
-            }
-          />
-        </div>
-      </section>
-
-      {/* ── INVERSIONES ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <Split
-            a={
-              <div>
-                <SectionLabel>Inversiones</SectionLabel>
-                <SectionHeadline>Acciones, cripto<br /><em>y más, en tiempo real.</em></SectionHeadline>
-                <SectionSub>Conecta tus portafolios y ve el valor actualizado de cada posición. Finance consolida acciones, criptomonedas y fondos de alto rendimiento en un patrimonio neto unificado.</SectionSub>
-                <div className="flex flex-col gap-2.5 mt-6">
-                  <Bullet>Precios actualizados automáticamente</Bullet>
-                  <Bullet>Proyección de rendimiento a 6 y 12 meses</Bullet>
-                  <Bullet>Incluye dividendos y ganancias/pérdidas no realizadas</Bullet>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["←", "→"].map(ch => <button key={ch} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "var(--muted)", cursor: "pointer", fontFamily: "'IBM Plex Mono',monospace" }}>{ch}</button>)}
                 </div>
               </div>
-            }
-            b={
-              <MockCard
-                title="Portafolio"
-                badge={<span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(74,222,128,0.1)", color: "var(--pos)" }}>↑ +3.8% hoy</span>}
-              >
-                <table className="w-full" style={{ borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr>
-                      <th className="text-left pb-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", fontWeight: 500, borderBottom: "1px solid var(--line)" }}>Activo</th>
-                      <th className="text-center pb-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", fontWeight: 500, borderBottom: "1px solid var(--line)" }}>Cambio</th>
-                      <th className="text-right pb-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", fontWeight: 500, borderBottom: "1px solid var(--line)" }}>Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {/* KPIs */}
+              <div className="dash-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 16 }}>
+                {[
+                  { label: "Ingresos", val: "$8.450.000", sub: "+12% vs junio", color: "var(--pos)" },
+                  { label: "Gastos", val: "$4.120.000", sub: "−3% vs junio", color: "var(--neg)" },
+                  { label: "Ahorro neto", val: "$4.330.000", sub: "Tasa: 51.2%", color: "var(--pos)", valColor: "var(--fg)" },
+                ].map(k => (
+                  <div key={k.label} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontSize: 11, color: "var(--dim)", marginBottom: 8, fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em" }}>{k.label}</div>
+                    <div style={{ fontSize: 22, fontWeight: 600, color: k.valColor ?? k.color, fontFamily: "'IBM Plex Mono',monospace" }}>{k.val}</div>
+                    <div style={{ fontSize: 11, color: k.label === "Ahorro neto" ? "var(--pos)" : "var(--dim)", marginTop: 4 }}>{k.sub}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Patrimony + Chart */}
+              <div className="dash-grid-patrimony" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 14, marginBottom: 14 }}>
+                <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Patrimonio</div>
+                  <div>
+                    <div style={{ fontSize: 26, fontWeight: 600, color: "var(--fg)", fontFamily: "'IBM Plex Mono',monospace", lineHeight: 1.15 }}>$82.340.000</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8 }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="var(--pos)" /></svg>
+                      <span style={{ fontSize: 12, color: "var(--pos)", fontFamily: "'IBM Plex Mono',monospace" }}>+8.4% este año</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: 16, overflow: "hidden" }}>
+                  <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>Evolución · 12 meses</div>
+                  <svg width="100%" height="72" viewBox="0 0 580 72" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="dcg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <path d="M0,62 C40,58 80,52 120,46 C160,40 190,54 230,46 C270,38 300,28 340,22 C380,16 410,26 450,18 C490,10 530,8 580,4 L580,72 L0,72 Z" fill="url(#dcg)" />
+                    <path d="M0,62 C40,58 80,52 120,46 C160,40 190,54 230,46 C270,38 300,28 340,22 C380,16 410,26 450,18 C490,10 530,8 580,4" fill="none" stroke="#6366f1" strokeWidth={2.5} strokeLinecap="round" />
+                    <path d="M580,4 L640,2" fill="none" stroke="#6366f1" strokeWidth={1.5} strokeDasharray="4,3" strokeLinecap="round" opacity={0.45} />
+                  </svg>
+                </div>
+              </div>
+              {/* Transactions + Portfolio */}
+              <div className="dash-grid-bottom" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: 16 }}>
+                  <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Últimas transacciones</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {[
-                      { name: "Ecopetrol",      ticker: "ECO · BVC",    chg: "↑2.3%", up: true,  val: "$4.800.000" },
-                      { name: "S&P 500 ETF",    ticker: "SPY · NYSE",   chg: "↑0.9%", up: true,  val: "$7.600.000" },
-                      { name: "Bitcoin",         ticker: "BTC · Binance",chg: "↑5.1%", up: true,  val: "$2.400.000" },
-                      { name: "Ethereum",        ticker: "ETH · Binance",chg: "↓1.2%", up: false, val: "$700.000"   },
-                      { name: "Fdo. Alto Rdto.", ticker: "Bancolombia",  chg: "+0.6%", up: true,  val: "$8.200.000" },
-                    ].map((row, i, arr) => (
-                      <tr key={row.name}>
-                        <td className="py-2.5" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none" }}>
-                          <div className="text-sm">{row.name}</div>
-                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 1 }}>{row.ticker}</div>
-                        </td>
-                        <td className="text-center py-2.5" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none" }}>
-                          <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{
-                            background: row.up ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
-                            color: row.up ? "var(--pos)" : "var(--neg)",
-                          }}>{row.chg}</span>
-                        </td>
-                        <td className="text-right py-2.5" style={{ fontFamily: "Spectral, serif", fontSize: 13, borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none" }}>{row.val}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex justify-between items-center pt-3 mt-1" style={{ borderTop: "1px solid var(--line)" }}>
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Total inversiones</span>
-                  <span style={{ fontFamily: "Spectral, serif", fontSize: 16, fontWeight: 500, color: "var(--pos)" }}>$23.700.000</span>
-                </div>
-              </MockCard>
-            }
-          />
-        </div>
-      </section>
-
-      {/* ── RECURRENTES ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <Split
-            rev
-            a={
-              <div>
-                <SectionLabel>Recurrentes</SectionLabel>
-                <SectionHeadline>Nómina, arriendo<br /><em>y suscripciones.</em></SectionHeadline>
-                <SectionSub>Registra ingresos y gastos que se repiten cada mes. Finance te alerta antes de que venza cada uno para que nunca te tome por sorpresa.</SectionSub>
-                <div className="flex flex-col gap-2.5 mt-6">
-                  <Bullet>Alerta 3 días antes del vencimiento</Bullet>
-                  <Bullet>Proyección automática de flujo mensual</Bullet>
-                </div>
-              </div>
-            }
-            b={
-              <MockCard
-                title="Recurrentes · Julio"
-                badge={<span style={{ fontSize: 10, color: "var(--neg)" }}>1 vence pronto</span>}
-              >
-                {[
-                  { name: "Nómina",   meta: "Ingreso · 1 del mes",        badge: "Cobrado",        alertBadge: false, pos: true,  amt: "+$4.500.000" },
-                  { name: "Arriendo", meta: "Vivienda · 5 del mes",        badge: "Vence en 2 días",alertBadge: true,  pos: false, amt: "−$1.200.000" },
-                  { name: "Netflix",  meta: "Entretenimiento · 15 del mes", badge: "Pendiente",      alertBadge: false, pos: false, amt: "−$45.000"    },
-                  { name: "Spotify",  meta: "Entretenimiento · 15 del mes", badge: "Pendiente",      alertBadge: false, pos: false, amt: "−$32.000"    },
-                  { name: "Gimnasio", meta: "Salud · 20 del mes",           badge: "Pendiente",      alertBadge: false, pos: false, amt: "−$90.000"    },
-                ].map((r, i, arr) => (
-                  <div key={r.name} className="flex items-center justify-between gap-2.5 py-2.5" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none" }}>
-                    <div className="flex-1">
-                      <div className="text-sm">{r.name}</div>
-                      <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{r.meta}</div>
-                    </div>
-                    <span
-                      className="text-xs font-semibold px-1.5 py-0.5 rounded shrink-0"
-                      style={r.alertBadge
-                        ? { background: "rgba(248,113,113,0.12)", color: "var(--neg)" }
-                        : { background: "var(--panel2)", color: "var(--muted)", border: "1px solid var(--line)" }
-                      }
-                    >{r.badge}</span>
-                    <div className="text-sm shrink-0" style={{ fontFamily: "Spectral, serif", color: r.pos ? "var(--pos)" : "var(--fg)", textAlign: "right", whiteSpace: "nowrap" }}>{r.amt}</div>
-                  </div>
-                ))}
-              </MockCard>
-            }
-          />
-        </div>
-      </section>
-
-      {/* ── METAS ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <Split
-            a={
-              <div>
-                <SectionLabel>Metas</SectionLabel>
-                <SectionHeadline>Ahorra con<br /><em>propósito y fecha.</em></SectionHeadline>
-                <SectionSub>Define cuánto quieres ahorrar y para cuándo. Finance muestra tu progreso en tiempo real y ajusta la proyección según tus movimientos del mes.</SectionSub>
-                <div className="flex flex-col gap-2.5 mt-6">
-                  <Bullet>Progreso automático desde tus registros</Bullet>
-                  <Bullet>Alerta si no llegarás a tu meta a tiempo</Bullet>
-                </div>
-              </div>
-            }
-            b={
-              <MockCard title="Metas de ahorro" badge={<span style={{ fontSize: 10, color: "var(--muted)" }}>3 activas</span>}>
-                <div className="flex flex-col gap-3.5">
-                  {[
-                    { name: "Viaje a Europa",      date: "Meta: Sep 2026", pct: 40,  current: "$3.200.000 ahorrados", target: "meta $8.000.000",  done: false },
-                    { name: "Fondo de emergencia", date: "Meta: Dic 2026", pct: 74,  current: "$11.200.000 ahorrados",target: "meta $15.000.000", done: false },
-                    { name: "Portátil nuevo",       date: "Completado",    pct: 100, current: "$4.500.000 — listo",   target: "meta $4.500.000",  done: true  },
-                  ].map(({ name, date, pct, current, target, done }) => (
-                    <div key={name} className="rounded-xl p-3.5" style={{ background: "var(--panel2)", border: "1px solid var(--line)" }}>
-                      <div className="flex justify-between items-start mb-2.5">
-                        <div>
-                          <div className="text-sm font-medium">{name}</div>
-                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{date}</div>
+                      { icon: "🛒", name: "Mercado", sub: "Hoy · Alimentos", amount: "−$87.000", color: "var(--neg)" },
+                      { icon: "💼", name: "Nómina", sub: "Ayer · Ingresos", amount: "+$5.800.000", color: "var(--pos)" },
+                      { icon: "🏠", name: "Arriendo", sub: "Jul 1 · Vivienda", amount: "−$1.200.000", color: "var(--neg)" },
+                      { icon: "⚡", name: "Servicios", sub: "Jun 30 · Hogar", amount: "−$145.000", color: "var(--neg)" },
+                    ].map(t => (
+                      <div key={t.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 32, height: 32, background: "var(--panel2)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>{t.icon}</div>
+                          <div><div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)" }}>{t.name}</div><div style={{ fontSize: 11, color: "var(--dim)" }}>{t.sub}</div></div>
                         </div>
-                        <div style={{ fontFamily: "Spectral, serif", fontSize: 18, fontWeight: 300, color: done ? "var(--pos)" : "var(--indigo-bright)" }}>{pct}%</div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: t.color, fontFamily: "'IBM Plex Mono',monospace" }}>{t.amount}</span>
                       </div>
-                      <div className="rounded-full overflow-hidden" style={{ height: 4, background: "var(--line)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: done ? "var(--pos)" : "var(--indigo)" }}/>
-                      </div>
-                      <div className="flex justify-between mt-1.5">
-                        <span style={{ fontSize: 11, color: done ? "var(--pos)" : "var(--indigo-bright)", fontWeight: 500 }}>{current}</span>
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{target}</span>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </MockCard>
-            }
-          />
-        </div>
-      </section>
+                <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: 16 }}>
+                  <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Portafolio</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {[
+                      { bg: "#f7931a18", color: "#f7931a", label: "₿", name: "Bitcoin", sub: "0.0342 BTC", val: "$9.840.000", pct: "+14.2%" },
+                      { bg: "#627eea18", color: "#627eea", label: "Ξ", name: "Ethereum", sub: "1.28 ETH", val: "$4.230.000", pct: "+7.8%" },
+                      { bg: "var(--panel2)", color: "var(--pos)", label: "S&P", name: "S&P 500", sub: "3 ETFs", val: "$12.650.000", pct: "+21.3%" },
+                      { bg: "var(--panel2)", color: "var(--muted)", label: "CDT", name: "CDT Bancolombia", sub: "Vence sep 2026", val: "$20.000.000", pct: "12% E.A." },
+                    ].map(a => (
+                      <div key={a.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 32, height: 32, background: a.bg, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: a.color, fontFamily: "'IBM Plex Mono',monospace" }}>{a.label}</div>
+                          <div><div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)" }}>{a.name}</div><div style={{ fontSize: 11, color: "var(--dim)" }}>{a.sub}</div></div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg)", fontFamily: "'IBM Plex Mono',monospace" }}>{a.val}</div>
+                          <div style={{ fontSize: 11, color: "var(--pos)" }}>{a.pct}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* ── PRESUPUESTOS ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <Split
-            rev
-            a={
+        {/* FEATURE CARDS */}
+        <section className="landing-section" style={{ padding: "120px 40px", background: "var(--bg)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+            <div className="fi-fade" style={{ marginBottom: 64 }}>
+              <SectionLabel>Funciones</SectionLabel>
+              <SectionTitle maxW={600}>Diseñado para cómo realmente manejas el dinero.</SectionTitle>
+            </div>
+            <div className="feat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
+              {[
+                { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>, title: "Registro por voz", desc: "Habla o escribe en español natural. Finance detecta tipo, monto y categoría automáticamente.", delay: "" },
+                { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--pos)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>, title: "Inversiones en tiempo real", desc: "Acciones, cripto y alto rendimiento consolidados. Precios actualizados y proyecciones incluidas.", delay: "d1" },
+                { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12.01" y2="18" /></svg>, title: "Multi-canal", desc: "Web, app móvil, Telegram o CSV. Registra desde donde más te convenga.", delay: "d2" },
+                { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--indigo-b)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 01-8 0" /></svg>, title: "Comercio integrado", desc: "Gestiona productos, clientes, ventas y fiado desde el mismo panel financiero.", delay: "d3" },
+              ].map(card => (
+                <div key={card.title} className={`feat-card fi-fade ${card.delay}`}>
+                  <div style={{ width: 44, height: 44, background: "var(--panel2)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, border: "1px solid var(--line)" }}>{card.icon}</div>
+                  <h3 style={{ fontFamily: "'Spectral',serif", fontSize: 20, fontWeight: 500, color: "var(--fg)", marginBottom: 10, letterSpacing: -0.2 }}>{card.title}</h3>
+                  <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--muted)" }}>{card.desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="fi-fade" style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 16, padding: "28px 32px", marginTop: 16, display: "flex", alignItems: "center", gap: 28 }}>
+              <div style={{ width: 44, height: 44, background: "var(--panel2)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--line)", flexShrink: 0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
+              </div>
               <div>
-                <SectionLabel>Presupuestos</SectionLabel>
-                <SectionHeadline>Límites que<br /><em>avisan antes de romperse.</em></SectionHeadline>
-                <SectionSub>Define un techo total o por categoría. Cada vez que registras un movimiento, Finance verifica en tiempo real si estás cerca del límite.</SectionSub>
-                <div className="flex flex-col gap-2.5 mt-6">
-                  <Bullet>Alerta al superar el 85% del presupuesto</Bullet>
-                  <Bullet>Resumen de excesos al cierre del mes</Bullet>
-                </div>
-              </div>
-            }
-            b={
-              <MockCard
-                title="Presupuesto · Julio 2026"
-                badge={<span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>1 advertencia</span>}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Total gastado este mes</span>
-                  <span style={{ fontFamily: "Spectral, serif", fontSize: 14 }}>$1.552.000 <span style={{ color: "var(--muted)", fontSize: 10 }}>/ $2.500.000</span></span>
-                </div>
-                <div className="rounded-full overflow-hidden mb-4" style={{ height: 4, background: "var(--line)" }}>
-                  <div className="h-full rounded-full" style={{ width: "62%", background: "var(--indigo)" }}/>
-                </div>
-                <div className="flex flex-col gap-3">
-                  {[
-                    { cat: "Alimentación",   spent: "$450.000",  total: "$600.000",  pct: 75,  status: "safe" },
-                    { cat: "Transporte",      spent: "$180.000",  total: "$300.000",  pct: 60,  status: "safe" },
-                    { cat: "Entretenimiento",spent: "$270.000",  total: "$280.000",  pct: 96,  status: "warn" },
-                    { cat: "Salud",           spent: "$90.000",   total: "$400.000",  pct: 22,  status: "safe" },
-                  ].map(({ cat, spent, total, pct, status }) => (
-                    <div key={cat}>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-sm">{cat}</span>
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}><strong style={{ color: "var(--fg)", fontWeight: 500 }}>{spent}</strong> / {total}</span>
-                      </div>
-                      <div className="rounded-full overflow-hidden" style={{ height: 5, background: "var(--line)" }}>
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: status === "warn" ? "#f59e0b" : "var(--indigo)" }}/>
-                      </div>
-                      {status === "warn" && <div className="mt-1" style={{ fontSize: 9, color: "#f59e0b", fontWeight: 500 }}>⚠ Casi en el límite — te quedan $10.000</div>}
-                    </div>
-                  ))}
-                </div>
-              </MockCard>
-            }
-          />
-        </div>
-      </section>
-
-      {/* ── MULTI-CANAL ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <SectionLabel><span className="block text-center">Multi-canal</span></SectionLabel>
-          <SectionHeadline><span className="block text-center" style={{ maxWidth: 500, margin: "0 auto" }}>Registra desde donde<br /><em>más te convenga.</em></span></SectionHeadline>
-          <p className="text-sm font-light text-center mx-auto mb-12 m-0 leading-relaxed" style={{ color: "var(--muted)", maxWidth: 420 }}>
-            Web, Telegram o importando tu extracto CSV del banco. Finance adapta el canal al momento, no al revés.
-          </p>
-          <div className="grid grid-cols-2 gap-5">
-            {/* Telegram mock */}
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--line)", background: "var(--panel)" }}>
-              <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ borderBottom: "1px solid var(--line)" }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--indigo)" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.75" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Finance Bot</div>
-                  <div style={{ fontSize: 10, color: "var(--pos)" }}>en línea</div>
-                </div>
-              </div>
-              <div className="p-3.5 flex flex-col gap-2">
-                {[
-                  { user: true,  text: "35000 almuerzo" },
-                  { user: false, text: <>Listo. <strong style={{ color: "var(--pos)", fontWeight: 600 }}>$35.000</strong> registrado como <strong style={{ color: "var(--indigo-bright)", fontWeight: 500 }}>Alimentación</strong>. ¿Todo bien?</> },
-                  { user: true,  text: "ingreso un millón salario" },
-                  { user: false, text: <>Ingreso de <strong style={{ color: "var(--pos)", fontWeight: 600 }}>$1.000.000</strong> guardado bajo <strong style={{ color: "var(--indigo-bright)", fontWeight: 500 }}>Salario</strong>. Tu ahorro del mes va en $4.748.000.</> },
-                ].map((msg, i) => (
-                  <div key={i} className={`max-w-xs ${msg.user ? "self-end" : "self-start"}`}>
-                    <div
-                      className="px-3 py-2 rounded-xl text-sm leading-snug"
-                      style={msg.user
-                        ? { background: "var(--indigo)", color: "#fff", borderBottomRightRadius: 3 }
-                        : { background: "var(--panel2)", border: "1px solid var(--line)", borderBottomLeftRadius: 3 }
-                      }
-                    >{msg.text}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* CSV mock */}
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--line)", background: "var(--panel)" }}>
-              <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: "1px solid var(--line)" }}>
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>Importar extracto CSV</span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: "var(--indigo-dim)", color: "var(--indigo-bright)", letterSpacing: "0.04em" }}>Bancolombia · Nequi</span>
-              </div>
-              <div className="p-3.5 border-b" style={{ borderColor: "var(--line)" }}>
-                <div className="rounded-lg p-3 text-center" style={{ border: "1px dashed var(--line)" }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round" style={{ display: "block", margin: "0 auto 6px" }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Arrastra tu extracto aquí</span>
-                </div>
-              </div>
-              <div className="px-4 pt-2.5 pb-0" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Detección automática de columnas</div>
-              <div className="px-4 pb-2">
-                {[
-                  { raw: "04/07/2026,SUPERMERCADO EXITO,-320000",  amount: "$320.000",   cat: "Alimentación" },
-                  { raw: "03/07/2026,NOMINA EMPRESA S.A,4500000",  amount: "$4.500.000", cat: "Salario" },
-                  { raw: "02/07/2026,PSE*NETFLIX,-45000",           amount: "$45.000",   cat: "Entretenimiento" },
-                ].map((row, i, arr) => (
-                  <div key={i} className="flex items-center gap-2.5 py-2" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none" }}>
-                    <span className="flex-1 truncate" style={{ fontFamily: "monospace", fontSize: 10, color: "var(--muted)" }}>{row.raw}</span>
-                    <div className="flex gap-1.5 shrink-0">
-                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ borderColor: "rgba(99,102,241,0.3)", border: "1px solid rgba(99,102,241,0.3)", color: "var(--indigo-bright)" }}>{row.amount}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--panel2)", border: "1px solid var(--line)", color: "var(--muted)" }}>{row.cat}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="px-4 pb-3.5">
-                <button className="w-full py-2.5 rounded-lg text-sm font-medium cursor-pointer" style={{ background: "var(--indigo)", color: "#fff", border: "none" }}>
-                  Importar 3 movimientos
-                </button>
+                <h3 style={{ fontFamily: "'Spectral',serif", fontSize: 20, fontWeight: 500, color: "var(--fg)", marginBottom: 6, letterSpacing: -0.2 }}>Consignaciones DIAN</h3>
+                <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--muted)", maxWidth: 640 }}>Rastrea pagos de impuestos y fechas clave del calendario tributario colombiano. Sin sorpresas en declaración de renta.</p>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── FEATURES GRID ── */}
-      <section className="py-24 px-6" style={{ borderTop: "1px solid var(--line)" }}>
-        <div className="max-w-4xl mx-auto">
-          <p className="text-xs font-semibold uppercase text-center mb-8 m-0" style={{ color: "var(--muted)", letterSpacing: "0.12em" }}>
-            Diseñado para el día a día
-          </p>
-          <div className="grid grid-cols-2 gap-px rounded-xl overflow-hidden" style={{ background: "var(--line)", border: "1px solid var(--line)" }}>
-            {[
-              {
-                icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
-                title: "Modo privacidad",
-                desc:  "Oculta todos los montos con un clic. Ideal para compartir pantalla en reuniones.",
-              },
-              {
-                icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
-                title: "Tema oscuro y claro",
-                desc:  "Cambia entre temas con un clic. Finance respeta tu preferencia del sistema operativo.",
-              },
-              {
-                icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="8" y1="18" x2="12" y2="18"/></svg>,
-                title: "Calculadora flotante",
-                desc:  "Accesible desde cualquier pantalla. Calcula sin perder el contexto donde estás.",
-              },
-              {
-                icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-                title: "Categorización inteligente",
-                desc:  "17 categorías con mapeo semántico. Aprende de tus hábitos para sugerir mejor con el tiempo.",
-              },
-              {
-                icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
-                title: "En pesos colombianos",
-                desc:  "Todo en COP, formateado como $44.800.000. Sin conversiones, sin confusión.",
-              },
-              {
-                icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="M3 17v.01M3 21v.01M7 17v.01M7 21v.01M10 17v.01"/></svg>,
-                title: "Atajos de teclado",
-                desc:  "Navega, registra y consulta sin tocar el mouse. Productividad de escritorio real.",
-              },
-            ].map(({ icon, title, desc }) => (
-              <div key={title} className="flex flex-col gap-2.5 p-6" style={{ background: "var(--bg)" }}>
-                <span style={{ color: "var(--muted)" }}>{icon}</span>
-                <div className="text-sm font-semibold">{title}</div>
-                <div className="text-sm font-light leading-snug" style={{ color: "var(--muted)" }}>{desc}</div>
-              </div>
-            ))}
+        {/* STATS */}
+        <section className="landing-section" style={{ padding: "120px 40px", background: "var(--panel)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+            <div className="fi-fade" style={{ textAlign: "center", marginBottom: 64 }}>
+              <SectionTitle align="center">Construido para la realidad<br /><em>colombiana.</em></SectionTitle>
+            </div>
+            <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+              {[
+                { val: "17+", label: "Categorías inteligentes preconfiguradas", color: "var(--fg)", delay: "" },
+                { val: "3", label: "Canales de registro — Web, App, Telegram", color: "var(--fg)", delay: "d1" },
+                { val: "COP", label: "Pensado exclusivamente para Colombia", color: "var(--indigo-b)", delay: "d2" },
+                { val: "24/7", label: "Acceso desde cualquier dispositivo", color: "var(--fg)", delay: "" },
+                { val: "<5s", label: "Para registrar por voz o texto natural", color: "var(--pos)", delay: "d1" },
+                { val: "100%", label: "Tus datos son privados y solo tuyos", color: "var(--fg)", delay: "d2" },
+              ].map(s => (
+                <div key={s.val} className={`fi-fade ${s.delay}`} style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 16, padding: "28px 24px" }}>
+                  <div style={{ fontFamily: "'Spectral',serif", fontSize: 54, fontWeight: 300, color: s.color, letterSpacing: -2, marginBottom: 8, lineHeight: 1 }}>{s.val}</div>
+                  <div style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.55 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── BOTTOM CTA ── */}
-      <section className="text-center px-6 py-24" style={{ borderTop: "1px solid var(--line)", background: "var(--panel)" }}>
-        <div className="max-w-4xl mx-auto">
-          <h2
-            className="font-light m-0 mb-3 leading-none"
-            style={{ fontFamily: "Spectral, serif", fontSize: "clamp(38px, 6vw, 64px)", letterSpacing: "-0.03em" }}
-          >
-            Empieza hoy.
-          </h2>
-          <p className="text-sm font-light m-0 mb-7" style={{ color: "var(--muted)" }}>
-            Sin tarjeta de crédito. Sin configuración complicada.
-          </p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2.5 text-sm font-medium no-underline px-5 py-3 rounded-lg transition-opacity hover:opacity-85"
-            style={{ background: "var(--fg)", color: "var(--bg)" }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            Crear cuenta con Google
-          </Link>
-        </div>
-      </section>
+        {/* SPLIT: VOICE */}
+        <section className="landing-section" style={{ padding: "120px 40px", background: "var(--bg)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+            <div className="split-row" style={{ display: "flex", alignItems: "center", gap: 80 }}>
+              <div className="fi-fade" style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
+                <SectionLabel>Registro inteligente</SectionLabel>
+                <h2 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(30px,3.5vw,46px)", fontWeight: 300, letterSpacing: -1, color: "var(--fg)", lineHeight: 1.15, marginBottom: 20 } as React.CSSProperties}>
+                  Di lo que gastaste.<br /><em>Finance hace el resto.</em>
+                </h2>
+                <p style={{ fontSize: 16, lineHeight: 1.68, color: "var(--muted)", marginBottom: 28 }}>Habla o escribe en español desde Telegram, la app o la web. El sistema detecta tipo, monto, categoría y moneda automáticamente.</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <Bullet>Detección automática de categorías</Bullet>
+                  <Bullet>Soporte en pesos colombianos y USD</Bullet>
+                  <Bullet>Desde Telegram sin abrir ninguna app</Bullet>
+                </div>
+              </div>
+              <div className="split-mock fi-fade" style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 20, padding: 20, width: 360, maxWidth: "100%" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid var(--line)" }}>
+                    <div style={{ width: 36, height: 36, background: "linear-gradient(135deg,#229ED9,#1a7fb5)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>✈</div>
+                    <div><div style={{ fontSize: 14, fontWeight: 600, color: "var(--fg)" }}>Finance Bot</div><div style={{ fontSize: 11, color: "var(--pos)" }}>en línea</div></div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ background: "var(--indigo)", color: "#fff", borderRadius: "16px 16px 4px 16px", padding: "10px 14px", maxWidth: 230, fontSize: 13, lineHeight: 1.5 }}>gasté 87 mil en el éxito hoy</div></div>
+                    <div style={{ display: "flex", justifyContent: "flex-start" }}><div style={{ background: "var(--panel2)", border: "1px solid var(--line)", color: "var(--fg)", borderRadius: "16px 16px 16px 4px", padding: "12px 14px", maxWidth: 280, fontSize: 13, lineHeight: 1.6 }}>
+                      <div style={{ marginBottom: 5 }}>✓ Transacción registrada:</div>
+                      <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span>→ Gasto · $87.000 COP</span><span>→ Categoría: Alimentos</span><span>→ Comercio: Éxito</span>
+                      </div>
+                    </div></div>
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ background: "var(--indigo)", color: "#fff", borderRadius: "16px 16px 4px 16px", padding: "10px 14px", maxWidth: 230, fontSize: 13, lineHeight: 1.5 }}>también pagué netflix 52900</div></div>
+                    <div style={{ display: "flex", justifyContent: "flex-start" }}><div style={{ background: "var(--panel2)", border: "1px solid var(--line)", color: "var(--fg)", borderRadius: "16px 16px 16px 4px", padding: "12px 14px", maxWidth: 280, fontSize: 13, lineHeight: 1.6 }}>
+                      <div style={{ marginBottom: 5 }}>✓ Registrado:</div>
+                      <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+                        <span>→ Suscripción · $52.900 COP</span><span>→ Categoría: Entretenimiento</span><span>→ Pago recurrente detectado</span>
+                      </div>
+                    </div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* ── FOOTER ── */}
-      <footer className="relative flex items-center justify-center px-6 py-5" style={{ borderTop: "1px solid var(--line)" }}>
-        <span style={{ fontSize: 12, color: "var(--dim)" }}>Finance · 2026</span>
-        <div className="absolute right-6 flex gap-5">
-          <Link href="/help" className="no-underline transition-colors hover:opacity-70" style={{ fontSize: 12, color: "var(--dim)" }}>Ayuda</Link>
-          <Link href="/login" className="no-underline transition-colors hover:opacity-70" style={{ fontSize: 12, color: "var(--dim)" }}>Entrar</Link>
-        </div>
-      </footer>
+        {/* SPLIT: INVESTMENTS */}
+        <section className="landing-section" style={{ padding: "120px 40px", background: "var(--panel)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+            <div className="split-row" style={{ display: "flex", alignItems: "center", gap: 80, flexDirection: "row-reverse" }}>
+              <div className="fi-fade" style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
+                <SectionLabel color="var(--pos)">Portafolio</SectionLabel>
+                <h2 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(30px,3.5vw,46px)", fontWeight: 300, letterSpacing: -1, color: "var(--fg)", lineHeight: 1.15, marginBottom: 20 } as React.CSSProperties}>
+                  Acciones, cripto y CDTs.<br /><em>En un solo lugar.</em>
+                </h2>
+                <p style={{ fontSize: 16, lineHeight: 1.68, color: "var(--muted)", marginBottom: 28 }}>Consolida acciones, ETFs, criptomonedas y alto rendimiento. Precios en tiempo real, rendimiento total y proyecciones históricas.</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <Bullet color="var(--pos)">Cripto: Bitcoin, Ethereum y altcoins</Bullet>
+                  <Bullet color="var(--pos)">Acciones y ETFs en USD</Bullet>
+                  <Bullet color="var(--pos)">CDTs, fondos y alto rendimiento COP</Bullet>
+                </div>
+              </div>
+              <div className="split-mock fi-fade" style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                <div style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 20, padding: 24, width: 380, maxWidth: "100%" }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Portafolio total</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                      <span style={{ fontSize: 28, fontWeight: 600, color: "var(--fg)", fontFamily: "'IBM Plex Mono',monospace" }}>$46.720.000</span>
+                      <span style={{ fontSize: 14, color: "var(--pos)" }}>+16.4%</span>
+                    </div>
+                  </div>
+                  <div style={{ background: "var(--panel)", borderRadius: 11, padding: "10px 14px", marginBottom: 14 }}>
+                    <svg width="100%" height="52" viewBox="0 0 340 52" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="ig-p" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#5cae87" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="#5cae87" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <path d="M0,44 C20,42 40,38 80,32 C120,26 150,36 190,28 C230,20 260,14 300,10 L340,6 L340,52 L0,52 Z" fill="url(#ig-p)" />
+                      <path d="M0,44 C20,42 40,38 80,32 C120,26 150,36 190,28 C230,20 260,14 300,10 L340,6" fill="none" stroke="#5cae87" strokeWidth={2.5} strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[
+                      { bg: "#f7931a18", color: "#f7931a", label: "₿", name: "Bitcoin", val: "$9.840.000", pct: "+14.2%" },
+                      { bg: "#627eea18", color: "#627eea", label: "Ξ", name: "Ethereum", val: "$4.230.000", pct: "+7.8%" },
+                      { bg: "var(--panel2)", color: "var(--pos)", label: "S&P", name: "S&P 500", val: "$12.650.000", pct: "+21.3%" },
+                      { bg: "var(--panel2)", color: "var(--muted)", label: "CDT", name: "CDT 12% E.A.", val: "$20.000.000", pct: "12.0%" },
+                    ].map(a => (
+                      <div key={a.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "var(--panel)", borderRadius: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <div style={{ width: 28, height: 28, background: a.bg, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: a.color, fontFamily: "'IBM Plex Mono',monospace" }}>{a.label}</div>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--fg)" }}>{a.name}</span>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 13, color: "var(--fg)", fontFamily: "'IBM Plex Mono',monospace" }}>{a.val}</div>
+                          <div style={{ fontSize: 11, color: "var(--pos)" }}>{a.pct}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      <FloatingCalc />
-    </div>
+        {/* SPLIT: GOALS */}
+        <section className="landing-section" style={{ padding: "120px 40px", background: "var(--bg)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+            <div className="split-row" style={{ display: "flex", alignItems: "center", gap: 80 }}>
+              <div className="fi-fade" style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
+                <SectionLabel>Metas y presupuestos</SectionLabel>
+                <h2 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(30px,3.5vw,46px)", fontWeight: 300, letterSpacing: -1, color: "var(--fg)", lineHeight: 1.15, marginBottom: 20 } as React.CSSProperties}>
+                  Define metas.<br /><em>Alcánzalas con claridad.</em>
+                </h2>
+                <p style={{ fontSize: 16, lineHeight: 1.68, color: "var(--muted)", marginBottom: 28 }}>Presupuestos mensuales por categoría, metas de ahorro con fecha objetivo y alertas cuando te acercas al límite.</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <Bullet>Presupuestos por categoría con alertas</Bullet>
+                  <Bullet>Metas de ahorro con barra de progreso</Bullet>
+                  <Bullet>Pagos recurrentes y suscripciones</Bullet>
+                </div>
+              </div>
+              <div className="split-mock fi-fade" style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 20, padding: 24, width: 360, maxWidth: "100%" }}>
+                  <div style={{ fontSize: 11, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>Metas activas</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {[
+                      { name: "Viaje a Cartagena", pct: 68, current: "$2.040.000", total: "$3.000.000", date: "dic 2026", color: "var(--pos)" },
+                      { name: "Fondo de emergencia", pct: 45, current: "$9.000.000", total: "$20.000.000", date: "dic 2027", color: "var(--indigo)" },
+                      { name: "MacBook Pro", pct: 82, current: "$6.560.000", total: "$8.000.000", date: "sep 2026", color: "var(--muted)" },
+                    ].map(g => (
+                      <div key={g.name} style={{ background: "var(--panel2)", borderRadius: 12, padding: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
+                          <span style={{ fontSize: 14, fontWeight: 500, color: "var(--fg)" }}>{g.name}</span>
+                          <span style={{ fontSize: 12, color: g.color, fontFamily: "'IBM Plex Mono',monospace" }}>{g.pct}%</span>
+                        </div>
+                        <div style={{ background: "var(--line)", height: 5, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ width: `${g.pct}%`, height: "100%", background: g.color, borderRadius: 3 }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 7 }}>
+                          <span style={{ fontSize: 11, color: "var(--dim)" }}>{g.current} de {g.total}</span>
+                          <span style={{ fontSize: 11, color: "var(--dim)" }}>{g.date}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* DOWNLOAD */}
+        <section id="descargar" className="landing-section" style={{ padding: "120px 40px", background: "var(--panel)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto", textAlign: "center" }}>
+            <div className="fi-fade">
+              <SectionLabel>Descarga</SectionLabel>
+              <h2 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(42px,6vw,80px)", fontWeight: 300, letterSpacing: -2.5, color: "var(--fg)", lineHeight: 1.05, marginBottom: 20 } as React.CSSProperties}>Llévalo contigo.</h2>
+              <p style={{ fontSize: 18, lineHeight: 1.65, color: "var(--muted)", maxWidth: 420, margin: "0 auto 48px" }}>Disponible para iOS y Android. Sin app store, instalación directa.</p>
+              <div className="dl-btns" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap", marginBottom: 28 }}>
+                <a href="/finance.apk" style={{ display: "inline-flex", alignItems: "center", gap: 14, background: "var(--fg)", color: "var(--bg)", borderRadius: 16, padding: "18px 28px", fontFamily: "'IBM Plex Sans',sans-serif", fontSize: 15, fontWeight: 600, textDecoration: "none", minWidth: 210 }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.34L19.4 12.11a.38.38 0 00-.666-.365L16.85 15A11.5 11.5 0 0112 15.75c-1.66 0-3.23-.356-4.635-.987L5.48 11.51a.38.38 0 00-.666.365l1.86 3.22A11.5 11.5 0 000 23.25h24a11.5 11.5 0 00-6.477-7.91zM7.5 6.75a4.5 4.5 0 019 0v2.25a4.5 4.5 0 01-9 0V6.75z" /></svg>
+                  <div style={{ textAlign: "left" }}><div style={{ fontSize: 11, fontWeight: 400, opacity: 0.65, marginBottom: 2 }}>Descargar para</div><div>Android</div></div>
+                </a>
+                <a href="/finance.ipa" style={{ display: "inline-flex", alignItems: "center", gap: 14, background: "var(--panel2)", color: "var(--fg)", border: "1.5px solid var(--line)", borderRadius: 16, padding: "18px 28px", fontFamily: "'IBM Plex Sans',sans-serif", fontSize: 15, fontWeight: 600, textDecoration: "none", minWidth: 210 }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" /></svg>
+                  <div style={{ textAlign: "left" }}><div style={{ fontSize: 11, fontWeight: 400, opacity: 0.55, marginBottom: 2 }}>Descargar para</div><div>iOS</div></div>
+                </a>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--dim)", fontFamily: "'IBM Plex Mono',monospace" }}>Versión 1.0 · Última actualización: julio 2026</p>
+            </div>
+          </div>
+        </section>
+
+        {/* BOTTOM CTA */}
+        <section className="landing-section" style={{ padding: "140px 40px", background: "var(--bg)", textAlign: "center" }}>
+          <div style={{ maxWidth: 760, margin: "0 auto" }}>
+            <div className="fi-fade">
+              <h2 style={{ fontFamily: "'Spectral',serif", fontSize: "clamp(56px,8vw,104px)", fontWeight: 300, letterSpacing: -4, color: "var(--fg)", lineHeight: 0.96, marginBottom: 32 } as React.CSSProperties}>
+                Empieza<br /><em>hoy.</em>
+              </h2>
+              <p style={{ fontSize: 18, lineHeight: 1.65, color: "var(--muted)", maxWidth: 360, margin: "0 auto 40px" }}>Gratis. Sin tarjeta de crédito. Acceso inmediato.</p>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
+                <Link href="/login" className="btn-fill" style={{ fontSize: 17, padding: "18px 36px" }}>Comenzar con Google</Link>
+                <Link href="/login" className="btn-outline" style={{ fontSize: 17, padding: "18px 36px" }}>Registro con email</Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* FOOTER */}
+        <footer style={{ padding: "36px 40px", borderTop: "1px solid var(--line)", background: "var(--bg)" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+            <span style={{ fontFamily: "'Spectral',serif", fontSize: 15, fontWeight: 500, color: "var(--dim)" }}>Finance · 2026</span>
+            <div style={{ display: "flex", gap: 24 }}>
+              <Link href="/help" style={{ fontSize: 13, color: "var(--dim)" }}>Ayuda</Link>
+              <Link href="/login" style={{ fontSize: 13, color: "var(--dim)" }}>Entrar</Link>
+              <a href="#descargar" style={{ fontSize: 13, color: "var(--dim)" }}>Descargar</a>
+            </div>
+          </div>
+        </footer>
+
+        <FloatingCalc />
+      </div>
+    </>
   );
 }
