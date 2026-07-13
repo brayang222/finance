@@ -320,10 +320,23 @@
     border: 1px solid var(--line);
     border-radius: 16px;
     padding: 28px;
-    transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.4s, box-shadow 0.4s;
     cursor: default;
   }
-  .feat-card:hover { border-color: var(--dim); transform: translateY(-2px); }
+  .feat-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at 50% 0%, var(--glow) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .feat-card:hover::before { opacity: 1; }
+  .feat-card:hover { border-color: rgba(99, 102, 241, 0.35); }
 
   .lp-container { max-width: 1240px; margin-left: auto; margin-right: auto; }
   .phone-fan { position: relative; width: 700px; height: 560px; flex-shrink: 0; }
@@ -344,6 +357,15 @@
   .phone-pos { color: #5cae87; }
   .phone-neg { color: #d67c78; }
   .phone-tab { border-top: 1px solid #1b1e25; }
+
+  .lp-cursor-glow {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999;
+    background: radial-gradient(400px circle at var(--cx, -300px) var(--cy, -300px), var(--glow) 0%, transparent 40%);
+    transition: background 0s;
+  }
 
   .lp-glow-hero-1 {
     position: absolute; top: 20%; right: 15%;
@@ -389,8 +411,8 @@
   box-shadow: 0 1px 6px rgba(82, 84, 216, 0.03);
 }
 [data-theme="light"] .feat-card:hover {
-  box-shadow: 0 6px 20px rgba(82, 84, 216, 0.06);
-  border-color: rgba(82, 84, 216, 0.15);
+  box-shadow: 0 6px 20px rgba(82, 84, 216, 0.08);
+  border-color: rgba(82, 84, 216, 0.4);
 }
 [data-theme="light"] .lp-stat-card {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);

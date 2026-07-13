@@ -204,13 +204,19 @@ export default function LandingPage() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
 
+    const onMove = (e: MouseEvent) => {
+      document.documentElement.style.setProperty("--cx", `${e.clientX}px`);
+      document.documentElement.style.setProperty("--cy", `${e.clientY}px`);
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+
     const obs = new IntersectionObserver(
       entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("fi-vis"); }),
       { threshold: 0.08, rootMargin: "0px 0px -32px 0px" }
     );
     document.querySelectorAll(".fi-fade").forEach(el => obs.observe(el));
 
-    return () => { window.removeEventListener("scroll", onScroll); obs.disconnect(); };
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("mousemove", onMove); obs.disconnect(); };
   }, []);
 
   const toggleTheme = () => {
@@ -223,6 +229,7 @@ export default function LandingPage() {
 
   return (
     <div className="landing-page bg-bg text-fg min-h-screen overflow-x-hidden">
+      <div className="lp-cursor-glow" aria-hidden="true" />
 
       {/* NAV */}
       <nav ref={navRef} className="fi-nav">
