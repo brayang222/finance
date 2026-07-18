@@ -10,142 +10,19 @@ const FloatingCalc = dynamic(
   { ssr: false }
 );
 
-// ── Phone components ──────────────────────────────────────────────
+// ── Phone screenshot components ───────────────────────────────────
 
-function TabBar({ active }: { active: 0 | 1 | 2 | 3 }) {
-  const strokes = [0, 1, 2, 3].map(i => i === active ? "#6366f1" : "#5f6672");
-  return (
-    <div className="flex justify-around items-center pt-2.5 pb-1 mt-2 phone-tab">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[0]} strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9,22 9,12 15,12 15,22" /></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[1]} strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[2]} strokeWidth="2" strokeLinecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /></svg>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={strokes[3]} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M6 20v-2a6 6 0 0112 0v2" /></svg>
-    </div>
-  );
-}
-
-function PhoneShell({ w, h, children }: { w: number; h: number; children: React.ReactNode }) {
+function PhoneScreen({ src, alt, w, h }: { src: string; alt: string; w: number; h: number }) {
   return (
     <div className="phone-shell overflow-hidden relative" style={{ width: w, height: h }}>
-      <div className="phone-notch absolute top-3 left-1/2 -translate-x-1/2 z-10" />
-      <div className="flex flex-col h-full pt-14 px-4 pb-3">{children}</div>
+      <img src={src} alt={alt} className="absolute inset-0 w-full h-full object-cover object-top" />
     </div>
   );
 }
 
-function PhoneAccounts() {
-  const accounts = [
-    { bg: "#f7c94822", color: "#f7c948", label: "BC", name: "Bancolombia", sub: "Ahorros", amount: "$18.5M" },
-    { bg: "#a855f722", color: "#a855f7", label: "NQ", name: "Nequi", sub: "Corriente", amount: "$2.34M" },
-    { bg: "#ec489922", color: "#ec4899", label: "Nu", name: "Nu Colombia", sub: "Tarjeta", amount: "$890k" },
-  ];
-  return (
-    <PhoneShell w={220} h={460}>
-      <div className="mb-3.5">
-        <div className="text-xs phone-dim font-mono uppercase tracking-widest mb-0.5">Cuentas</div>
-        <div className="text-xl font-semibold phone-fg font-mono">$21.730.000</div>
-        <div className="text-xs phone-pos mt-0.5">3 cuentas activas</div>
-      </div>
-      <div className="flex flex-col gap-2 flex-1">
-        {accounts.map(a => (
-          <div key={a.name} className="phone-card-bd rounded-xl p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="size-7 rounded-lg flex items-center justify-center text-xs font-bold font-mono" style={{ background: a.bg, color: a.color }}>{a.label}</div>
-                <div>
-                  <div className="text-xs font-medium phone-fg">{a.name}</div>
-                  <div className="text-xs phone-dim">{a.sub}</div>
-                </div>
-              </div>
-              <span className="text-xs font-semibold phone-fg font-mono">{a.amount}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <TabBar active={0} />
-    </PhoneShell>
-  );
-}
-
-function PhoneSummary({ w = 252, h = 520 }: { w?: number; h?: number }) {
-  const txns = [
-    { icon: "\u{1F6D2}", name: "Mercado", sub: "Hoy", amount: "−$87k", color: "#d67c78" },
-    { icon: "\u{1F4BC}", name: "Nómina", sub: "Ayer", amount: "+$5.8M", color: "#5cae87" },
-    { icon: "\u{1F3E0}", name: "Arriendo", sub: "Jul 1", amount: "−$1.2M", color: "#d67c78" },
-  ];
-  return (
-    <PhoneShell w={w} h={h}>
-      <div className="mb-4">
-        <div className="text-xs phone-dim font-mono uppercase tracking-widest mb-0.5">Resumen &middot; Jul 2026</div>
-        <div className="text-2xl font-semibold phone-fg font-mono leading-tight">$82.340.000</div>
-        <div className="flex items-center gap-1.5 mt-1">
-          <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="#5cae87" /></svg>
-          <span className="text-xs phone-pos font-mono">+8.4% este a&ntilde;o</span>
-        </div>
-      </div>
-      <div className="phone-card rounded-lg p-2.5 mb-3">
-        <svg width="100%" height="44" viewBox="0 0 222 44" preserveAspectRatio="none">
-          <defs><linearGradient id="pcg-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient></defs>
-          <path d="M0,38 C18,35 36,30 54,26 C72,22 90,29 108,23 C126,17 144,10 162,8 C180,6 198,9 222,4 L222,44 L0,44 Z" fill="url(#pcg-s)" />
-          <path d="M0,38 C18,35 36,30 54,26 C72,22 90,29 108,23 C126,17 144,10 162,8 C180,6 198,9 222,4" fill="none" stroke="#6366f1" strokeWidth={2} strokeLinecap="round" />
-        </svg>
-      </div>
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <div className="phone-card rounded-lg p-2.5"><div className="text-xs phone-dim mb-0.5 font-mono uppercase">Ingresos</div><div className="text-sm font-semibold phone-pos font-mono">$8.45M</div></div>
-        <div className="phone-card rounded-lg p-2.5"><div className="text-xs phone-dim mb-0.5 font-mono uppercase">Gastos</div><div className="text-sm font-semibold phone-neg font-mono">$4.12M</div></div>
-      </div>
-      <div className="flex flex-col gap-2 flex-1">
-        {txns.map(t => (
-          <div key={t.name} className="flex items-center justify-between phone-card rounded-lg py-2 px-2.5">
-            <div className="flex items-center gap-2">
-              <div className="size-6.5 rounded-lg flex items-center justify-center text-xs" style={{ background: "#1b1e25" }}>{t.icon}</div>
-              <div><div className="text-xs font-medium phone-fg">{t.name}</div><div className="text-xs phone-dim">{t.sub}</div></div>
-            </div>
-            <span className="text-xs font-mono" style={{ color: t.color }}>{t.amount}</span>
-          </div>
-        ))}
-      </div>
-      <TabBar active={0} />
-    </PhoneShell>
-  );
-}
-
-function PhoneInvestments() {
-  const assets = [
-    { bg: "#f7931a1a", color: "#f7931a", label: "₿", name: "Bitcoin", amount: "$9.84M", pct: "+14.2%" },
-    { bg: "#627eea1a", color: "#627eea", label: "Ξ", name: "Ethereum", amount: "$4.23M", pct: "+7.8%" },
-    { bg: "#1b1e25", color: "#5cae87", label: "S&P", name: "S&P 500", amount: "$12.65M", pct: "+21.3%" },
-    { bg: "#1b1e25", color: "#9ba1ab", label: "CDT", name: "CDT 12%", amount: "$20M", pct: "12% E.A." },
-  ];
-  return (
-    <PhoneShell w={220} h={460}>
-      <div className="mb-2.5">
-        <div className="text-xs phone-dim font-mono uppercase tracking-widest mb-0.5">Inversiones</div>
-        <div className="text-xl font-semibold phone-fg font-mono">$46.720.000</div>
-        <div className="text-xs phone-pos mt-0.5">+16.4% total</div>
-      </div>
-      <div className="phone-card rounded-lg p-2.5 mb-2.5">
-        <svg width="100%" height="36" viewBox="0 0 192 36" preserveAspectRatio="none">
-          <path d="M0,30 L24,27 L48,24 L72,18 L96,20 L120,13 L144,10 L168,7 L192,4" fill="none" stroke="#5cae87" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <div className="flex flex-col gap-2 flex-1">
-        {assets.map(a => (
-          <div key={a.name} className="phone-card rounded-lg p-2.5" style={{ border: "1px solid #1b1e25" }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="size-6.5 rounded-lg flex items-center justify-center text-xs font-bold font-mono" style={{ background: a.bg, color: a.color }}>{a.label}</div>
-                <span className="text-xs font-medium phone-fg">{a.name}</span>
-              </div>
-              <div className="text-right"><div className="text-xs phone-fg font-mono">{a.amount}</div><div className="text-xs phone-pos">{a.pct}</div></div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <TabBar active={2} />
-    </PhoneShell>
-  );
-}
+const PhoneLeft   = () => <PhoneScreen src="/screenshots/screen-inicio.png"       alt="Inicio"        w={220} h={460} />;
+const PhoneCenter = () => <PhoneScreen src="/screenshots/screen-movimientos.webp"  alt="Movimientos"   w={252} h={520} />;
+const PhoneRight  = () => <PhoneScreen src="/screenshots/screen-planes.webp"       alt="Planes"        w={220} h={460} />;
 
 // ── Shared UI helpers ─────────────────────────────────────────────
 
@@ -334,9 +211,9 @@ export default function LandingPage() {
             <p className="hero-platforms mt-7 text-sm text-dim font-mono">Web &middot; iOS &middot; Android &middot; Telegram</p>
           </div>
           <div className="phone-fan">
-            <div className="fl0 absolute left-5 bottom-0 z-10 opacity-80"><PhoneAccounts /></div>
-            <div className="fl1 absolute left-1/2 -translate-x-1/2 bottom-0 z-30"><PhoneSummary /></div>
-            <div className="fl2 absolute right-5 bottom-0 z-20 opacity-80"><PhoneInvestments /></div>
+            <div className="fl0 absolute left-5 bottom-0 z-10 opacity-80"><PhoneLeft /></div>
+            <div className="fl1 absolute left-1/2 -translate-x-1/2 bottom-0 z-30"><PhoneCenter /></div>
+            <div className="fl2 absolute right-5 bottom-0 z-20 opacity-80"><PhoneRight /></div>
           </div>
         </div>
       </section>
@@ -394,6 +271,57 @@ export default function LandingPage() {
       <div className="px-0">
         <FeatureMarquee />
       </div>
+
+      {/* ── APP GALLERY ── */}
+      <section id="galeria" className="landing-section py-20 bg-bg overflow-hidden">
+        <div className="lp-container px-10 mb-12">
+          <div className="fi-fade flex items-end justify-between gap-8">
+            <div>
+              <p className="text-sm font-medium text-muted mb-3" style={{ letterSpacing: "0.06em", textTransform: "uppercase" }}>La app</p>
+              <Heading size="lg">Cada pantalla,<br /><em>pensada para ti.</em></Heading>
+            </div>
+            <p className="text-base text-muted max-w-xs leading-relaxed hidden md:block">Diseñada para que registrar, analizar y planificar sea natural desde el primer día.</p>
+          </div>
+        </div>
+        <style>{`
+          @keyframes gs { to { transform: translateX(-50%); } }
+          .gs-track { display: flex; width: max-content; animation: gs 36s linear infinite; gap: 16px; }
+          .gs-track:hover { animation-play-state: paused; }
+        `}</style>
+        <div className="overflow-hidden px-10">
+          <div className="gs-track">
+            {[
+              { src: "/screenshots/screen-inicio.png",             alt: "Inicio",               label: "Inicio" },
+              { src: "/screenshots/screen-movimientos.webp",       alt: "Movimientos",          label: "Movimientos" },
+              { src: "/screenshots/screen-inversion.webp",         alt: "Inversión · Acciones", label: "Acciones" },
+              { src: "/screenshots/screen-inversion-cripto.webp",  alt: "Inversión · Cripto",   label: "Cripto" },
+              { src: "/screenshots/screen-inversion-hys.webp",     alt: "Inversión · HYS",      label: "HYS" },
+              { src: "/screenshots/screen-planes-presupuestos.webp", alt: "Planes · Presupuestos", label: "Presupuestos" },
+              { src: "/screenshots/screen-planes-metas.webp",      alt: "Planes · Metas",       label: "Metas" },
+              { src: "/screenshots/screen-planes.webp",            alt: "Planes · Análisis",    label: "Análisis" },
+              { src: "/screenshots/screen-perfil.webp",            alt: "Perfil",               label: "Perfil" },
+              ...[
+              { src: "/screenshots/screen-inicio.png",             alt: "Inicio",               label: "Inicio" },
+              { src: "/screenshots/screen-movimientos.webp",       alt: "Movimientos",          label: "Movimientos" },
+              { src: "/screenshots/screen-inversion.webp",         alt: "Inversión · Acciones", label: "Acciones" },
+              { src: "/screenshots/screen-inversion-cripto.webp",  alt: "Inversión · Cripto",   label: "Cripto" },
+              { src: "/screenshots/screen-inversion-hys.webp",     alt: "Inversión · HYS",      label: "HYS" },
+              { src: "/screenshots/screen-planes-presupuestos.webp", alt: "Planes · Presupuestos", label: "Presupuestos" },
+              { src: "/screenshots/screen-planes-metas.webp",      alt: "Planes · Metas",       label: "Metas" },
+              { src: "/screenshots/screen-planes.webp",            alt: "Planes · Análisis",    label: "Análisis" },
+              { src: "/screenshots/screen-perfil.webp",            alt: "Perfil",               label: "Perfil" },
+              ],
+            ].flat().map((s, i) => (
+              <div key={i} className="shrink-0 flex flex-col items-center gap-3">
+                <div className="phone-shell overflow-hidden relative" style={{ width: 180, height: 380 }}>
+                  <img src={s.src} alt={s.alt} className="absolute inset-0 w-full h-full object-cover object-top" />
+                </div>
+                <span className="text-xs text-dim font-mono">{s.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ── DASHBOARD OVERVIEW ── */}
       <section id="funciones" className="landing-section lp-panel-section lp-dash-section py-28 px-10 bg-panel relative overflow-hidden">
@@ -597,10 +525,46 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── SPLIT: INVESTMENTS ── */}
+      {/* ── SPLIT: GOALS ── */}
       <section className="landing-section lp-panel-section py-28 px-10 bg-panel">
         <div className="lp-container">
           <div className="split-row flex items-center gap-20 flex-row-reverse">
+            <div className="fi-fade flex-1 min-w-0 max-w-lg">
+              <p className="text-sm font-medium text-muted mb-4" style={{ letterSpacing: "0.06em", textTransform: "uppercase" }}>Metas y presupuestos</p>
+              <Heading size="md" className="mb-5">Define metas.<br /><em>Alc&aacute;nzalas con claridad.</em></Heading>
+              <p className="text-base leading-relaxed text-muted mb-7">Presupuestos mensuales por categor&iacute;a, metas de ahorro con fecha objetivo y alertas cuando te acercas al l&iacute;mite.</p>
+              <div className="flex flex-col gap-3">
+                <Bullet>Presupuestos por categor&iacute;a con alertas</Bullet>
+                <Bullet>Metas de ahorro con barra de progreso</Bullet>
+                <Bullet>Pagos recurrentes y suscripciones</Bullet>
+              </div>
+            </div>
+            <div className="split-mock fi-fade flex-1 flex justify-center">
+              <div className="bg-bg border border-line rounded-2xl p-6 w-full max-w-sm">
+                <div className="text-xs text-dim font-mono uppercase tracking-wider mb-4">Metas activas</div>
+                <div className="flex flex-col gap-3.5">
+                  {[
+                    { name: "Viaje a Cartagena", pct: 68, current: "$2.040.000", total: "$3.000.000", date: "dic 2026", color: "var(--pos)" },
+                    { name: "Fondo de emergencia", pct: 45, current: "$9.000.000", total: "$20.000.000", date: "dic 2027", color: "var(--indigo)" },
+                    { name: "MacBook Pro", pct: 82, current: "$6.560.000", total: "$8.000.000", date: "sep 2026", color: "var(--muted)" },
+                  ].map(g => (
+                    <div key={g.name} className="bg-panel2 rounded-xl p-3.5">
+                      <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-fg">{g.name}</span><span className="text-xs font-mono" style={{ color: g.color }}>{g.pct}%</span></div>
+                      <div className="bg-line h-1.5 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${g.pct}%`, background: g.color }} /></div>
+                      <div className="flex justify-between mt-2"><span className="text-xs text-dim">{g.current} de {g.total}</span><span className="text-xs text-dim">{g.date}</span></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SPLIT: INVESTMENTS ── */}
+      <section className="landing-section py-28 px-10 bg-bg">
+        <div className="lp-container">
+          <div className="split-row flex items-center gap-20">
             <div className="fi-fade flex-1 min-w-0 max-w-lg">
               <p className="text-sm font-medium mb-4" style={{ letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--pos)" }}>Portafolio</p>
               <Heading size="md" className="mb-5">Acciones, cripto y CDTs.<br /><em>En un solo lugar.</em></Heading>
@@ -612,12 +576,12 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="split-mock fi-fade flex-1 flex justify-center">
-              <div className="bg-bg border border-line rounded-2xl p-6 w-full max-w-sm">
+              <div className="bg-panel border border-line rounded-2xl p-6 w-full max-w-sm">
                 <div className="mb-3">
                   <div className="text-xs text-dim font-mono uppercase tracking-wider mb-1">Portafolio total</div>
                   <div className="flex items-baseline gap-3"><span className="text-2xl font-semibold text-fg font-mono">$46.720.000</span><span className="text-sm text-pos">+16.4%</span></div>
                 </div>
-                <div className="bg-panel rounded-xl py-2.5 px-3.5 mb-3.5">
+                <div className="bg-panel2 rounded-xl py-2.5 px-3.5 mb-3.5">
                   <svg width="100%" height="52" viewBox="0 0 340 52" preserveAspectRatio="none">
                     <defs><linearGradient id="ig-p" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5cae87" stopOpacity={0.3} /><stop offset="100%" stopColor="#5cae87" stopOpacity={0} /></linearGradient></defs>
                     <path d="M0,44 C20,42 40,38 80,32 C120,26 150,36 190,28 C230,20 260,14 300,10 L340,6 L340,52 L0,52 Z" fill="url(#ig-p)" />
@@ -631,48 +595,12 @@ export default function LandingPage() {
                     { bg: "var(--panel2)", color: "var(--pos)", label: "S&P", name: "S&P 500", val: "$12.650.000", pct: "+21.3%" },
                     { bg: "var(--panel2)", color: "var(--muted)", label: "CDT", name: "CDT 12% E.A.", val: "$20.000.000", pct: "12.0%" },
                   ].map(a => (
-                    <div key={a.name} className="flex items-center justify-between py-2.5 px-3 bg-panel rounded-lg">
+                    <div key={a.name} className="flex items-center justify-between py-2.5 px-3 bg-panel2 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="size-7 rounded-lg flex items-center justify-center text-xs font-bold font-mono" style={{ background: a.bg, color: a.color }}>{a.label}</div>
                         <span className="text-sm font-medium text-fg">{a.name}</span>
                       </div>
                       <div className="text-right"><div className="text-sm text-fg font-mono">{a.val}</div><div className="text-xs text-pos">{a.pct}</div></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── SPLIT: GOALS ── */}
-      <section className="landing-section py-28 px-10 bg-bg">
-        <div className="lp-container">
-          <div className="split-row flex items-center gap-20">
-            <div className="fi-fade flex-1 min-w-0 max-w-lg">
-              <p className="text-sm font-medium text-muted mb-4" style={{ letterSpacing: "0.06em", textTransform: "uppercase" }}>Metas y presupuestos</p>
-              <Heading size="md" className="mb-5">Define metas.<br /><em>Alc&aacute;nzalas con claridad.</em></Heading>
-              <p className="text-base leading-relaxed text-muted mb-7">Presupuestos mensuales por categor&iacute;a, metas de ahorro con fecha objetivo y alertas cuando te acercas al l&iacute;mite.</p>
-              <div className="flex flex-col gap-3">
-                <Bullet>Presupuestos por categor&iacute;a con alertas</Bullet>
-                <Bullet>Metas de ahorro con barra de progreso</Bullet>
-                <Bullet>Pagos recurrentes y suscripciones</Bullet>
-              </div>
-            </div>
-            <div className="split-mock fi-fade flex-1 flex justify-center">
-              <div className="bg-panel border border-line rounded-2xl p-6 w-full max-w-sm">
-                <div className="text-xs text-dim font-mono uppercase tracking-wider mb-4">Metas activas</div>
-                <div className="flex flex-col gap-3.5">
-                  {[
-                    { name: "Viaje a Cartagena", pct: 68, current: "$2.040.000", total: "$3.000.000", date: "dic 2026", color: "var(--pos)" },
-                    { name: "Fondo de emergencia", pct: 45, current: "$9.000.000", total: "$20.000.000", date: "dic 2027", color: "var(--indigo)" },
-                    { name: "MacBook Pro", pct: 82, current: "$6.560.000", total: "$8.000.000", date: "sep 2026", color: "var(--muted)" },
-                  ].map(g => (
-                    <div key={g.name} className="bg-panel2 rounded-xl p-3.5">
-                      <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-fg">{g.name}</span><span className="text-xs font-mono" style={{ color: g.color }}>{g.pct}%</span></div>
-                      <div className="bg-line h-1.5 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${g.pct}%`, background: g.color }} /></div>
-                      <div className="flex justify-between mt-2"><span className="text-xs text-dim">{g.current} de {g.total}</span><span className="text-xs text-dim">{g.date}</span></div>
                     </div>
                   ))}
                 </div>

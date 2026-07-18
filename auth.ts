@@ -48,6 +48,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (token?.id) session.user.id = token.id;
       return session;
     },
+    redirect({ url, baseUrl }) {
+      // After any sign-in, go to /summary unless a deeper callbackUrl was set
+      if (url === baseUrl || url === `${baseUrl}/` || url === `${baseUrl}/login`) {
+        return `${baseUrl}/summary`;
+      }
+      if (url.startsWith(baseUrl)) return url;
+      return `${baseUrl}/summary`;
+    },
   },
-  pages: { signIn: "/" },
+  pages: { signIn: "/login" },
 });

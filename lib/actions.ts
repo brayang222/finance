@@ -405,7 +405,7 @@ export async function deleteCrypto(id: string) {
   await logActivity(userId, "crypto_delete", `Eliminación cripto: ${row?.ticker ?? id}`, { ticker: row?.ticker });
 }
 
-// ── TRANSFERS (rotación de capital) ──
+// ── TRANSFERS (capital rotation) ──
 export async function addTransfer(opts: {
   fromAccountId: string; fromAccountName?: string;
   toAccountId: string; toAccountName?: string;
@@ -750,7 +750,7 @@ export async function saveTelegramId(telegramId: string) {
   });
 }
 
-// ── SEED (migración inicial) ──
+// ── SEED (initial migration) ──
 export async function seedUserData(data: any) { // TODO: type
   const userId = await getUserId();
 

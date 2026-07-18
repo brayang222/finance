@@ -104,9 +104,9 @@ export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Perfil comercio: usuario sombra vinculado al dueño real. Se crea perezosamente
-// con su UserConfig listo (onboarding hecho, tema/moneda/TRM copiados del dueño)
-// para que nunca vea el onboarding personal.
+// Business profile: shadow user linked to the real owner. Created lazily
+// with a ready UserConfig (onboarding done, theme/currency/TRM copied from owner)
+// so the user never sees the personal onboarding flow.
 export async function resolveBusinessUser(realUserId: string) {
   let biz = await prisma.user.findFirst({
     where: { businessOwnerId: realUserId },
@@ -138,8 +138,8 @@ export async function resolveBusinessUser(realUserId: string) {
   return biz;
 }
 
-// ── COMERCIO: ventas, compras y cierre de caja ───────────────────────────────
-// Lógica compartida entre server actions (web) y API routes (móvil).
+// ── COMMERCE: sales, purchases and cash close ────────────────────────────────
+// Shared logic between server actions (web) and API routes (mobile).
 
 export function todayISOShared() {
   return new Date().toISOString().slice(0, 10);
@@ -235,7 +235,7 @@ export async function removeSale(userId: string, saleId: string) {
 
 export type PurchaseItemInput = { productId: string; qty: number; unitCost: number };
 
-// Compra de mercancía: sube stock y actualiza costo. Contado (accountId) o a crédito (supplierId).
+// Merchandise purchase: increases stock and updates cost. Cash (accountId) or credit (supplierId).
 export async function createPurchase(
   userId: string,
   items: PurchaseItemInput[],
@@ -257,7 +257,7 @@ export async function createPurchase(
   }
   const desc = (opts.note || names.join(", ")).slice(0, 120);
   if (opts.supplierId) {
-    // A crédito: deuda con el proveedor
+    // On credit: creates a debt with the supplier
     await prisma.fiadoMovement.create({
       data: { userId, customerId: opts.supplierId, date, type: "fiado", amount: total, note: desc, dueDate: opts.dueDate },
     });
@@ -301,7 +301,7 @@ export async function closeCashDay(userId: string, countedCash: number, note?: s
       summary: JSON.stringify({ byMethod, gastos, ventas: sales.reduce((s, x) => s + x.total, 0) }),
     },
   });
-  // El conteo físico manda: ajusta el efectivo de la app
+  // Physical count wins: updates the in-app cash balance
   await prisma.cash.upsert({
     where: { userId },
     create: { userId, banco: countedCash },

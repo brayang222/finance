@@ -139,7 +139,20 @@ export default function ModalVenta({
               <span className="flex-1 truncate">{l.name}</span>
               <div className="flex items-center gap-1">
                 <button onClick={() => setQty(i, l.qty - 1)} className="w-6 h-6 rounded-md border border-line bg-transparent cursor-pointer text-fg">−</button>
-                <span className="w-7 text-center tabular-nums">{l.qty}</span>
+                <input
+                  key={`${i}:${l.qty}`}
+                  type="text"
+                  inputMode="decimal"
+                  defaultValue={l.qty}
+                  onFocus={e => e.target.select()}
+                  onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                  onBlur={e => {
+                    const v = Number(e.target.value.replace(/[^\d.]/g, ""));
+                    if (v > 0 && v !== l.qty) setQty(i, v);
+                    else e.target.value = String(l.qty);
+                  }}
+                  className="w-10 h-6 text-center tabular-nums rounded-md border border-line bg-transparent text-fg"
+                />
                 <button onClick={() => setQty(i, l.qty + 1)} className="w-6 h-6 rounded-md border border-line bg-transparent cursor-pointer text-fg">+</button>
               </div>
               <span className="w-[90px] text-right tabular-nums">{COP(l.qty * l.price)}</span>

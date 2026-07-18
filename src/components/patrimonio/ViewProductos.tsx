@@ -213,6 +213,12 @@ export default function ViewProductos({ initialData }: { initialData: AllData })
   const { products, customers, bankAccounts } = initialData;
   const [modal, setModal] = useState<{ kind: "new" } | { kind: "edit"; product: Product } | { kind: "compra" } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const visibles = products.filter(p => {
+    const q = search.toLowerCase();
+    return p.name.toLowerCase().includes(q) || (p.category ?? "").toLowerCase().includes(q);
+  });
 
   const suppliers = customers.filter(c => c.kind === "supplier");
   const lowStock = products.filter(p => p.active && p.stock <= p.minStock && p.minStock > 0);
@@ -268,6 +274,15 @@ export default function ViewProductos({ initialData }: { initialData: AllData })
         </div>
       ) : (
         <div className={cardBase}>
+          {products.length > 5 && (
+            <input
+              type="text"
+              className={fieldClass + " mb-3"}
+              placeholder="Buscar por nombre o categoría..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-[13px] border-collapse">
               <thead>
@@ -281,7 +296,7 @@ export default function ViewProductos({ initialData }: { initialData: AllData })
                 </tr>
               </thead>
               <tbody>
-                {products.map(p => {
+                {visibles.map(p => {
                   const margen = p.price > 0 ? ((p.price - p.cost) / p.price) * 100 : 0;
                   const low = p.stock <= p.minStock && p.minStock > 0;
                   return (

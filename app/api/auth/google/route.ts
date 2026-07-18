@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/api-auth";
 
-// Verifica un ID token de Google llamando al endpoint público tokeninfo.
-// Devuelve el JWT propio de la app (Bearer).
+// Verifies a Google ID token against the public tokeninfo endpoint.
+// Returns the app's own JWT (Bearer).
 export async function POST(req: NextRequest) {
   try {
     const { idToken } = await req.json();
