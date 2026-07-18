@@ -420,7 +420,15 @@ type TabId = typeof TABS[number]["id"];
 export default function FloatingCalc({ trm }: { trm?: number | null }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab]   = useState<TabId>("normal");
+  const [isMobile, setIsMobile] = useState(false);
   const panelRef        = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 880);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -439,8 +447,11 @@ export default function FloatingCalc({ trm }: { trm?: number | null }) {
     trm:      <CalcTRM storedTrm={trm} />,
   }[tab];
 
+  const bottomOffset = isMobile ? "calc(env(safe-area-inset-bottom) + 76px)" : "24px";
+  const rightOffset  = isMobile ? "12px" : "24px";
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+    <div className="fixed z-50 flex flex-col items-end gap-3" style={{ bottom: bottomOffset, right: rightOffset }}>
       {open && (
         <div ref={panelRef}
           className="w-80 max-h-[80vh] overflow-y-auto rounded-2xl shadow-2xl flex flex-col"
