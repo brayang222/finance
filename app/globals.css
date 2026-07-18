@@ -33,24 +33,24 @@
   }
 
   [data-theme="light"] {
-    --bg: #f5f4f1;
+    --bg: #f0f0fa;
     --panel: #ffffff;
-    --panel2: #efeeea;
-    --line: #e6e4de;
+    --panel2: #e9e8f6;
+    --line: #dddaf0;
     --fg: #1b1d20;
     --muted: #6c727a;
     --dim: #a2a7ad;
     --pos: #2f8f6a;
     --neg: #c05a54;
     --accent: #1b1d20;
-    --accentFg: #f5f4f1;
-    --chip: #f0efeb;
+    --accentFg: #f0f0fa;
+    --chip: #e9e8f6;
     --line-accent: #1b1d20;
     --indigo: #5254d8;
     --indigo-b: #4344bb;
-    --nav-bg: rgba(245, 244, 241, 0.88);
-    --glow: rgba(83, 85, 216, 0.15);
-    --glow-2: rgba(67, 68, 187, 0.11);
+    --nav-bg: rgba(240, 240, 250, 0.88);
+    --glow: rgba(83, 85, 216, 0.22);
+    --glow-2: rgba(67, 68, 187, 0.14);
     --phone-shadow: 0 40px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.07);
 
     /* legacy tokens */
@@ -358,38 +358,46 @@
   .phone-neg { color: #d67c78; }
   .phone-tab { border-top: 1px solid #1b1e25; }
 
-  .lp-cursor-glow {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 999;
-    background: radial-gradient(400px circle at var(--cx, -300px) var(--cy, -300px), var(--glow) 0%, transparent 40%);
-    transition: background 0s;
+  /* Cursor glow — purple shadow behind the system pointer */
+  .lp-c-ring {
+    position: fixed; top: 0; left: 0;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 65%);
+    pointer-events: none; z-index: 9997; opacity: 0;
+    transition: opacity 0.4s;
+    will-change: transform;
   }
 
-  .lp-glow-hero-1 {
-    position: absolute; top: 20%; right: 15%;
-    width: 600px; height: 600px;
-    background: radial-gradient(circle, var(--glow) 0%, transparent 70%);
+  /* Hero: gradient anchored to top-right (phones) + bottom-left — intentional light source */
+  .hero-section::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 65% 60% at 78% 38%, var(--glow) 0%, transparent 70%),
+      radial-gradient(ellipse 45% 40% at 10% 78%, var(--glow-2) 0%, transparent 65%);
     pointer-events: none;
+    z-index: 0;
   }
-  .lp-glow-hero-2 {
-    position: absolute; bottom: 0; left: 5%;
-    width: 400px; height: 400px;
-    background: radial-gradient(circle, var(--glow-2) 0%, transparent 70%);
+
+  /* Dashboard section: gradient from top-center over the mock */
+  .lp-dash-section::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 60% 45% at 50% -5%, var(--glow) 0%, transparent 65%);
     pointer-events: none;
+    z-index: 0;
   }
-  .lp-glow-dash {
-    position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
-    width: 600px; height: 400px;
-    background: radial-gradient(ellipse, var(--glow) 0%, transparent 70%);
+
+  /* CTA: gradient blooms upward from the heading */
+  .lp-cta-section::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 55% 50% at 50% 20%, var(--glow) 0%, transparent 65%),
+      radial-gradient(ellipse 30% 30% at 20% 80%, var(--glow-2) 0%, transparent 60%);
     pointer-events: none;
-  }
-  .lp-glow-cta {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 500px; height: 400px;
-    background: radial-gradient(ellipse, var(--glow) 0%, transparent 70%);
-    pointer-events: none;
+    z-index: 0;
   }
 
   .lp-dash-mock {
