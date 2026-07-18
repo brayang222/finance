@@ -708,6 +708,43 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── PRIVACY ── */}
+      <section className="landing-section py-16 px-10 bg-bg">
+        <div className="lp-container">
+          <div className="fi-fade mb-10 text-center">
+            <p className="text-sm font-medium text-muted" style={{ letterSpacing: "0.06em", textTransform: "uppercase" }}>Privacidad y seguridad</p>
+          </div>
+          <div className="fi-fade grid grid-cols-1 sm:grid-cols-3 gap-5">
+            {[
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+                title: "Tránsito cifrado",
+                body: "Toda comunicación entre tu dispositivo y el servidor viaja por HTTPS/TLS. Nadie puede interceptarla.",
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>,
+                title: "Base de datos cifrada",
+                body: "La base de datos usa cifrado en disco (Neon TDE). Tus descripciones y notas están cifradas con AES-256 antes de guardarse.",
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+                title: "Tus datos, solo tuyos",
+                body: "No vendemos ni compartimos tu información con terceros. Cada cuenta está completamente aislada.",
+              },
+            ].map(({ icon, title, body }) => (
+              <div key={title} className="bg-panel border border-line rounded-2xl p-6 flex flex-col gap-3">
+                <span className="text-muted">{icon}</span>
+                <p className="font-semibold text-fg text-sm">{title}</p>
+                <p className="text-sm text-muted leading-relaxed">{body}</p>
+              </div>
+            ))}
+          </div>
+          <p className="fi-fade text-center text-xs text-dim mt-8 max-w-lg mx-auto leading-relaxed">
+            Como cualquier app de finanzas con servidor (Fintual, YNAB, Tyba), el administrador técnico podría en teoría acceder a montos y categorías. Nunca lo haremos. Si esto te preocupa, puedes exportar y borrar tus datos en cualquier momento desde Configuración.
+          </p>
+        </div>
+      </section>
+
       {/* ── BOTTOM CTA ── */}
       <section className="landing-section lp-cta-section py-40 px-10 bg-bg text-center relative overflow-hidden">
         <div className="max-w-4xl mx-auto relative">
