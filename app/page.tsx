@@ -162,10 +162,10 @@ function Bullet({ color = "var(--indigo)", children }: { color?: string; childre
 
 // Pill button with trailing arrow circle — Halo style
 function PillBtn({ children, href, dark = false, onClick }: { children: React.ReactNode; href?: string; dark?: boolean; onClick?: () => void }) {
-  const cls = `inline-flex items-center gap-3 font-semibold pl-7 pr-2 py-2 rounded-full text-sm transition-opacity hover:opacity-85 no-underline cursor-pointer ${dark ? "bg-fg text-bg" : "bg-panel border border-line text-fg"}`;
+  const cls = `inline-flex items-center gap-3 font-semibold pl-7 pr-2 py-2 rounded-full text-sm transition-opacity hover:opacity-85 no-underline cursor-pointer ${dark ? "bg-fg lp-pill-dark" : "bg-panel border border-line text-fg"}`;
   const icon = (
-    <span className={`size-8 rounded-full flex items-center justify-center ${dark ? "bg-bg" : "bg-fg"}`}>
-      <ArrowRight className={`w-4 h-4 ${dark ? "text-fg" : "text-bg"}`} />
+    <span className={`size-8 rounded-full flex items-center justify-center ${dark ? "lp-pill-icon" : "bg-fg"}`}>
+      <ArrowRight className={`w-4 h-4 ${dark ? "lp-pill-arrow" : "text-bg"}`} />
     </span>
   );
   if (href) return <Link href={href} className={cls}>{children}{icon}</Link>;
@@ -174,7 +174,7 @@ function PillBtn({ children, href, dark = false, onClick }: { children: React.Re
 
 // Tight section heading — Halo typography style
 function Heading({ children, size = "lg", className = "" }: { children: React.ReactNode; size?: "xl" | "lg" | "md"; className?: string }) {
-  const sz = size === "xl" ? "text-5xl md:text-6xl" : size === "lg" ? "text-4xl md:text-5xl" : "text-3xl md:text-4xl";
+  const sz = size === "xl" ? "text-3xl md:text-5xl lg:text-6xl" : size === "lg" ? "text-2xl md:text-4xl lg:text-5xl" : "text-xl md:text-3xl lg:text-4xl";
   return (
     <h2 className={`font-serif font-light text-fg leading-tight ${sz} ${className}`} style={{ letterSpacing: "-0.03em" }}>
       {children}
@@ -219,7 +219,13 @@ function FeatureMarquee() {
 
 export default function LandingPage() {
   const [isLight, setIsLight] = useState(false);
+  const [toast, setToast] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+
+  const showToast = () => {
+    setToast(true);
+    setTimeout(() => setToast(false), 3000);
+  };
 
   useEffect(() => {
     setIsLight(document.documentElement.getAttribute("data-theme") === "light");
@@ -273,6 +279,18 @@ export default function LandingPage() {
   return (
     <div className="landing-page bg-bg text-fg min-h-screen overflow-x-hidden">
       <div className="lp-c-ring" aria-hidden="true" />
+
+      {/* Toast */}
+      <div style={{
+        position: "fixed", bottom: 28, left: "50%", transform: `translateX(-50%) translateY(${toast ? 0 : 16}px)`,
+        opacity: toast ? 1 : 0, transition: "opacity 0.25s, transform 0.25s",
+        background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 14,
+        padding: "12px 20px", fontSize: 14, fontWeight: 500, color: "var(--fg)",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 9999, pointerEvents: "none",
+        whiteSpace: "nowrap",
+      }}>
+        🍎 iOS próximamente — estamos trabajando en ello
+      </div>
 
       {/* ── NAV ── */}
       <nav ref={navRef} className="fi-nav">
@@ -332,7 +350,7 @@ export default function LandingPage() {
               <Heading size="lg" className="mb-8">Conoce Finance.</Heading>
               <PillBtn href="#funciones" dark>Explorar funciones</PillBtn>
             </div>
-            <p className="text-2xl md:text-3xl leading-relaxed text-muted" style={{ letterSpacing: "-0.01em" }}>
+            <p className="text-base md:text-xl lg:text-2xl leading-relaxed text-muted" style={{ letterSpacing: "-0.01em" }}>
               Una plataforma de finanzas personales construida para la realidad colombiana — inversiones, gastos y metas en un solo lugar.
             </p>
           </div>
@@ -671,7 +689,7 @@ export default function LandingPage() {
             <div>
               <p className="text-sm font-medium text-muted mb-4" style={{ letterSpacing: "0.06em", textTransform: "uppercase" }}>Descarga</p>
               <h2 className="font-serif font-light text-fg leading-tight mb-5 dl-title" style={{ letterSpacing: "-0.04em" }}>Ll&eacute;valo<br />contigo.</h2>
-              <p className="text-lg leading-relaxed text-muted max-w-sm">Disponible para iOS y Android. Sin app store, instalaci&oacute;n directa.</p>
+              <p className="text-lg leading-relaxed text-muted max-w-sm">Disponible para Android. iOS próximamente.</p>
             </div>
             <div>
               <div className="flex flex-col sm:flex-row items-start gap-3.5 mb-6">
@@ -679,10 +697,10 @@ export default function LandingPage() {
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.34L19.4 12.11a.38.38 0 00-.666-.365L16.85 15A11.5 11.5 0 0112 15.75c-1.66 0-3.23-.356-4.635-.987L5.48 11.51a.38.38 0 00-.666.365l1.86 3.22A11.5 11.5 0 000 23.25h24a11.5 11.5 0 00-6.477-7.91zM7.5 6.75a4.5 4.5 0 019 0v2.25a4.5 4.5 0 01-9 0V6.75z" /></svg>
                   <div className="text-left"><div className="text-xs font-normal opacity-65 mb-0.5">Descargar para</div><div>Android</div></div>
                 </a>
-                <a href="/finance.ipa" className="inline-flex items-center gap-3.5 bg-panel2 text-fg border border-line rounded-2xl py-4.5 px-7 font-semibold no-underline min-w-52">
+                <button onClick={showToast} className="inline-flex items-center gap-3.5 bg-panel2 text-fg border border-line rounded-2xl py-4.5 px-7 font-semibold opacity-60 cursor-pointer min-w-52">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" /></svg>
-                  <div className="text-left"><div className="text-xs font-normal opacity-55 mb-0.5">Descargar para</div><div>iOS</div></div>
-                </a>
+                  <div className="text-left"><div className="text-xs font-normal opacity-55 mb-0.5">Próximamente</div><div>iOS</div></div>
+                </button>
               </div>
               <p className="text-xs text-dim font-mono">Versi&oacute;n 1.0 &middot; &Uacute;ltima actualizaci&oacute;n: julio 2026</p>
             </div>
