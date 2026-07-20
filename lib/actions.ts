@@ -650,6 +650,7 @@ export async function hysWithdraw(hysId: string, amount: number, note?: string, 
   if (!hys) throw new Error("Cuenta no encontrada");
   const last = await prisma.hysMovement.findFirst({ where: { hysId }, orderBy: { date: "desc" } });
   const base = last ? compound(last.balance, last.rate, last.date, today) : 0;
+  if (amount > base) throw new Error(`Saldo insuficiente — disponible: ${Math.round(base)}`);
   const newBalance = base - amount;
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },

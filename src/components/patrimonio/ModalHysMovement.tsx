@@ -5,17 +5,20 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { hysDeposit, hysWithdraw, hysChangeRate, hysEditMovement } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
 import type { HysMovement } from "../../types";
 
 type Props =
-  | { mode: "deposit" | "withdraw"; hysId: string; onClose: () => void; editItem?: undefined; bankAccounts?: { id: string; name: string }[] }
+  | { mode: "deposit" | "withdraw"; hysId: string; currentBalance?: number; onClose: () => void; editItem?: undefined; bankAccounts?: { id: string; name: string }[] }
   | { mode: "rate"; hysId: string; currentRate: number; onClose: () => void; editItem?: undefined; bankAccounts?: { id: string; name: string }[] }
   | { mode: "edit"; hysId?: string; editItem: HysMovement; onClose: () => void; bankAccounts?: { id: string; name: string }[] };
 
 export default function ModalHysMovement(props: Props) {
   const { mode, onClose } = props;
   const bankAccounts = props.bankAccounts ?? [];
+  const currentBalance = (props.mode === "withdraw" && props.currentBalance) ? props.currentBalance : Infinity;
   const router = useRouter();
+  const toast = useToast();
   const [amount, setAmount] = useState(props.mode === "edit" ? String(Math.round(props.editItem.amount)) : "");
   const [note, setNote] = useState(props.mode === "edit" ? (props.editItem.note ?? "") : "");
   const [date, setDate] = useState(props.mode === "edit" ? props.editItem.date : today());
@@ -28,10 +31,11 @@ export default function ModalHysMovement(props: Props) {
   const amountVal = Number(amount.replace(/\./g, "")) || 0;
   const rateVal = parseFloat(rate) || 0;
 
+  const overBalance = mode === "withdraw" && amountVal > currentBalance;
   const canSave =
     mode === "rate" ? rateVal > 0
     : mode === "edit" ? amountVal > 0
-    : amountVal > 0;
+    : amountVal > 0 && !overBalance;
 
   const titles: Record<string, string> = {
     deposit: "Depositar",
@@ -55,6 +59,8 @@ export default function ModalHysMovement(props: Props) {
       }
       router.refresh();
       onClose();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al guardar");
     } finally {
       setSaving(false);
     }
@@ -81,6 +87,11 @@ export default function ModalHysMovement(props: Props) {
           <div>
             <label className={labelClass}>Monto</label>
             <MoneyInput value={amount} onChange={setAmount} prefix="$" />
+            {overBalance && (
+              <p className="text-[11.5px] mt-1" style={{ color: "var(--color-neg, #f87171)" }}>
+                Saldo insuficiente — disponible: ${Math.round(currentBalance).toLocaleString("es-CO")}
+              </p>
+            )}
           </div>
           {mode === "edit" && (
             <div>

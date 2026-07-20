@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { addTransfer } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
 import type { BankAccount, Cash } from "../../types";
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 
 export default function ModalTransfer({ bankAccounts, cash, hasHys, fromAccountId, onClose }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const [from, setFrom] = useState(fromAccountId ?? "cash");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -38,13 +40,19 @@ export default function ModalTransfer({ bankAccounts, cash, hasHys, fromAccountI
   const save = async () => {
     if (!valid) return;
     setSaving(true);
-    await addTransfer({
-      fromAccountId: from, fromAccountName: accountName(from),
-      toAccountId: to, toAccountName: accountName(to),
-      amount: amountNum, note: note || undefined, date,
-    });
-    router.refresh();
-    onClose();
+    try {
+      await addTransfer({
+        fromAccountId: from, fromAccountName: accountName(from),
+        toAccountId: to, toAccountName: accountName(to),
+        amount: amountNum, note: note || undefined, date,
+      });
+      router.refresh();
+      onClose();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al transferir");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

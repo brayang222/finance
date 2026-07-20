@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { today, COP } from "../../data/mock";
 import { sellStock, sellCrypto } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
 import type { BankAccount, Stock, Crypto } from "../../types";
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
 
 export default function ModalSellInvestment({ item, kind, bankAccounts, hasHys, currentPrice, onClose }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const cost = item.priceCOP * item.qty + item.commission;
   const suggested = currentPrice ? currentPrice * item.qty : cost;
 
@@ -40,13 +42,19 @@ export default function ModalSellInvestment({ item, kind, bankAccounts, hasHys, 
   const save = async () => {
     if (!valid) return;
     setSaving(true);
-    if (kind === "stock") {
-      await sellStock(item.id, sellNum, toAccount, accountName(toAccount), date);
-    } else {
-      await sellCrypto(item.id, sellNum, toAccount, accountName(toAccount), date);
+    try {
+      if (kind === "stock") {
+        await sellStock(item.id, sellNum, toAccount, accountName(toAccount), date);
+      } else {
+        await sellCrypto(item.id, sellNum, toAccount, accountName(toAccount), date);
+      }
+      router.refresh();
+      onClose();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al registrar la venta");
+    } finally {
+      setSaving(false);
     }
-    router.refresh();
-    onClose();
   };
 
   return (

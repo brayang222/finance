@@ -3,9 +3,33 @@ import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+const SITE_URL = "https://financials-app.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Finance",
-  description: "Control de finanzas personales",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Finance — Controla tus finanzas personales y las de tu negocio",
+    template: "%s | Finance",
+  },
+  description:
+    "App gratuita para registrar gastos, presupuestos, deudas, inversiones y las ventas de tu negocio. Hecha para Colombia: en pesos, con fiado, caja y Bre-B.",
+  keywords: [
+    "finanzas personales", "control de gastos", "app de finanzas colombia",
+    "presupuesto personal", "registro de ventas negocio", "educación financiera",
+  ],
+  applicationName: "Finance",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "Finance",
+    locale: "es_CO",
+    title: "Finance — Controla tus finanzas personales y las de tu negocio",
+    description:
+      "Registra gastos, presupuestos, deudas y las ventas de tu negocio en segundos. Gratis y hecha para Colombia.",
+  },
+  twitter: { card: "summary_large_image" },
+  robots: { index: true, follow: true },
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
@@ -21,7 +45,31 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify([
+              {
+                "@context": "https://schema.org",
+                "@type": "Organization",
+                name: "Finance",
+                url: SITE_URL,
+                logo: `${SITE_URL}/icon.png`,
+                description: "App de finanzas personales y de negocio para Colombia.",
+              },
+              {
+                "@context": "https://schema.org",
+                "@type": "WebSite",
+                name: "Finance",
+                url: SITE_URL,
+                inLanguage: "es-CO",
+              },
+            ]),
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

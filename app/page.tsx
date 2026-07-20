@@ -176,6 +176,7 @@ export default function LandingPage() {
           <div className="nav-links flex gap-8">
             <a href="#conoce" className="nav-link">Funciones</a>
             <a href="#descargar" className="nav-link">Descargar</a>
+            <Link href="/blog" className="nav-link">Blog</Link>
             <Link href="/help" className="nav-link">Ayuda</Link>
           </div>
           <div className="flex items-center gap-3">
@@ -694,6 +695,8 @@ export default function LandingPage() {
         <div className="lp-container flex items-center justify-between flex-wrap gap-4">
           <span className="font-serif text-sm font-medium text-dim" style={{ letterSpacing: "-0.02em" }}>Finance &middot; 2026</span>
           <div className="flex gap-6">
+            <Link href="/blog" className="text-sm text-dim">Blog</Link>
+            <Link href="/herramientas" className="text-sm text-dim">Herramientas</Link>
             <Link href="/help" className="text-sm text-dim">Ayuda</Link>
             <Link href="/login" className="text-sm text-dim">Entrar</Link>
             <a href="#descargar" className="text-sm text-dim">Descargar</a>

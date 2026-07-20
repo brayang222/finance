@@ -1,0 +1,51 @@
+"use client";
+
+import { useState } from "react";
+import { SMMLV, AUX_TRANSPORTE, fmtCOP } from "../valores";
+
+const field =
+  "w-full rounded-xl border px-4 py-3 text-[15px] outline-none bg-transparent";
+
+export default function CalcCesantias() {
+  const [salario, setSalario] = useState("");
+  const [dias, setDias] = useState("360");
+
+  const s = Number(salario.replace(/\D/g, "")) || 0;
+  const d = Math.max(0, Math.min(360, Number(dias.replace(/\D/g, "")) || 0));
+  const aux = s > 0 && s <= 2 * SMMLV ? AUX_TRANSPORTE : 0;
+  const base = s + aux;
+  const cesantias = (base * d) / 360;
+  const intereses = cesantias * 0.12 * (d / 360);
+
+  return (
+    <div className="rounded-2xl border p-6 flex flex-col gap-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+      <div>
+        <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Salario mensual</label>
+        <input type="text" inputMode="numeric" placeholder={`Ej: ${SMMLV.toLocaleString("es-CO")}`}
+          className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
+          value={salario ? Number(salario.replace(/\D/g, "")).toLocaleString("es-CO") : ""}
+          onChange={(e) => setSalario(e.target.value)} />
+      </div>
+      <div>
+        <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Días trabajados en el año (máx. 360)</label>
+        <input type="text" inputMode="numeric" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
+          value={dias} onChange={(e) => setDias(e.target.value)} />
+      </div>
+      {s > 0 && d > 0 && (
+        <div className="rounded-xl p-5 flex flex-col gap-2" style={{ background: "var(--panel2)" }}>
+          <div className="flex items-baseline justify-between text-[14px]">
+            <span style={{ color: "var(--muted)" }}>Cesantías (al fondo, antes del 14 de febrero)</span>
+            <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--fg)" }}>{fmtCOP(cesantias)}</span>
+          </div>
+          <div className="flex items-baseline justify-between text-[14px]">
+            <span style={{ color: "var(--muted)" }}>Intereses 12% (a tu bolsillo, antes del 31 de enero)</span>
+            <span className="text-xl font-semibold tabular-nums" style={{ color: "var(--pos)" }}>{fmtCOP(intereses)}</span>
+          </div>
+          <div className="text-[13px] mt-1" style={{ color: "var(--muted)" }}>
+            Base: {fmtCOP(s)}{aux > 0 ? ` + ${fmtCOP(aux)} de auxilio de transporte` : " (sin auxilio: salario mayor a 2 SMMLV)"} × {d} ÷ 360
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

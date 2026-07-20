@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBankAccount, updateBankAccount } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
 import type { BankAccount } from "../../types";
 
 const TYPES = [
@@ -15,6 +16,7 @@ const TYPES = [
 
 export default function ModalCuenta({ onClose, editItem }: { onClose: () => void; editItem?: BankAccount }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName]       = useState(editItem?.name ?? "");
   const [bank, setBank]       = useState(editItem?.bank ?? "");
   const [type, setType]       = useState(editItem?.type ?? "banco");
@@ -35,6 +37,8 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
       }
       router.refresh();
       onClose();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al guardar la cuenta");
     } finally {
       setSaving(false);
     }

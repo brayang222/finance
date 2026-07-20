@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { today } from "../../data/mock";
 import { addStock, updateStock } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
+import { useToast } from "./Toast";
 import type { Stock, BankAccount } from "../../types";
 
 const num = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
 
 export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Stock; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [ticker, setTicker] = useState(editItem?.ticker ?? "");
   const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
   const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
@@ -45,6 +47,8 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
       }
       router.refresh();
       onClose();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al guardar la acción");
     } finally {
       setSaving(false);
     }

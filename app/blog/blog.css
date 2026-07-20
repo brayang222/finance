@@ -1,0 +1,47 @@
+/* Estilos del cuerpo de los artículos del blog (HTML estático de content/posts.ts) */
+.post-body {
+  color: var(--muted);
+  font-size: 15.5px;
+  line-height: 1.75;
+}
+.post-body h2 {
+  font-family: var(--font-serif, "Spectral", serif);
+  font-weight: 500;
+  color: var(--fg);
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  margin: 2em 0 0.6em;
+}
+.post-body p { margin: 0 0 1em; }
+.post-body strong { color: var(--fg); font-weight: 600; }
+.post-body ul, .post-body ol { margin: 0 0 1.2em; padding-left: 1.3em; display: flex; flex-direction: column; gap: 0.4em; }
+.post-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0 1.5em;
+  font-size: 14px;
+}
+.post-body th, .post-body td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.post-body th { color: var(--fg); font-weight: 600; font-size: 12.5px; }
+.post-body td:last-child, .post-body th:last-child { text-align: right; white-space: nowrap; }
+.post-body em { color: var(--fg); }
+
+.faq-item summary {
+  cursor: pointer;
+  color: var(--fg);
+  font-weight: 500;
+  font-size: 14.5px;
+  padding: 14px 0;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.faq-item summary::after { content: "+"; color: var(--muted); }
+.faq-item[open] summary::after { content: "−"; }
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-item p { color: var(--muted); font-size: 14px; line-height: 1.7; margin: 0 0 14px; }
