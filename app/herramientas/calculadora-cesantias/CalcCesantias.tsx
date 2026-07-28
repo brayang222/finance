@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SMMLV, AUX_TRANSPORTE, fmtCOP } from "../valores";
 
 const field =
-  "w-full rounded-xl border px-4 py-3 text-[15px] outline-none bg-transparent";
+  "w-full rounded-xl border px-4 py-3 text-[15px] bg-transparent";
 
 export default function CalcCesantias() {
   const [salario, setSalario] = useState("");
@@ -20,19 +20,19 @@ export default function CalcCesantias() {
   return (
     <div className="rounded-2xl border p-6 flex flex-col gap-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
       <div>
-        <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Salario mensual</label>
-        <input type="text" inputMode="numeric" placeholder={`Ej: ${SMMLV.toLocaleString("es-CO")}`}
+        <label htmlFor="salario" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Salario mensual</label>
+        <input id="salario" type="text" inputMode="numeric" placeholder={`Ej: ${SMMLV.toLocaleString("es-CO")}`}
           className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
           value={salario ? Number(salario.replace(/\D/g, "")).toLocaleString("es-CO") : ""}
           onChange={(e) => setSalario(e.target.value)} />
       </div>
       <div>
-        <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Días trabajados en el año (máx. 360)</label>
-        <input type="text" inputMode="numeric" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
+        <label htmlFor="dias" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Días trabajados en el año (máx. 360)</label>
+        <input id="dias" type="text" inputMode="numeric" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
           value={dias} onChange={(e) => setDias(e.target.value)} />
       </div>
       {s > 0 && d > 0 && (
-        <div className="rounded-xl p-5 flex flex-col gap-2" style={{ background: "var(--panel2)" }}>
+        <div aria-live="polite" className="rounded-xl p-5 flex flex-col gap-2" style={{ background: "var(--panel2)" }}>
           <div className="flex items-baseline justify-between text-[14px]">
             <span style={{ color: "var(--muted)" }}>Cesantías (al fondo, antes del 14 de febrero)</span>
             <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--fg)" }}>{fmtCOP(cesantias)}</span>

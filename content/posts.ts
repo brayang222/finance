@@ -643,6 +643,110 @@ export const posts: Post[] = [
 <h2>8. Mezclar la plata del negocio con la personal</h2>
 <p>El clásico de tenderos y emprendedores: la caja del negocio paga el mercado de la casa y nadie sabe si el negocio de verdad da utilidad. <strong>Solución:</strong> cuentas separadas y registro aparte — en Finance puedes llevar el perfil personal y el del negocio separados en la misma app.</p>`,
   },
+  {
+    slug: "nequi-vs-daviplata-cual-elegir",
+    title: "¿Nequi o Daviplata? Cuál elegir según tu uso",
+    description:
+      "Comparamos Nequi y Daviplata: apertura, funciones, bolsillos, Bre-B y para quién es mejor cada una. La respuesta corta: depende de tu ecosistema.",
+    keywords: ["nequi vs daviplata", "cuál es mejor nequi o daviplata", "billeteras digitales colombia", "comparación nequi daviplata"],
+    date: "2026-07-19",
+    category: "Bancos digitales",
+    minutes: 4,
+    faqs: [
+      { q: "¿Puedo tener Nequi y Daviplata al mismo tiempo?", a: "Sí, y es lo que hace la mayoría: no compiten entre sí para el usuario. Muchos usan una para el día a día y otra para recibir pagos o separar la plata del negocio." },
+      { q: "¿La plata en estas billeteras está protegida?", a: "Ambas operan como depósitos en entidades vigiladas por la Superfinanciera y cuentan con la protección del sistema financiero. No son 'apps sueltas': detrás están Bancolombia y Davivienda." },
+      { q: "¿Cuál rinde más?", a: "Ninguna de las dos es un producto de inversión: para poner la plata a rentar usa sus opciones de bolsillos remunerados si están disponibles, o un CDT digital. La billetera es para mover plata, no para guardarla a largo plazo." },
+    ],
+    html: `
+<p>Las dos billeteras más usadas de Colombia hacen lo mismo en esencia — guardar, enviar y recibir plata desde el celular, gratis y sin papeleo. La diferencia está en el <strong>ecosistema</strong> al que pertenecen y en detalles de uso diario.</p>
+<h2>Lo que comparten</h2>
+<ul>
+<li>Apertura en minutos solo con cédula y celular, sin cuota de manejo.</li>
+<li>Transferencias inmediatas con <strong>Bre-B</strong> hacia cualquier banco o billetera.</li>
+<li>Recargas, retiros en corresponsales y cajeros, pagos de servicios y compras.</li>
+<li>Pueden marcarse como cuenta exenta del 4x1000.</li>
+</ul>
+<h2>Dónde se diferencian</h2>
+<p><strong>Nequi</strong> (Bancolombia) brilla en organización: bolsillos para separar metas, apartados automáticos y una integración natural si tú o tus clientes ya se mueven en el mundo Bancolombia — que en Colombia es media población.</p>
+<p><strong>Daviplata</strong> (Davivienda) es fuerte en cobertura y simpleza: fue la billetera de los subsidios estatales, la conoce todo el mundo y funciona muy bien como canal de cobro en negocios de barrio donde "¿tienes Daviplata?" es pregunta estándar.</p>
+<h2>Cuál elegir</h2>
+<ul>
+<li><strong>Para tu día a día:</strong> la del ecosistema donde ya está tu nómina o tu banco principal — menos fricción y menos comisiones cruzadas.</li>
+<li><strong>Para tu negocio:</strong> la que usen más tus clientes. En la práctica: ambas, y con Bre-B la diferencia cada vez importa menos.</li>
+<li><strong>Para ahorrar:</strong> ninguna como destino final — usa la billetera para mover, y un CDT o cuenta remunerada para guardar.</li>
+</ul>
+<p>El error real no es elegir mal la billetera: es dejar la plata regada entre varias sin saber cuánto hay en total. Sea cual sea tu combinación, consolida el panorama en un solo lugar.</p>`,
+  },
+  {
+    slug: "cdt-vs-cuenta-de-ahorros-donde-poner-la-plata",
+    title: "¿CDT o cuenta de ahorros? Dónde poner tu plata",
+    description:
+      "CDT: más tasa, plata inmovilizada. Cuenta remunerada: menos tasa, disponible ya. Cuándo usar cada uno y la estrategia mixta que aprovecha ambos.",
+    keywords: ["cdt o cuenta de ahorros", "dónde poner la plata", "cuenta remunerada vs cdt", "dónde ahorrar colombia"],
+    date: "2026-07-19",
+    category: "Inversión",
+    minutes: 4,
+    faqs: [
+      { q: "¿Y si necesito la plata antes del vencimiento del CDT?", a: "Ese es exactamente el riesgo del CDT: no puedes retirarla (o pagas penalidad). Por eso el fondo de emergencia va en cuenta remunerada o fondo de inversión líquido, y al CDT solo va plata con fecha conocida." },
+      { q: "¿Qué es mejor para el fondo de emergencia?", a: "Cuenta de ahorros remunerada o fondo de inversión conservador: disponibilidad en horas. Como mucho, la porción de los meses 3-6 del fondo puede ir en CDTs cortos escalonados." },
+      { q: "¿Las cuentas de ahorro tradicionales no sirven?", a: "Una cuenta que paga 0,1% con inflación del 5% pierde plata en términos reales. Si tu banco no te remunera el saldo, muévelo: hay cuentas digitales que pagan varios puntos sin sacrificar disponibilidad." },
+    ],
+    html: `
+<p>La pregunta correcta no es cuál es mejor, sino <strong>para qué plata</strong>. Cada instrumento gana en su terreno:</p>
+<h2>Cara a cara</h2>
+<table><thead><tr><th>Criterio</th><th>CDT</th><th>Cuenta remunerada</th></tr></thead><tbody>
+<tr><td>Tasa</td><td>Mayor (pactada fija)</td><td>Menor (variable)</td></tr>
+<tr><td>Disponibilidad</td><td>Al vencimiento</td><td>Inmediata</td></tr>
+<tr><td>Riesgo de tasa</td><td>Cero: queda pactada</td><td>Puede bajar mañana</td></tr>
+<tr><td>Ideal para</td><td>Metas con fecha</td><td>Fondo de emergencia</td></tr>
+<tr><td>Protección</td><td colspan="2">Ambos: Fogafín hasta $50 millones por entidad</td></tr>
+</tbody></table>
+<h2>La decisión en una regla</h2>
+<p><strong>¿Sabes cuándo necesitarás la plata?</strong> Si la fecha es conocida (prima de diciembre, matrícula de enero, viaje de junio), el CDT te da más tasa sin riesgo real, porque no la tocarás antes. Si la fecha es "no sé, cuando pase algo" — emergencias — la liquidez vale más que los puntos extra de tasa.</p>
+<h2>La estrategia mixta (lo que hacen los que saben)</h2>
+<ol>
+<li><strong>Cuenta remunerada:</strong> fondo de emergencia y flujo del mes.</li>
+<li><strong>CDTs escalonados:</strong> el ahorro de mediano plazo dividido en varios CDT con vencimientos cada 90 días — tasa de CDT con liquidez trimestral.</li>
+<li><strong>Renovación consciente:</strong> al vencer cada CDT, compara el mercado antes de renovar; la renovación automática suele pagar menos.</li>
+</ol>
+<p>Lo único imperdonable es la plata grande quieta en una cuenta al 0%: ahí la inflación te cobra un "impuesto" silencioso todos los meses.</p>`,
+  },
+  {
+    slug: "colpensiones-vs-fondo-privado-donde-cotizar",
+    title: "¿Colpensiones o fondo privado? Dónde cotizar pensión",
+    description:
+      "Prima media vs ahorro individual: cómo calcula la pensión cada régimen, para quién conviene cada uno y qué considerar antes de un traslado.",
+    keywords: ["colpensiones o fondo privado", "dónde cotizar pensión", "régimen de prima media", "traslado de fondo de pensiones"],
+    date: "2026-07-19",
+    category: "Pensión",
+    minutes: 5,
+    faqs: [
+      { q: "¿Puedo cambiarme de régimen cuando quiera?", a: "Los traslados tienen reglas y plazos (históricamente, hasta 10 años antes de la edad de pensión). Antes de decidir, pide la doble asesoría obligatoria: ambas entidades deben mostrarte proyecciones de tu pensión en cada régimen." },
+      { q: "¿Qué pasó con la reforma pensional?", a: "La reforma aprobada en 2024 plantea un sistema de pilares donde los aportes hasta cierto nivel van al componente público. Su implementación ha estado sujeta a decisiones judiciales, así que verifica el estado vigente en Colpensiones o tu fondo antes de tomar decisiones de traslado." },
+      { q: "¿Si soy independiente también debo cotizar?", a: "Sí, sobre al menos el 40% de tus ingresos mensualizados (mínimo sobre un salario mínimo). Cada año sin cotizar son semanas que después no se recuperan — y las semanas son el requisito más difícil de completar." },
+    ],
+    html: `
+<p>En Colombia han coexistido dos formas de construir pensión, y la diferencia de resultado entre una y otra puede ser <strong>enorme</strong> según tu perfil:</p>
+<h2>Cómo funciona cada uno</h2>
+<ul>
+<li><strong>Colpensiones (prima media):</strong> tus aportes van a una bolsa común. La pensión se calcula sobre el <em>promedio salarial de tus últimos 10 años</em> y las semanas cotizadas — no sobre cuánto acumulaste. Con los requisitos completos, la mesada es predecible y de por vida.</li>
+<li><strong>Fondo privado (ahorro individual):</strong> tus aportes van a <em>tu cuenta</em>, se invierten y generan rendimientos. Tu pensión depende del capital que logres acumular. Permite pensionarse antes si el capital alcanza, y el saldo es heredable.</li>
+</ul>
+<h2>Para quién suele ganar cada uno</h2>
+<table><thead><tr><th>Perfil</th><th>Suele convenir</th></tr></thead><tbody>
+<tr><td>Salarios altos al final de la carrera</td><td>Colpensiones (promedia solo los últimos años)</td></tr>
+<tr><td>Ingresos variables o carrera corta</td><td>Fondo privado (todo aporte suma capital)</td></tr>
+<tr><td>Quien valora herencia del ahorro</td><td>Fondo privado</td></tr>
+<tr><td>Quien valora mesada garantizada</td><td>Colpensiones</td></tr>
+</tbody></table>
+<h2>Antes de decidir (o trasladarte)</h2>
+<ol>
+<li>Pide la <strong>doble asesoría</strong>: es obligatoria y gratuita — ambas entidades deben proyectarte tu pensión en cada régimen con tus números reales.</li>
+<li>Revisa tu <strong>historia laboral</strong> en ambos sistemas: semanas mal registradas son plata perdida y se corrigen con reclamo.</li>
+<li>Ten presente que la <strong>reforma pensional</strong> aprobada en 2024 plantea un sistema de pilares; su implementación ha estado en manos de los tribunales — confirma las reglas vigentes antes de firmar un traslado.</li>
+</ol>
+<p>Y la regla que aplica en ambos regímenes: el peor escenario no es elegir "mal" — es dejar de cotizar. Las semanas no se improvisan a los 60.</p>`,
+  },
 ];
 
 export const getPost = (slug: string) => posts.find((p) => p.slug === slug);

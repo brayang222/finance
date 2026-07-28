@@ -11,6 +11,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/herramientas/calculadora-prima`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/herramientas/calculadora-liquidacion`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/herramientas/calculadora-cesantias`, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/herramientas/fecha-declaracion-renta`, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/herramientas/calculadora-pago-deudas`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/herramientas/calculadora-interes-compuesto`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/datos/salario-minimo-historico`, changeFrequency: "yearly", priority: 0.7 },
     { url: `${SITE_URL}/datos/uvt-historica`, changeFrequency: "yearly", priority: 0.7 },

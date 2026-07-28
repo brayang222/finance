@@ -12,6 +12,11 @@ export const metadata: Metadata = {
 
 const tools = [
   {
+    href: "/herramientas/fecha-declaracion-renta",
+    name: `¿Cuándo me toca declarar renta?`,
+    desc: "Tu fecha límite exacta del calendario DIAN, según tu cédula.",
+  },
+  {
     href: "/herramientas/calculadora-liquidacion",
     name: `Calculadora de liquidación laboral`,
     desc: "Cesantías, intereses, prima y vacaciones al terminar tu contrato.",

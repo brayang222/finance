@@ -1,10 +1,9 @@
 import { ImageResponse } from "next/og";
 
-export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
-export const alt = "Finance — Controla tus finanzas personales y las de tu negocio";
-
-export default function Image() {
+// Imagen Open Graph del sitio (1200x630) como route handler.
+// El convenio opengraph-image.tsx rompe las páginas con Turbopack
+// (require is not defined) — misma razón que en /blog/og/[slug].
+export function GET() {
   return new ImageResponse(
     (
       <div
@@ -29,6 +28,6 @@ export default function Image() {
         </div>
       </div>
     ),
-    size,
+    { width: 1200, height: 630 },
   );
 }

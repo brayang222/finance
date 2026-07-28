@@ -315,7 +315,7 @@ export default function LandingPage() {
             ].flat().map((s, i) => (
               <div key={i} className="shrink-0 flex flex-col items-center gap-3">
                 <div className="phone-shell overflow-hidden relative" style={{ width: 180, height: 380 }}>
-                  <img src={s.src} alt={s.alt} className="absolute inset-0 w-full h-full object-cover object-top" />
+                  <img src={s.src} alt={s.alt} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover object-top" />
                 </div>
                 <span className="text-xs text-dim font-mono">{s.label}</span>
               </div>

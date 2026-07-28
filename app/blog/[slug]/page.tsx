@@ -125,12 +125,12 @@ export default async function BlogPost({ params }: Props) {
           className="no-underline inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
           style={{ background: "#1faa53", color: "#ffffff" }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.4 14.1c-.2.7-1.3 1.3-1.9 1.4-.5.1-1.1.2-3.6-.8-3-1.2-4.9-4.3-5.1-4.5-.1-.2-1.2-1.6-1.2-3.1s.8-2.2 1-2.5c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .6l-.4.6-.5.6c-.2.2-.3.4-.1.7.2.3.8 1.4 1.8 2.2 1.2 1.1 2.3 1.4 2.6 1.6.3.1.5.1.7-.1l1-1.2c.2-.3.4-.2.7-.1l2.1 1c.3.2.5.3.6.4.1.2.1.7-.1 1.4z" />
           </svg>
           Compartir por WhatsApp
         </a>
-        <span className="text-xs" style={{ color: "var(--dim)" }}>Ayuda a alguien que se esté haciendo esta pregunta</span>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>Ayuda a alguien que se esté haciendo esta pregunta</span>
       </div>
 
       <div className="mt-10 flex items-center gap-3 rounded-2xl border p-5" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>

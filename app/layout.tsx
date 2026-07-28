@@ -27,6 +27,7 @@ export const metadata: Metadata = {
     title: "Finance — Controla tus finanzas personales y las de tu negocio",
     description:
       "Registra gastos, presupuestos, deudas y las ventas de tu negocio en segundos. Gratis y hecha para Colombia.",
+    images: [{ url: `${SITE_URL}/og`, width: 1200, height: 630 }],
   },
   twitter: { card: "summary_large_image" },
   robots: { index: true, follow: true },

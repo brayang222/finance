@@ -4,7 +4,7 @@ import { useState } from "react";
 import { fmtCOP } from "../valores";
 
 const field =
-  "w-full rounded-xl border px-4 py-3 text-[15px] outline-none bg-transparent";
+  "w-full rounded-xl border px-4 py-3 text-[15px] bg-transparent";
 
 export default function CalcInteres() {
   const [aporte, setAporte] = useState("");
@@ -22,26 +22,26 @@ export default function CalcInteres() {
   return (
     <div className="rounded-2xl border p-6 flex flex-col gap-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
       <div>
-        <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Aporte mensual</label>
-        <input type="text" inputMode="numeric" placeholder="Ej: 200.000"
+        <label htmlFor="aporte" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Aporte mensual</label>
+        <input id="aporte" type="text" inputMode="numeric" placeholder="Ej: 200.000"
           className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
           value={aporte ? Number(aporte.replace(/\D/g, "")).toLocaleString("es-CO") : ""}
           onChange={(e) => setAporte(e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Rentabilidad anual (E.A. %)</label>
-          <input type="text" inputMode="decimal" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
+          <label htmlFor="tasa" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Rentabilidad anual (E.A. %)</label>
+          <input id="tasa" type="text" inputMode="decimal" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
             value={tasa} onChange={(e) => setTasa(e.target.value)} />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Años</label>
-          <input type="text" inputMode="numeric" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
+          <label htmlFor="anios" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Años</label>
+          <input id="anios" type="text" inputMode="numeric" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
             value={años} onChange={(e) => setAños(e.target.value)} />
         </div>
       </div>
       {a > 0 && y > 0 && (
-        <div className="rounded-xl p-5 flex flex-col gap-2" style={{ background: "var(--panel2)" }}>
+        <div aria-live="polite" className="rounded-xl p-5 flex flex-col gap-2" style={{ background: "var(--panel2)" }}>
           <div className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Tendrías en {y} años</div>
           <div className="text-4xl font-semibold tabular-nums" style={{ color: "var(--fg)" }}>{fmtCOP(futuro)}</div>
           <div className="flex items-baseline justify-between text-[14px] mt-1">

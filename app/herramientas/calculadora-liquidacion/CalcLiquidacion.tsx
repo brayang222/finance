@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SMMLV, AUX_TRANSPORTE, fmtCOP } from "../valores";
 
 const field =
-  "w-full rounded-xl border px-4 py-3 text-[15px] outline-none bg-transparent";
+  "w-full rounded-xl border px-4 py-3 text-[15px] bg-transparent";
 
 // Convención laboral colombiana: año de 360 días, meses de 30. Conteo inclusivo.
 function dias360(a: Date, b: Date) {
@@ -55,8 +55,9 @@ export default function CalcLiquidacion() {
   return (
     <div className="rounded-2xl border p-6 flex flex-col gap-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
       <div>
-        <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Salario mensual</label>
+        <label htmlFor="salario" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Salario mensual</label>
         <input
+          id="salario"
           type="text" inputMode="numeric" placeholder={`Ej: ${SMMLV.toLocaleString("es-CO")}`}
           className={field} style={{ borderColor: "var(--line)", color: "var(--fg)" }}
           value={salario ? Number(salario.replace(/\D/g, "")).toLocaleString("es-CO") : ""}
@@ -65,18 +66,18 @@ export default function CalcLiquidacion() {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Fecha de ingreso</label>
-          <input type="date" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)", colorScheme: "inherit" }}
+          <label htmlFor="inicio" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Fecha de ingreso</label>
+          <input id="inicio" type="date" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)", colorScheme: "inherit" }}
             value={inicio} onChange={(e) => setInicio(e.target.value)} />
         </div>
         <div>
-          <label className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Último día trabajado</label>
-          <input type="date" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)", colorScheme: "inherit" }}
+          <label htmlFor="fin" className="text-xs uppercase tracking-widest" style={{ color: "var(--muted)" }}>Último día trabajado</label>
+          <input id="fin" type="date" className={field} style={{ borderColor: "var(--line)", color: "var(--fg)", colorScheme: "inherit" }}
             value={fin} onChange={(e) => setFin(e.target.value)} />
         </div>
       </div>
       {ok && (
-        <div className="rounded-xl p-5 flex flex-col gap-2.5" style={{ background: "var(--panel2)" }}>
+        <div aria-live="polite" className="rounded-xl p-5 flex flex-col gap-2.5" style={{ background: "var(--panel2)" }}>
           {rows.map((r) => (
             <div key={r.label} className="flex items-baseline justify-between gap-3 text-[14px]">
               <span style={{ color: "var(--muted)" }}>{r.label} <span className="text-xs" style={{ color: "var(--dim)" }}>· {r.note}</span></span>
@@ -89,7 +90,7 @@ export default function CalcLiquidacion() {
           </div>
         </div>
       )}
-      <p className="text-xs leading-relaxed m-0" style={{ color: "var(--dim)" }}>
+      <p className="text-xs leading-relaxed m-0" style={{ color: "var(--muted)" }}>
         Estimación con salario fijo, sin vacaciones tomadas ni indemnización por despido. Las cesantías y prima
         de periodos anteriores ya consignadas no se incluyen. No reemplaza el cálculo oficial de tu empleador.
       </p>

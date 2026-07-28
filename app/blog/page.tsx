@@ -17,6 +17,7 @@ export const metadata: Metadata = {
     siteName: "Finance",
     locale: "es_CO",
     type: "website",
+    images: [{ url: `${SITE_URL}/og`, width: 1200, height: 630 }],
   },
 };
 
