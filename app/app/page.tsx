@@ -67,7 +67,18 @@ export default function Page() {
           </div>
         ))}
       </div>
-      <p className="text-xs mt-8" style={{ color: "var(--dim)" }}>
+      <div className="mt-10 rounded-2xl border p-6" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <div className="text-[11px] uppercase tracking-widest mb-3" style={{ color: "var(--muted)" }}>
+          Lo que no vas a encontrar aquí
+        </div>
+        <ul className="m-0 p-0 list-none flex flex-col gap-2 text-sm" style={{ color: "var(--muted)" }}>
+          <li><strong style={{ color: "var(--fg)" }}>Anuncios</strong> — tu información financiera no es una valla publicitaria.</li>
+          <li><strong style={{ color: "var(--fg)" }}>Datos secuestrados</strong> — exporta tus movimientos, ventas y fiado a CSV cuando quieras.</li>
+          <li><strong style={{ color: "var(--fg)" }}>Pánico al cambiar de celular</strong> — todo vive en tu cuenta, no en el teléfono.</li>
+          <li><strong style={{ color: "var(--fg)" }}>Dependencia total del internet</strong> — consulta tus datos sin señal, y las ventas del negocio se guardan y envían solas al reconectar.</li>
+        </ul>
+      </div>
+      <p className="text-xs mt-8" style={{ color: "var(--muted)" }}>
         Para instalar el APK, permite "instalar apps de origen desconocido" en tu Android.
         Versión iOS: usa la web desde Safari y agrégala a tu pantalla de inicio.
       </p>

@@ -36,6 +36,11 @@ const tools = [
     name: `Calculadora de interés compuesto`,
     desc: "Cuánto crece tu ahorro con aportes mensuales, año tras año.",
   },
+  {
+    href: "/herramientas/calculadora-pago-deudas",
+    name: `Calculadora de pago de deudas`,
+    desc: "Cuándo terminas de pagar y cuánto ahorras con un abono extra.",
+  },
 ];
 
 export default function Page() {
