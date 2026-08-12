@@ -629,7 +629,11 @@ export async function initHys(initialBalance: number, rate: number, name = "Nuba
   return hys.id;
 }
 
-export async function hysDeposit(hysId: string, amount: number, note?: string, accountId?: string) {
+// `amount` siempre está en la moneda nativa de la cuenta HYS (USD si currency==="USD").
+// `sourceAmount`, cuando se da, es lo que realmente se debita/acredita en la cuenta
+// bancaria en COP (a la TRM real de la operación) — igual que en initHys. Sin esto,
+// una cuenta en USD terminaba restando el número de dólares directo de los pesos.
+export async function hysDeposit(hysId: string, amount: number, note?: string, accountId?: string, sourceAmount?: number) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
@@ -640,10 +644,10 @@ export async function hysDeposit(hysId: string, amount: number, note?: string, a
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
   });
-  if (accountId) await adjustBalance(userId, accountId, -amount);
+  if (accountId) await adjustBalance(userId, accountId, -(sourceAmount ?? amount));
 }
 
-export async function hysWithdraw(hysId: string, amount: number, note?: string, accountId?: string) {
+export async function hysWithdraw(hysId: string, amount: number, note?: string, accountId?: string, sourceAmount?: number) {
   const userId = await getUserId();
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
@@ -655,7 +659,7 @@ export async function hysWithdraw(hysId: string, amount: number, note?: string, 
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "retiro", amount, balance: newBalance, rate: hys.rate, note },
   });
-  if (accountId) await adjustBalance(userId, accountId, amount);
+  if (accountId) await adjustBalance(userId, accountId, sourceAmount ?? amount);
 }
 
 export async function hysChangeRate(hysId: string, newRate: number) {

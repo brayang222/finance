@@ -581,10 +581,10 @@ function AccountView({ account, trm, privacy, bankAccounts }: { account: HysAcco
 
       {/* Modals */}
       {modal?.kind === "deposit" && (
-        <ModalHysMovement mode="deposit" hysId={hysId} onClose={() => setModal(null)} bankAccounts={bankAccounts} />
+        <ModalHysMovement mode="deposit" hysId={hysId} onClose={() => setModal(null)} bankAccounts={bankAccounts} currency={currency} trm={trm} />
       )}
       {modal?.kind === "withdraw" && (
-        <ModalHysMovement mode="withdraw" hysId={hysId} onClose={() => setModal(null)} bankAccounts={bankAccounts} currentBalance={currentBalance} />
+        <ModalHysMovement mode="withdraw" hysId={hysId} onClose={() => setModal(null)} bankAccounts={bankAccounts} currentBalance={currentBalance} currency={currency} trm={trm} />
       )}
       {modal?.kind === "rate" && (
         <ModalHysMovement mode="rate" hysId={hysId} currentRate={modal.currentRate} onClose={() => setModal(null)} />
