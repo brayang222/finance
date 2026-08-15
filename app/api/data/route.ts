@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       hys: hysAccounts[0] ? { rate: hysAccounts[0].rate, movements: hysMovements } : null,
       hysAccounts: hysAccounts.map(a => ({
         id: a.id, name: a.name, currency: a.currency, rate: a.rate,
-        openedAt: a.openedAt, movements: a.movements,
+        openedAt: a.openedAt, parentId: a.parentId, movements: a.movements,
       })),
       prices: Object.fromEntries(prices.map(p => [p.ticker, p.value])),
       targets: Object.fromEntries(targets.map(t => [t.ticker, t.value])),

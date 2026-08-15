@@ -155,6 +155,7 @@ async function _loadAll() {
   const typedHysAccounts = hysAccountsRaw.map(h => ({
     id: h.id, name: h.name, currency: h.currency, rate: h.rate,
     openedAt: h.openedAt ?? undefined,
+    parentId: h.parentId ?? undefined,
     movements: h.movements.map(m => ({ ...m, note: m.note ?? undefined })),
   }));
 
@@ -616,16 +617,20 @@ async function replayBalancesForAccount(hysId: string, fromDate: string) {
   }
 }
 
-export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP", accountId?: string, sourceAmount?: number) {
+export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP", accountId?: string, sourceAmount?: number, parentId?: string) {
   const userId = await getUserId();
   const today = todayISO();
+  // Si el capital sale de otra cuenta HYS (un bolsillo hermano o la cuenta padre),
+  // se retira primero: hysWithdraw valida saldo y lanza antes de crear nada.
+  const fromHys = accountId?.startsWith("hys:") ? accountId.slice(4) : null;
+  if (fromHys) await hysWithdraw(fromHys, initialBalance, `Traslado a ${name}`);
   const hys = await prisma.hys.create({
-    data: { userId, name, currency, rate, openedAt: today },
+    data: { userId, name, currency, rate, openedAt: today, parentId },
   });
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId: hys.id, date: today, type: "inicio", amount: initialBalance, balance: initialBalance, rate },
   });
-  if (accountId) await adjustBalance(userId, accountId, -(sourceAmount ?? initialBalance));
+  if (accountId && !fromHys) await adjustBalance(userId, accountId, -(sourceAmount ?? initialBalance));
   return hys.id;
 }
 
@@ -638,13 +643,17 @@ export async function hysDeposit(hysId: string, amount: number, note?: string, a
   const today = todayISO();
   const hys = await prisma.hys.findFirst({ where: { id: hysId, userId } });
   if (!hys) throw new Error("Cuenta no encontrada");
+  // Origen otra cuenta HYS: retirar primero para que un saldo insuficiente lance
+  // antes de crear el depósito (adjustBalance recortaría a 0 en silencio).
+  const fromHys = accountId?.startsWith("hys:") ? accountId.slice(4) : null;
+  if (fromHys) await hysWithdraw(fromHys, sourceAmount ?? amount, `Traslado a ${hys.name}`);
   const last = await prisma.hysMovement.findFirst({ where: { hysId }, orderBy: { date: "desc" } });
   const base = last ? compound(last.balance, last.rate, last.date, today) : amount;
   const newBalance = base + amount;
   await prisma.hysMovement.create({
     data: { id: crypto.randomUUID(), userId, hysId, date: today, type: "deposito", amount, balance: newBalance, rate: hys.rate, note },
   });
-  if (accountId) await adjustBalance(userId, accountId, -(sourceAmount ?? amount));
+  if (accountId && !fromHys) await adjustBalance(userId, accountId, -(sourceAmount ?? amount));
 }
 
 export async function hysWithdraw(hysId: string, amount: number, note?: string, accountId?: string, sourceAmount?: number) {

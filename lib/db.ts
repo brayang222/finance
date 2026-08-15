@@ -36,8 +36,10 @@ export async function adjustBalance(
     });
     return;
   }
-  if (accountId === "hys") {
-    const hys = await prisma.hys.findFirst({ where: { userId } });
+  // "hys" = primera cuenta (legacy); "hys:<id>" = una cuenta/bolsillo concreto
+  if (accountId === "hys" || accountId.startsWith("hys:")) {
+    const hysId = accountId.slice(4);
+    const hys = await prisma.hys.findFirst({ where: hysId ? { id: hysId, userId } : { userId } });
     if (!hys) return;
     const todayStr = new Date().toISOString().slice(0, 10);
     const last = await prisma.hysMovement.findFirst({ where: { hysId: hys.id }, orderBy: { date: "desc" } });

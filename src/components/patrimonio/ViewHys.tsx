@@ -43,6 +43,11 @@ function balanceAt(movements: HysMovement[], date: string): number {
   return compound(prev.balance, prev.rate, prev.date, date);
 }
 
+function balanceNow(a: HysAccount): number {
+  const last = [...a.movements].sort((x, y) => x.date.localeCompare(y.date)).pop();
+  return last ? compound(last.balance, a.rate, last.date, todayISO()) : 0;
+}
+
 function fmtCurrency(n: number, currency: string, trm?: number | null) {
   if (currency === "USD") return `USD ${n.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return COP(n);
@@ -88,30 +93,34 @@ function parseInput(formatted: string): number {
   return Number(formatted.replace(/\D/g, "")) || 0;
 }
 
-function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; trm?: number | null; bankAccounts: { id: string; name: string }[] }) {
+function SetupCard({ onCreated, trm, bankAccounts, parent }: { onCreated?: () => void; trm?: number | null; bankAccounts: { id: string; name: string }[]; parent?: HysAccount }) {
   const router = useRouter();
   const [balanceRaw, setBalanceRaw] = useState("");
   const [rate, setRate] = useState("");
   const [name, setName] = useState("");
-  const [currency, setCurrency] = useState("COP");
+  const [currency, setCurrency] = useState(parent?.currency ?? "COP");
   const [customTrm, setCustomTrm] = useState(trm?.toFixed(2) ?? "");
   const [accountId, setAccountId] = useState(bankAccounts[0]?.id ?? "cash");
   const [saving, setSaving] = useState(false);
 
+  // Un bolsillo hereda la moneda de su cuenta y se financia desde ella: no hay
+  // conversión de por medio, así que se saltan los selectores de moneda/TRM/origen.
+  const usdPocket = parent?.currency === "USD";
   const activeTrm = parseFloat(customTrm) || 0;
-  const copAmount = parseInput(balanceRaw);
-  const usdAmount = activeTrm > 0 ? copAmount / activeTrm : 0;
-  const canSave = copAmount > 0 && (parseFloat(rate) || 0) > 0 && name.trim().length > 0
-    && (currency !== "USD" || activeTrm > 0);
+  const amountIn = usdPocket ? (parseFloat(balanceRaw.replace(",", ".")) || 0) : parseInput(balanceRaw);
+  const usdAmount = activeTrm > 0 ? amountIn / activeTrm : 0;
+  const canSave = amountIn > 0 && (parseFloat(rate) || 0) > 0 && name.trim().length > 0
+    && (parent ? true : currency !== "USD" || activeTrm > 0);
 
   const save = async () => {
     setSaving(true);
     try {
-      const initialBalance = currency === "USD"
-        ? Math.round(usdAmount * 100) / 100
-        : copAmount;
-      const sourceAmount = currency === "USD" ? copAmount : undefined;
-      await initHys(initialBalance, parseFloat(rate), name.trim(), currency, accountId, sourceAmount);
+      const initialBalance = parent
+        ? amountIn
+        : currency === "USD" ? Math.round(usdAmount * 100) / 100 : amountIn;
+      const sourceAmount = !parent && currency === "USD" ? amountIn : undefined;
+      const source = parent ? `hys:${parent.id}` : accountId;
+      await initHys(initialBalance, parseFloat(rate), name.trim(), currency, source, sourceAmount, parent?.id);
       router.refresh();
       onCreated?.();
     } finally {
@@ -122,7 +131,7 @@ function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; t
   return (
     <div className={`${cardBase} w-full max-w-[420px] flex flex-col gap-4`}>
       <h2 className="text-[20px] font-medium m-0" style={{ fontFamily: "Spectral, serif" }}>
-        Nueva cuenta de alto rendimiento
+        {parent ? `Nuevo bolsillo en ${parent.name}` : "Nueva cuenta de alto rendimiento"}
       </h2>
       <div>
         <label className={`${microLabel} mb-1.5 block`}>Nombre</label>
@@ -131,25 +140,27 @@ function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; t
           className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
           value={name}
           onChange={e => setName(e.target.value)}
-          placeholder="Ej: Nubank, Lulo Bank USD"
+          placeholder={parent ? "Ej: Bolsillo 8%, Meta viaje" : "Ej: Nubank, Lulo Bank USD"}
           autoFocus
         />
       </div>
-      <div>
-        <label className={`${microLabel} mb-1.5 block`}>Moneda</label>
-        <select
-          className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
-          value={currency}
-          onChange={e => {
-            setCurrency(e.target.value);
-            if (e.target.value === "USD" && !customTrm) setCustomTrm(trm?.toFixed(2) ?? "");
-          }}
-        >
-          <option value="COP">COP — Pesos colombianos</option>
-          <option value="USD">USD — Dólares</option>
-        </select>
-      </div>
-      {currency === "USD" && (
+      {!parent && (
+        <div>
+          <label className={`${microLabel} mb-1.5 block`}>Moneda</label>
+          <select
+            className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
+            value={currency}
+            onChange={e => {
+              setCurrency(e.target.value);
+              if (e.target.value === "USD" && !customTrm) setCustomTrm(trm?.toFixed(2) ?? "");
+            }}
+          >
+            <option value="COP">COP — Pesos colombianos</option>
+            <option value="USD">USD — Dólares</option>
+          </select>
+        </div>
+      )}
+      {!parent && currency === "USD" && (
         <div>
           <label className={`${microLabel} mb-1.5 block`}>TRM (COP por 1 USD)</label>
           <input
@@ -170,17 +181,18 @@ function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; t
       )}
       <div>
         <label className={`${microLabel} mb-1.5 block`}>
-          {currency === "USD" ? "Capital a invertir (COP)" : "Capital inicial"}
+          {parent ? `Capital inicial (sale de ${parent.name})`
+            : currency === "USD" ? "Capital a invertir (COP)" : "Capital inicial"}
         </label>
         <input
           type="text"
-          inputMode="numeric"
+          inputMode={usdPocket ? "decimal" : "numeric"}
           className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
           value={balanceRaw}
-          onChange={e => setBalanceRaw(fmtInput(e.target.value))}
-          placeholder="$ 0"
+          onChange={e => setBalanceRaw(usdPocket ? e.target.value.replace(/[^\d.,]/g, "") : fmtInput(e.target.value))}
+          placeholder={usdPocket ? "USD 0.00" : "$ 0"}
         />
-        {currency === "USD" && activeTrm > 0 && copAmount > 0 && (
+        {!parent && currency === "USD" && activeTrm > 0 && amountIn > 0 && (
           <div className="text-[13px] text-pos mt-1.5 font-medium">
             Se depositarán USD {usdAmount.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
@@ -198,21 +210,23 @@ function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; t
           placeholder="Ej: 14.00"
         />
       </div>
-      <div>
-        <label className={`${microLabel} mb-1.5 block`}>Origen del dinero</label>
-        <select
-          className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
-          value={accountId}
-          onChange={e => setAccountId(e.target.value)}
-        >
-          {bankAccounts.map(a => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-          {!bankAccounts.some(a => a.name.toLowerCase().includes("efectivo")) && (
-            <option value="cash">Efectivo</option>
-          )}
-        </select>
-      </div>
+      {!parent && (
+        <div>
+          <label className={`${microLabel} mb-1.5 block`}>Origen del dinero</label>
+          <select
+            className="w-full h-[42px] px-3 rounded-xl border border-line bg-panel2 text-fg text-[14px] outline-none"
+            value={accountId}
+            onChange={e => setAccountId(e.target.value)}
+          >
+            {bankAccounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+            {!bankAccounts.some(a => a.name.toLowerCase().includes("efectivo")) && (
+              <option value="cash">Efectivo</option>
+            )}
+          </select>
+        </div>
+      )}
       <button
         disabled={!canSave || saving}
         onClick={save}
@@ -221,7 +235,7 @@ function SetupCard({ onCreated, trm, bankAccounts }: { onCreated?: () => void; t
           canSave && !saving ? "cursor-pointer opacity-100" : "cursor-not-allowed opacity-[0.45]",
         ].join(" ")}
       >
-        {saving ? "Creando…" : "Crear cuenta"}
+        {saving ? "Creando…" : parent ? "Crear bolsillo" : "Crear cuenta"}
       </button>
     </div>
   );
@@ -601,68 +615,132 @@ function AccountView({ account, trm, privacy, bankAccounts }: { account: HysAcco
 export default function ViewHys({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const [activeIdx, setActiveIdx] = useState(0);
-  const [showCreate, setShowCreate] = useState(false);
+  const [pocketId, setPocketId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState<null | "account" | "pocket">(null);
 
-  const accounts = initialData.hysAccounts ?? [];
+  const all = initialData.hysAccounts ?? [];
+  const accounts = all.filter(a => !a.parentId);
   const trm = initialData.config?.trm ?? null;
+
+  const root = accounts[activeIdx];
+  const pockets = all.filter(a => a.parentId === root?.id);
+  const selected = (pocketId && pockets.find(p => p.id === pocketId)) || root;
+
+  // El dinero de un bolsillo entra y sale de su cuenta o de sus hermanos, así que
+  // el selector de origen/destino lista también esos bolsillos junto a los bancos.
+  const group = root ? [root, ...pockets] : [];
+  const moneyAccounts = [
+    ...initialData.bankAccounts,
+    ...group
+      .filter(a => a.id !== selected?.id)
+      .map(a => ({ id: `hys:${a.id}`, name: `${a.name} (alto rendimiento)` })),
+  ];
+
+  const groupTotal = group.reduce((s, a) => s + balanceNow(a), 0);
+  const blendedRate = groupTotal > 0
+    ? group.reduce((s, a) => s + balanceNow(a) * a.rate, 0) / groupTotal
+    : (root?.rate ?? 0);
+
+  const openRoot = (i: number) => { setActiveIdx(i); setPocketId(null); setShowCreate(null); };
 
   if (accounts.length === 0 && !showCreate) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <SetupCard onCreated={() => setShowCreate(false)} trm={trm} bankAccounts={initialData.bankAccounts} />
+        <SetupCard onCreated={() => setShowCreate(null)} trm={trm} bankAccounts={initialData.bankAccounts} />
       </div>
     );
   }
 
+  const tabClass = (on: boolean) => [
+    "px-4 py-2 rounded-xl text-[13px] font-medium border cursor-pointer",
+    on ? "bg-accent text-accentFg border-accent" : "bg-transparent text-muted border-line",
+  ].join(" ");
+
   return (
     <div className="flex flex-col gap-5">
       {/* Account tabs */}
-      {(accounts.length > 1 || showCreate) && (
+      {(accounts.length > 1 || showCreate === "account") && (
         <div className="flex gap-2 flex-wrap">
           {accounts.map((a, i) => (
-            <button
-              key={a.id}
-              onClick={() => { setActiveIdx(i); setShowCreate(false); }}
-              className={[
-                "px-4 py-2 rounded-xl text-[13px] font-medium border cursor-pointer",
-                !showCreate && activeIdx === i
-                  ? "bg-accent text-accentFg border-accent"
-                  : "bg-transparent text-muted border-line",
-              ].join(" ")}
-            >
+            <button key={a.id} onClick={() => openRoot(i)} className={tabClass(!showCreate && activeIdx === i)}>
               {a.name} {a.currency !== "COP" && `(${a.currency})`}
             </button>
           ))}
-          <button
-            onClick={() => setShowCreate(true)}
-            className={[
-              "px-4 py-2 rounded-xl text-[13px] font-medium border cursor-pointer",
-              showCreate ? "bg-accent text-accentFg border-accent" : "bg-transparent text-muted border-line",
-            ].join(" ")}
-          >
+          <button onClick={() => setShowCreate("account")} className={tabClass(showCreate === "account")}>
             + Nueva cuenta
           </button>
         </div>
       )}
 
-      {/* Single add button when only one account */}
-      {accounts.length === 1 && !showCreate && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => setShowCreate(true)}
-            className="text-[12px] text-dim border-none bg-transparent cursor-pointer underline underline-offset-2 p-0"
-          >
-            + Agregar otra cuenta
-          </button>
+      {/* Group total + pocket tabs */}
+      {root && showCreate !== "account" && pockets.length > 0 && (
+        <div className={`${cardBase} flex flex-col gap-3`}>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <div>
+              <div className={microLabel}>Total {root.name} · {pockets.length + 1} bolsillos</div>
+              <div className="text-[22px] font-medium tabular-nums leading-tight">
+                {privacy ? "•••" : fmtCurrency(groupTotal, root.currency, trm)}
+              </div>
+            </div>
+            <span className="text-[12px] text-muted">Tasa promedio: {blendedRate.toFixed(2)}% EA</span>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => { setPocketId(null); setShowCreate(null); }}
+              className={tabClass(!showCreate && selected?.id === root.id)}
+            >
+              {root.name} · {root.rate.toFixed(2)}%
+            </button>
+            {pockets.map(p => (
+              <button
+                key={p.id}
+                onClick={() => { setPocketId(p.id); setShowCreate(null); }}
+                className={tabClass(!showCreate && selected?.id === p.id)}
+              >
+                {p.name} · {p.rate.toFixed(2)}%
+              </button>
+            ))}
+            <button onClick={() => setShowCreate("pocket")} className={tabClass(showCreate === "pocket")}>
+              + Bolsillo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Secondary actions */}
+      {root && !showCreate && (
+        <div className="flex justify-end gap-4">
+          {pockets.length === 0 && (
+            <button
+              onClick={() => setShowCreate("pocket")}
+              className="text-[12px] text-dim border-none bg-transparent cursor-pointer underline underline-offset-2 p-0"
+            >
+              + Crear bolsillo
+            </button>
+          )}
+          {accounts.length === 1 && (
+            <button
+              onClick={() => setShowCreate("account")}
+              className="text-[12px] text-dim border-none bg-transparent cursor-pointer underline underline-offset-2 p-0"
+            >
+              + Agregar otra cuenta
+            </button>
+          )}
         </div>
       )}
 
       {showCreate ? (
         <div className="flex justify-center">
-          <SetupCard onCreated={() => setShowCreate(false)} trm={trm} bankAccounts={initialData.bankAccounts} />
+          <SetupCard
+            key={showCreate === "pocket" ? root?.id : "account"}
+            onCreated={() => setShowCreate(null)}
+            trm={trm}
+            bankAccounts={initialData.bankAccounts}
+            parent={showCreate === "pocket" ? root : undefined}
+          />
         </div>
-      ) : accounts[activeIdx] ? (
-        <AccountView account={accounts[activeIdx]} trm={trm} privacy={privacy} bankAccounts={initialData.bankAccounts} />
+      ) : selected ? (
+        <AccountView key={selected.id} account={selected} trm={trm} privacy={privacy} bankAccounts={moneyAccounts} />
       ) : null}
     </div>
   );

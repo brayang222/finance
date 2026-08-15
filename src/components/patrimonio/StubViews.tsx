@@ -908,7 +908,9 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
               <div key={a.id} className={`${cardClass} cursor-pointer`} onClick={() => router.push("/savings")}>
                 <div className="flex items-center justify-between mb-3.5">
                   <div>
-                    <div className="text-[14px] font-medium">{a.name}</div>
+                    <div className="text-[14px] font-medium">
+                      {a.parentId ? `${hysAccounts.find(p => p.id === a.parentId)?.name ?? ""} · ${a.name}` : a.name}
+                    </div>
                     <div className="text-[11.5px] text-dim">
                       TEA {a.rate.toFixed(2)}% · {a.currency} · Ver detalle →
                     </div>
@@ -919,7 +921,8 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
-                        if (!window.confirm(`¿Cerrar la cuenta "${a.name}"? Se eliminarán todos los movimientos.`)) return;
+                        const kids = hysAccounts.filter(p => p.parentId === a.id).length;
+                        if (!window.confirm(`¿Cerrar la cuenta "${a.name}"? Se eliminarán todos los movimientos${kids ? ` y sus ${kids} bolsillo(s)` : ""}.`)) return;
                         await hysDeleteAccount(a.id);
                         router.refresh();
                       }}

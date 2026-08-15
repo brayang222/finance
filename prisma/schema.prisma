@@ -137,6 +137,9 @@ model Hys {
   currency  String        @default("COP")
   rate      Float
   openedAt  String?
+  parentId  String?       // bolsillo dentro de otra cuenta (Plenti 8% / Plenti 5%)
+  parent    Hys?          @relation("HysPockets", fields: [parentId], references: [id], onDelete: Cascade)
+  pockets   Hys[]         @relation("HysPockets")
   movements HysMovement[]
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 

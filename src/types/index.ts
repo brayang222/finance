@@ -43,6 +43,7 @@ export interface HysAccount {
   currency: string
   rate: number
   openedAt?: string
+  parentId?: string
   movements: HysMovement[]
 }
 
