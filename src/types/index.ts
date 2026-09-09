@@ -65,6 +65,7 @@ export interface UserConfig {
   showHys: boolean
   showActivity: boolean
   showGoals: boolean
+  showBienes: boolean
   baseCurrency: "COP" | "USD"
   trm: number | null
   trmUpdatedAt: string | null
@@ -96,6 +97,15 @@ export interface BankAccount {
   type: string
   balance: number
   color?: string
+}
+
+// Bien patrimonial no monetario (moto, carro, inmueble, etc.): cuenta hacia el
+// patrimonio total pero no es dinero — perderlo no genera ninguna transacción.
+export interface Bien {
+  id: string
+  name: string
+  value: number
+  date: string
 }
 
 export interface ActivityLog {
@@ -213,6 +223,7 @@ export interface Transfer {
   toAccountId: string
   toAccountName?: string
   amount: number
+  costBasis?: number
   note?: string
 }
 
@@ -227,6 +238,7 @@ export interface AllData {
   cash: Cash | null
   config: UserConfig | null
   bankAccounts: BankAccount[]
+  bienes: Bien[]
   activityLogs: ActivityLog[]
   budgets: Budget[]
   budgetConfigs: BudgetConfig[]

@@ -42,6 +42,7 @@ model User {
   sales          Sale[]
   cashCloses     CashClose[]
   transfers      Transfer[]
+  bienes         Bien[]
 
   // Perfil comercio: usuario sombra vinculado al dueño real
   businessOwnerId String?
@@ -198,6 +199,7 @@ model UserConfig {
   showHys        Boolean   @default(true)
   showActivity   Boolean   @default(true)
   showGoals      Boolean   @default(true)
+  showBienes     Boolean   @default(true)
   baseCurrency   String    @default("COP")
   trm            Float?
   trmUpdatedAt   DateTime?
@@ -253,6 +255,18 @@ model BankAccount {
   type      String   @default("banco")
   balance   Float    @default(0)
   color     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Bien patrimonial no monetario (moto, carro, inmueble, etc.) — cuenta hacia el
+// patrimonio total pero no es dinero: perderlo no genera ninguna transacción.
+model Bien {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  value     Float
+  date      String
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -399,6 +413,7 @@ model Transfer {
   toAccountId     String   // "cash", "hys", bankAccountId
   toAccountName   String?
   amount          Float
+  costBasis       Float?   // set only on stock/crypto sales — realized P/G = amount - costBasis
   note            String?
   createdAt       DateTime @default(now())
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)

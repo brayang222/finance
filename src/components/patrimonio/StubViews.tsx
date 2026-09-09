@@ -2,18 +2,20 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Asset, Account, COP, PCT, today } from "../../data/mock";
-import type { AllData, Stock, Crypto } from "../../types";
-import { Bal } from "./utils";
+import { Asset, Account, COP, USD, PCT, today } from "../../data/mock";
+import type { AllData, Stock, Crypto, Bien } from "../../types";
+import { Bal, Segmented } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer } from "../../../lib/actions";
 import ModalTransfer from "./ModalTransfer";
 import ModalSellInvestment from "./ModalSellInvestment";
 import { useToast } from "./Toast";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
+import ModalBien from "./ModalBien";
+import ModalLoseBien from "./ModalLoseBien";
 import ModalMovimiento from "./ModalMovimiento";
 import ModalShell from "./ModalShell";
 import { IconEdit, IconTrash } from "./Icons";
@@ -34,11 +36,18 @@ function AssetTable({
   assets,
   privacy,
   onSelect,
+  currency = "COP",
+  trm,
 }: {
   assets: Asset[];
   privacy: boolean;
   onSelect: (t: string) => void;
+  currency?: "COP" | "USD";
+  trm?: number | null;
 }) {
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (copValue: number) => (inUSD ? USD(copValue / trm!) : COP(copValue));
+
   if (assets.length === 0) {
     return (
       <div className={`${cardClass} text-muted text-[13px]`}>
@@ -87,18 +96,18 @@ function AssetTable({
                     {a.qty % 1 === 0 ? a.qty.toLocaleString("es-CO") : a.qty.toFixed(4)}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                    {privacy ? "••••" : COP(a.price)}
+                    {privacy ? "••••" : fmt(a.price)}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
-                    {privacy ? "••••" : COP(a.avg)}
+                    {privacy ? "••••" : fmt(a.avg)}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                    <Bal n={value} privacy={privacy} />
+                    {inUSD ? (privacy ? "••••" : fmt(value)) : <Bal n={value} privacy={privacy} />}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
                     <div>{PCT(plPct)}</div>
                     <div className="text-[12px] opacity-80">
-                      {privacy ? "••••" : `${pos ? "+" : "−"}${COP(Math.abs(pl))}`}
+                      {privacy ? "••••" : `${pos ? "+" : "−"}${fmt(Math.abs(pl))}`}
                     </div>
                   </td>
                 </tr>
@@ -172,12 +181,18 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
 export function ViewCripto({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
+  const toast = useToast();
   const assets = toAssets(initialData.crypto, initialData.prices);
   const onSelect = (t: string) => router.push(`/detail/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
   const totalPL    = totalValue - totalCost;
   const [refreshing, setRefreshing] = useState(false);
+  const [currency, setCurrency] = useState<"COP" | "USD">("COP");
+  const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
+  const [loadingTrm, setLoadingTrm] = useState(false);
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (copValue: number) => (inUSD ? USD(copValue / trm!) : COP(copValue));
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -190,19 +205,34 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
     }
   };
 
+  const handleCurrencyChange = async (v: string) => {
+    if (v === "USD" && !trm) {
+      setLoadingTrm(true);
+      try {
+        setTrm(await refreshTrm());
+      } catch {
+        toast.error("No se pudo obtener la TRM actual");
+        setLoadingTrm(false);
+        return;
+      }
+      setLoadingTrm(false);
+    }
+    setCurrency(v as "COP" | "USD");
+  };
+
   useEffect(() => { handleRefresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between">
         <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          <SummaryCard label="Valor en cripto" value={<Bal n={totalValue} privacy={privacy} />} />
-          <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
+          <SummaryCard label="Valor en cripto" value={inUSD ? (privacy ? "••••" : fmt(totalValue)) : <Bal n={totalValue} privacy={privacy} />} />
+          <SummaryCard label="Costo invertido" value={inUSD ? (privacy ? "••••" : fmt(totalCost)) : <Bal n={totalCost} privacy={privacy} />} />
           <SummaryCard
             label="Rendimiento P/G"
             value={
               <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-                <Bal n={Math.abs(totalPL)} privacy={privacy} />
+                {inUSD ? (privacy ? "••••" : fmt(Math.abs(totalPL))) : <Bal n={Math.abs(totalPL)} privacy={privacy} />}
               </span>
             }
             sub={
@@ -214,14 +244,16 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
             }
           />
         </div>
-        
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-2.5">
           <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
             {refreshing ? "Actualizando…" : "Actualizar precios"}
           </button>
+          <Segmented options={["COP", "USD"]} value={currency} onChange={handleCurrencyChange} />
+          {loadingTrm && <span className="text-dim text-[12px]">Consultando TRM…</span>}
+          {inUSD && <span className="text-dim text-[12px]">TRM: {COP(trm!)}</span>}
       </div>
-      <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
+      <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} currency={currency} trm={trm} />
     </div>
   );
 }
@@ -245,6 +277,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
 
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
   const [sellItem, setSellItem] = useState<Stock | Crypto | null>(null);
+  const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("¿Eliminar esta operación?")) return;
@@ -252,6 +285,23 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
     else await deleteStock(id);
     router.refresh();
   };
+
+  useEffect(() => {
+    if (!isCrypto) return;
+    refreshTrm().then(setTrm).catch(() => {});
+  }, [isCrypto]);
+
+  // Split the COP return into "asset move (USD)" vs "FX move (TRM)" — only
+  // meaningful for crypto, whose lots carry the real historical TRM at purchase.
+  const cryptoTrades = rawTrades as Crypto[];
+  const costUSD = isCrypto ? cryptoTrades.reduce((s, t) => s + (t.trm > 0 ? (t.qty * t.priceCOP) / t.trm : 0), 0) : 0;
+  const costCOP = isCrypto ? cryptoTrades.reduce((s, t) => s + t.qty * t.priceCOP, 0) : 0;
+  const avgTrm = isCrypto && costUSD > 0 ? costCOP / costUSD : null;
+  const avgPriceUSD = isCrypto && asset && costUSD > 0 ? costUSD / asset.qty : null;
+  const priceNowUSD = isCrypto && trm && asset ? asset.price / trm : null;
+  const hasFxBreakdown = isCrypto && !!avgTrm && !!avgPriceUSD && !!priceNowUSD && !!trm;
+  const assetReturn = hasFxBreakdown ? priceNowUSD! / avgPriceUSD! - 1 : null;
+  const fxReturn = hasFxBreakdown ? trm! / avgTrm! - 1 : null;
 
   return (
     <div>
@@ -313,6 +363,28 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               sub={<span className={pl >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
             />
           </div>
+
+          {hasFxBreakdown && (
+            <div className={cardClass}>
+              <div className="text-[13px] font-medium mb-2">Desglose del rendimiento (USD)</div>
+              <div className="text-[12px] text-dim mb-3.5">
+                Tu P/G en pesos mezcla el movimiento de {asset.ticker} en dólares y el movimiento del tipo de cambio (TRM) desde tus compras.
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-muted">Por movimiento de {asset.ticker} (USD)</span>
+                  <span className={`text-[13px] font-medium ${assetReturn! >= 0 ? "text-pos" : "text-neg"}`}>{PCT(assetReturn!)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-muted">Por tipo de cambio (TRM)</span>
+                  <span className={`text-[13px] font-medium ${fxReturn! >= 0 ? "text-pos" : "text-neg"}`}>{PCT(fxReturn!)}</span>
+                </div>
+              </div>
+              <div className="text-[11.5px] text-dim mt-3 pt-3 border-t border-line">
+                TRM promedio de compra: {COP(avgTrm!)} · TRM actual: {COP(trm!)}
+              </div>
+            </div>
+          )}
 
           {/* Trade history */}
           <div className={cardClass}>
@@ -854,13 +926,15 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const criptoVal  = criptoAccounts.length > 0
     ? criptoAccounts.reduce((s, a) => s + criptoBalance(a.id), 0)
     : unlinkedCryptoTotal;
-  const total      = bankTotal + bolsaVal + criptoVal + hysBalance;
+  const bienesTotal = initialData.bienes.reduce((s, b) => s + b.value, 0);
+  const total      = bankTotal + bolsaVal + criptoVal + hysBalance + bienesTotal;
 
   const barParts = [
     { label: "Bolsa",            value: bolsaVal,    color: "var(--accent)" },
     { label: "Cripto",           value: criptoVal,   color: "#8a8f98" },
     { label: "Alto rendimiento", value: hysBalance,  color: "#f59e0b" },
     { label: "Bancos",           value: bankTotal,   color: "var(--dim)" },
+    { label: "Bienes",           value: bienesTotal, color: "#10b981" },
   ].filter((p) => p.value > 0);
 
   const handleDelete = async (id: string) => {
@@ -972,6 +1046,26 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         </Section>
       ) : null}
 
+      {/* Bienes (patrimonio no monetario) */}
+      {initialData.bienes.length > 0 && (
+        <Section title="Bienes">
+          {initialData.bienes.map((b) => (
+            <div key={b.id} className={`${cardClass} cursor-pointer`} onClick={() => router.push("/bienes")}>
+              <div className="flex items-center justify-between mb-3.5">
+                <div>
+                  <div className="text-[14px] font-medium">{b.name}</div>
+                  <div className="text-[11.5px] text-dim">Desde {b.date} · Ver detalle →</div>
+                </div>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm" style={{ background: "#10b98122", color: "#10b981" }}>Bien</span>
+              </div>
+              <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
+                <Bal n={b.value} privacy={privacy} />
+              </div>
+            </div>
+          ))}
+        </Section>
+      )}
+
       {/* Bank accounts */}
       <div>
         <div className="flex items-center justify-between mb-2.5">
@@ -1046,14 +1140,72 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   );
 }
 
+export function ViewBienes({ initialData }: { initialData: AllData }) {
+  const privacy = usePrivacy();
+  const [editItem, setEditItem] = useState<Bien | null>(null);
+  const [loseItem, setLoseItem] = useState<Bien | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const bienes = initialData.bienes;
+  const total = bienes.reduce((s, b) => s + b.value, 0);
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className={cardClass}>
+        <div className="text-[11px] tracking-[0.08em] uppercase text-dim font-medium mb-1.5">
+          Valor total en bienes
+        </div>
+        <div className="text-[32px] font-medium tracking-[-0.02em]" style={{ fontFamily: "Spectral, serif" }}>
+          <Bal n={total} privacy={privacy} />
+        </div>
+        <div className="text-[12.5px] text-muted mt-1.5">
+          Vehículos, inmuebles y otros bienes que forman parte de tu patrimonio pero no son dinero.
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="text-[11.5px] text-dim font-medium tracking-[0.04em] uppercase">Tus bienes</div>
+        <button onClick={() => setShowAdd(true)} className="border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer">
+          + Agregar bien
+        </button>
+      </div>
+
+      {bienes.length === 0 ? (
+        <div className={`${cardClass} text-muted text-[13px]`}>
+          No hay bienes registrados. Agrega uno para incluirlo en tu patrimonio.
+        </div>
+      ) : (
+        <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+          {bienes.map((b) => (
+            <AccountCard
+              key={b.id}
+              name={b.name}
+              subtitle={`Desde ${b.date}`}
+              balance={b.value}
+              privacy={privacy}
+              onEdit={() => setEditItem(b)}
+              onDelete={() => setLoseItem(b)}
+            />
+          ))}
+        </div>
+      )}
+
+      {showAdd && <ModalBien onClose={() => setShowAdd(false)} />}
+      {editItem && <ModalBien editItem={editItem} onClose={() => setEditItem(null)} />}
+      {loseItem && <ModalLoseBien item={loseItem} onClose={() => setLoseItem(null)} />}
+    </div>
+  );
+}
+
 export function ViewHistorico({ initialData }: { initialData: AllData }) {
   const logs = initialData.activityLogs;
 
   const typeLabel: Record<string, string> = {
     ingreso: "Ingreso", egreso: "Egreso",
-    stock_buy: "Compra acción", stock_edit: "Edición acción", stock_delete: "Eliminación acción",
-    crypto_buy: "Compra cripto", crypto_edit: "Edición cripto", crypto_delete: "Eliminación cripto",
+    stock_buy: "Compra acción", stock_edit: "Edición acción", stock_delete: "Eliminación acción", stock_sell: "Venta acción · ganancia realizada",
+    crypto_buy: "Compra cripto", crypto_edit: "Edición cripto", crypto_delete: "Eliminación cripto", crypto_sell: "Venta cripto · ganancia realizada",
     account_create: "Cuenta creada", account_edit: "Cuenta editada", account_delete: "Cuenta eliminada",
+    bien_create: "Bien agregado", bien_edit: "Bien editado", bien_lost: "Bien dado de baja",
   };
 
   const typeColor: Record<string, string> = {
@@ -1061,7 +1213,11 @@ export function ViewHistorico({ initialData }: { initialData: AllData }) {
     stock_buy: "var(--accent)", stock_edit: "var(--muted)", stock_delete: "var(--neg)",
     crypto_buy: "var(--accent)", crypto_edit: "var(--muted)", crypto_delete: "var(--neg)",
     account_create: "var(--pos)", account_edit: "var(--muted)", account_delete: "var(--neg)",
+    bien_create: "var(--pos)", bien_edit: "var(--muted)", bien_lost: "var(--neg)",
   };
+
+  // Realized P/G sales are colored by sign (gain/loss), not by a fixed per-type color
+  const isRealizedSale = (type: string) => type === "stock_sell" || type === "crypto_sell";
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -1075,11 +1231,16 @@ export function ViewHistorico({ initialData }: { initialData: AllData }) {
               const d = new Date(log.createdAt);
               const dateStr = d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
               const timeStr = d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+              const realizedSale = isRealizedSale(log.type);
+              const gain = realizedSale && log.amount != null ? log.amount >= 0 : null;
+              const dotColor = realizedSale
+                ? (gain ? "var(--pos)" : "var(--neg)")
+                : (typeColor[log.type] ?? "var(--dim)");
               return (
                 <div key={log.id} className="flex items-center gap-3.5 py-3">
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ background: typeColor[log.type] ?? "var(--dim)" }}
+                    style={{ background: dotColor }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px]">{log.description}</div>
@@ -1090,8 +1251,11 @@ export function ViewHistorico({ initialData }: { initialData: AllData }) {
                   </div>
                   <div className="text-right shrink-0">
                     {log.amount != null && (
-                      <div className="text-[13px] tabular-nums" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
-                        {COP(log.amount)}
+                      <div
+                        className={`text-[13px] tabular-nums ${realizedSale ? (gain ? "text-pos" : "text-neg") : ""}`}
+                        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                      >
+                        {realizedSale && gain ? "+" : ""}{COP(log.amount)}
                       </div>
                     )}
                     <div className="text-[11px] text-dim">{dateStr} {timeStr}</div>

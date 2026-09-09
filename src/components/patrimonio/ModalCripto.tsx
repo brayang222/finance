@@ -9,18 +9,25 @@ import { useToast } from "./Toast";
 import type { Crypto, BankAccount } from "../../types";
 
 const num = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
+// Crypto quantities are fractional, never thousands-grouped (nobody types
+// "1.234.567" BTC) — accept "." or "," as the decimal point either way,
+// instead of num()'s money convention that would strip a "." as a thousands
+// separator and silently mangle a value like 0.00801213.
+const numQty = (s: string) => Number(s.replace(",", ".")) || 0;
 
 export default function ModalCripto({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Crypto; bankAccounts?: BankAccount[] }) {
   const router = useRouter();
   const toast = useToast();
   const [ticker, setTicker] = useState(editItem?.ticker ?? "");
   const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
-  const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
+  // MoneyInput is integer-only (it strips both "." and ",") — round to whole
+  // COP, same convention already used for bank account balances.
+  const [priceCOP, setPriceCOP] = useState(editItem ? String(Math.round(editItem.priceCOP)) : "");
   const [dateISO, setDateISO] = useState(editItem?.date ?? today());
   const [accountId, setAccountId] = useState(editItem?.accountId ?? "");
   const [saving, setSaving] = useState(false);
 
-  const canSave = ticker.trim().length > 0 && num(qty) > 0 && num(priceCOP) > 0;
+  const canSave = ticker.trim().length > 0 && numQty(qty) > 0 && num(priceCOP) > 0;
 
   const save = async () => {
     setSaving(true);
@@ -29,7 +36,7 @@ export default function ModalCripto({ onClose, editItem, bankAccounts = [] }: { 
       const acct = bankAccounts.find(b => b.id === accountId);
       const data = {
         ticker: ticker.trim().toUpperCase(),
-        qty: num(qty),
+        qty: numQty(qty),
         price,
         currency: "COP",
         trm: 1,

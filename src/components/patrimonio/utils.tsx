@@ -235,3 +235,31 @@ export const IconTruck: React.FC<{ size?: number }> = ({ size = 18 }) => (
     <circle cx="18.5" cy="18.5" r="2.5" />
   </svg>
 );
+
+/** Small pill-shaped option switcher (e.g. range or currency toggles). */
+export function Segmented({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex bg-panel2 rounded-[10px] p-[3px] gap-0.5">
+      {options.map((o) => (
+        <button
+          key={o}
+          onClick={() => onChange(o)}
+          className={[
+            "border-none cursor-pointer px-[11px] py-[5px] rounded-[7px] text-[12px] font-medium",
+            value === o ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+          ].join(" ")}
+        >
+          {o}
+        </button>
+      ))}
+    </div>
+  );
+}

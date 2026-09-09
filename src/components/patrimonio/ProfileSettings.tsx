@@ -24,6 +24,7 @@ const MODULE_OPTIONS = [
   { key: "showCrypto",   label: "Criptomonedas",           sub: "Bitcoin, Ethereum y activos digitales" },
   { key: "showHys",      label: "Alto rendimiento",        sub: "Cuenta con intereses" },
   { key: "showGoals",    label: "Metas de ahorro",         sub: "Objetivos con progreso y fechas" },
+  { key: "showBienes",   label: "Bienes",                  sub: "Vehículos, inmuebles y otros bienes" },
   { key: "showActivity", label: "Historial de actividad",  sub: "Registro de acciones en la app" },
 ] as const;
 
@@ -32,6 +33,7 @@ export const SUMMARY_WIDGETS = [
   { key: "kpis",       label: "Indicadores rápidos" },
   { key: "goals",      label: "Metas de ahorro" },
   { key: "chart",      label: "Evolución del patrimonio" },
+  { key: "portfolioChart", label: "Evolución del portafolio" },
   { key: "allocation", label: "Asignación del portafolio" },
   { key: "cashflow",   label: "Ingresos vs. egresos" },
   { key: "recent",     label: "Movimientos recientes" },
@@ -82,6 +84,7 @@ export default function ProfileSettings({
     showCrypto:   config?.showCrypto   ?? true,
     showHys:      config?.showHys      ?? true,
     showGoals:    config?.showGoals    ?? true,
+    showBienes:   config?.showBienes   ?? true,
     showActivity: config?.showActivity ?? true,
   });
 

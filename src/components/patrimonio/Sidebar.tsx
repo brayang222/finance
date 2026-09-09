@@ -25,7 +25,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.FC<{ size?: number }>;
-  module?: keyof Pick<UserConfig, "showStocks" | "showCrypto" | "showHys" | "showActivity" | "showGoals">;
+  module?: keyof Pick<UserConfig, "showStocks" | "showCrypto" | "showHys" | "showActivity" | "showGoals" | "showBienes">;
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -34,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/crypto",       label: "Cripto",           icon: IconCrypto,   module: "showCrypto" },
   { href: "/transactions", label: "Transacciones",    icon: IconArrows },
   { href: "/accounts",     label: "Cuentas",          icon: IconCard },
+  { href: "/bienes",       label: "Bienes",           icon: IconTruck,    module: "showBienes" },
   { href: "/savings",      label: "Alto Rendimiento", icon: IconBank,     module: "showHys" },
   { href: "/analytics",    label: "Análisis",         icon: IconChart },
   { href: "/goals",        label: "Metas",            icon: IconTarget,   module: "showGoals" },

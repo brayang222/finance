@@ -16,9 +16,11 @@ import {
   areaPath,
   scalePoints,
   DONUT_COLORS,
+  Segmented,
 } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions } from "./transforms";
+import { getPortfolioHistory } from "../../../lib/actions";
 
 // ponytail: shared style objects replaced with className strings; kept as consts for readability
 const cardBase = "border border-line bg-panel";
@@ -35,7 +37,7 @@ function costOf(asset: { qty: number; avg: number }) {
 
 const MONTHS = ["Jul", "Ago", "Sep", "Oct", "Nov", "Dic", "Ene", "Feb", "Mar", "Abr", "May", "Jun"];
 
-const ALL_WIDGET_KEYS = ["hero", "kpis", "goals", "chart", "allocation", "cashflow", "recent"];
+const ALL_WIDGET_KEYS = ["hero", "kpis", "goals", "chart", "portfolioChart", "allocation", "cashflow", "recent"];
 
 export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
@@ -45,6 +47,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const holdings = toAssets(initialData.stocks, initialData.prices);
   const cryptoAssets = toAssets(initialData.crypto, initialData.prices);
   const [range, setRange] = useState<"1M" | "6M" | "1A" | "Todo">("1A");
+  const [portfolioRange, setPortfolioRange] = useState<"1M" | "6M" | "1A" | "Todo">("1A");
   const config = initialData.config;
 
   const stockValue = holdings.reduce((s, h) => s + valueOf(h), 0);
@@ -76,7 +79,8 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   }, [now, hysAccounts]);
   const hysBalance = useMemo(() => hysEntries.reduce((s, e) => s + (e.currency === "USD" && trm ? e.balance * trm : e.balance), 0), [hysEntries, trm]);
   const cash = bankTotal + hysBalance;
-  const total = stockValue + cryptoValue + cash;
+  const bienesValue = initialData.bienes.reduce((s, b) => s + b.value, 0);
+  const total = stockValue + cryptoValue + cash + bienesValue;
 
   // Filter transactions to current month
   const nowYM = new Date().toISOString().slice(0, 7);
@@ -188,13 +192,135 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
 
   const rangeMonths: Record<string, number> = { "1M": 1, "6M": 6, "1A": 12, "Todo": 9999 };
   const series = useMemo(() => {
-    const n = rangeMonths[range];
+    // Always keep at least 2 points (when available) so the chart can draw a line
+    // instead of collapsing to a single floating dot for narrow ranges like "1M".
+    const n = Math.max(2, rangeMonths[range]);
     return allSeries.slice(-n);
   }, [allSeries, range]);
 
   // Real 12-month change
   const val12mAgo = allSeries.length > 12 ? allSeries[allSeries.length - 13].value : allSeries[0].value;
   const change12m = val12mAgo > 0 ? (total - val12mAgo) / val12mAgo : 0;
+
+  // ── Portfolio evolution: which tickers to include ──
+  // null = every ticker currently held (default). Otherwise an explicit set,
+  // built from a preset ("Acciones"/"Cripto") or manual chip toggling.
+  const [portfolioMode, setPortfolioMode] = useState<"valor" | "pg">("valor");
+  const [tickerFilter, setTickerFilter] = useState<Set<string> | null>(null);
+  const portfolioTickers = useMemo(() => ({
+    stocks: [...new Set(holdings.map(h => h.ticker.toUpperCase()))],
+    crypto: [...new Set(cryptoAssets.map(c => c.ticker.toUpperCase()))],
+  }), [holdings, cryptoAssets]);
+  const allTickerChips = useMemo(() => [
+    ...portfolioTickers.stocks.map(t => ({ ticker: t, kind: "stock" as const })),
+    ...portfolioTickers.crypto.map(t => ({ ticker: t, kind: "crypto" as const })),
+  ], [portfolioTickers]);
+  const isTickerSelected = (t: string) => tickerFilter === null || tickerFilter.has(t);
+  const setTickerPreset = (preset: "all" | "stocks" | "crypto") => {
+    if (preset === "all") { setTickerFilter(null); return; }
+    setTickerFilter(new Set(allTickerChips.filter(a => a.kind === (preset === "stocks" ? "stock" : "crypto")).map(a => a.ticker)));
+  };
+  const toggleTicker = (t: string) => {
+    setTickerFilter(prev => {
+      const base = new Set(prev ?? allTickerChips.map(a => a.ticker));
+      if (base.has(t)) base.delete(t); else base.add(t);
+      return base;
+    });
+  };
+  const activePreset: "all" | "stocks" | "crypto" | "custom" = tickerFilter === null
+    ? "all"
+    : portfolioTickers.stocks.length > 0 && tickerFilter.size === portfolioTickers.stocks.length && portfolioTickers.stocks.every(t => tickerFilter.has(t))
+      ? "stocks"
+      : portfolioTickers.crypto.length > 0 && tickerFilter.size === portfolioTickers.crypto.length && portfolioTickers.crypto.every(t => tickerFilter.has(t))
+        ? "crypto"
+        : "custom";
+
+  // Real historical monthly prices (Yahoo for stocks, CoinGecko+TRM for crypto),
+  // fetched once per ticker set — lets the chart show true mark-to-market P/G
+  // instead of confusing "money contributed" with "money gained".
+  const [priceHistory, setPriceHistory] = useState<Record<string, Record<string, number>>>({});
+  useEffect(() => {
+    if (portfolioTickers.stocks.length === 0 && portfolioTickers.crypto.length === 0) return;
+    getPortfolioHistory(portfolioTickers.stocks, portfolioTickers.crypto).then(setPriceHistory).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioTickers.stocks.join(","), portfolioTickers.crypto.join(",")]);
+
+  // Per-month: real market value (using historical prices where known, else a
+  // flat fallback at cost), cumulative cost basis, and total P/G = unrealized
+  // (value - cost, for currently-held lots) + realized (from actual sales).
+  const portfolioFullSeries = useMemo(() => {
+    type Lot = { date: string; qty: number; cost: number };
+    const byTicker = new Map<string, Lot[]>();
+    for (const s of initialData.stocks) {
+      const t = s.ticker.toUpperCase();
+      if (!isTickerSelected(t)) continue;
+      if (!byTicker.has(t)) byTicker.set(t, []);
+      byTicker.get(t)!.push({ date: s.date, qty: s.qty, cost: s.priceCOP * s.qty + (s.commission ?? 0) });
+    }
+    for (const c of initialData.crypto) {
+      const t = c.ticker.toUpperCase();
+      if (!isTickerSelected(t)) continue;
+      if (!byTicker.has(t)) byTicker.set(t, []);
+      byTicker.get(t)!.push({ date: c.date, qty: c.qty, cost: c.priceCOP * c.qty + (c.commission ?? 0) });
+    }
+    const realizedSales = initialData.transfers
+      .map(t => {
+        const m = /^(?:stock|crypto):(.+)$/.exec(t.fromAccountId);
+        if (!m || t.costBasis == null || !isTickerSelected(m[1].toUpperCase())) return null;
+        return { date: t.date, pl: t.amount - t.costBasis };
+      })
+      .filter((x): x is { date: string; pl: number } => x !== null);
+
+    const allDates = [
+      ...[...byTicker.values()].flat().map(l => l.date),
+      ...realizedSales.map(r => r.date),
+    ];
+    const nowYM = new Date().toISOString().slice(0, 7);
+    if (allDates.length === 0) return [{ ym: nowYM, value: 0, cost: 0, pg: 0 }];
+
+    const minYM = allDates.sort()[0].slice(0, 7);
+    const months: string[] = [];
+    let cur = new Date(minYM + "-01");
+    const end = new Date(minYM <= nowYM ? nowYM + "-01" : minYM + "-01");
+    while (cur <= end) {
+      months.push(cur.toISOString().slice(0, 7));
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    }
+
+    let cumRealized = 0;
+    return months.map((ym) => {
+      let value = 0, cost = 0;
+      for (const [ticker, lots] of byTicker) {
+        const held = lots.filter(l => l.date.slice(0, 7) <= ym);
+        if (held.length === 0) continue;
+        const qty = held.reduce((s, l) => s + l.qty, 0);
+        const c = held.reduce((s, l) => s + l.cost, 0);
+        cost += c;
+        const hist = priceHistory[ticker];
+        const knownYms = hist ? Object.keys(hist).sort() : [];
+        const pastYms = knownYms.filter(k => k <= ym);
+        const price = pastYms.length ? hist![pastYms[pastYms.length - 1]] : (knownYms.length ? hist![knownYms[0]] : null);
+        value += price != null ? qty * price : c; // no historical price known → assume flat (no unrealized move) that month
+      }
+      realizedSales.filter(r => r.date.slice(0, 7) === ym).forEach(r => { cumRealized += r.pl; });
+      return { ym, value, cost, pg: value - cost + cumRealized };
+    });
+  }, [initialData.stocks, initialData.crypto, initialData.transfers, priceHistory, tickerFilter]);
+
+  const portfolioSeries = useMemo(() => {
+    const n = Math.max(2, rangeMonths[portfolioRange]);
+    const slice = portfolioFullSeries.slice(-n);
+    return slice.map(p => ({ ym: p.ym, value: portfolioMode === "pg" ? p.pg : p.value }));
+  }, [portfolioFullSeries, portfolioRange, portfolioMode]);
+
+  const portfolioLast = portfolioFullSeries[portfolioFullSeries.length - 1];
+  const portfolio12mAgo = portfolioFullSeries.length > 12
+    ? portfolioFullSeries[portfolioFullSeries.length - 13]
+    : portfolioFullSeries[0];
+  const portfolioChange12m = portfolioMode === "valor"
+    ? (portfolio12mAgo.value > 0 ? (portfolioLast.value - portfolio12mAgo.value) / portfolio12mAgo.value : 0)
+    : null; // P/G mode shows an absolute COP delta instead of a %, see below
+  const portfolioPgDelta12m = portfolioLast.pg - portfolio12mAgo.pg;
 
   const heroSpark = useMemo(() => allSeries.slice(-12).map(s => s.value), [allSeries]);
 
@@ -210,6 +336,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
     return ALL_WIDGET_KEYS.filter(k => {
       if (k === "goals") return config?.showGoals ?? true;
       if (k === "allocation") return (config?.showStocks ?? true) || (config?.showCrypto ?? true);
+      if (k === "portfolioChart") return (config?.showStocks ?? true) || (config?.showCrypto ?? true);
       return true;
     });
   }, [config]);
@@ -326,6 +453,68 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
           <Segmented options={["1M", "6M", "1A", "Todo"]} value={range} onChange={(v) => setRange(v as typeof range)} />
         </div>
         <NetWorthChart points={series} privacy={privacy} />
+      </div>
+    ),
+    portfolioChart: (
+      <div className={`${cardBase} rounded-[18px] p-6`}>
+        <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
+          <div>
+            <div className={sectionTitle}>Evolución del portafolio</div>
+            <div className="text-[12.5px] text-muted mt-0.5">
+              {portfolioMode === "valor" ? (
+                <>
+                  <span className={portfolioChange12m! >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
+                    {portfolioChange12m! >= 0 ? "▲" : "▼"} {PCT(Math.abs(portfolioChange12m!))}
+                  </span>{" "}
+                  últimos 12 meses
+                </>
+              ) : (
+                <>
+                  <span className={portfolioPgDelta12m >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
+                    {portfolioPgDelta12m >= 0 ? "▲ +" : "▼ "}{privacy ? "••••" : COP(portfolioPgDelta12m)}
+                  </span>{" "}
+                  últimos 12 meses
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Segmented options={["Valor", "P/G"]} value={portfolioMode === "valor" ? "Valor" : "P/G"}
+              onChange={(v) => setPortfolioMode(v === "Valor" ? "valor" : "pg")} />
+            <Segmented options={["1M", "6M", "1A", "Todo"]} value={portfolioRange} onChange={(v) => setPortfolioRange(v as typeof portfolioRange)} />
+          </div>
+        </div>
+
+        {allTickerChips.length > 1 && (
+          <div className="flex flex-wrap gap-1.5 mb-3.5">
+            {([["all", "Todo"], ["stocks", "Acciones"], ["crypto", "Cripto"]] as const)
+              .filter(([p]) => p === "all" || (p === "stocks" ? portfolioTickers.stocks.length : portfolioTickers.crypto.length) > 0)
+              .map(([p, label]) => (
+                <button key={p} onClick={() => setTickerPreset(p)}
+                  className={[
+                    "border-none cursor-pointer px-[10px] py-[4px] rounded-full text-[11.5px] font-medium",
+                    activePreset === p ? "bg-accent text-accentFg" : "bg-panel2 text-muted",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            <span className="w-px bg-line mx-0.5" />
+            {allTickerChips.map(({ ticker }) => (
+              <button key={ticker} onClick={() => toggleTicker(ticker)}
+                className={[
+                  "border-none cursor-pointer px-[10px] py-[4px] rounded-full text-[11.5px] font-medium",
+                  isTickerSelected(ticker) ? "bg-accent text-accentFg" : "bg-panel2 text-dim",
+                ].join(" ")}
+                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+              >
+                {ticker}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <NetWorthChart points={portfolioSeries} privacy={privacy} />
       </div>
     ),
     allocation: <PortfolioDonut privacy={privacy} total={stockValue + cryptoValue} holdings={holdings} cryptoAssets={cryptoAssets} />,
@@ -482,33 +671,6 @@ function KpiCard({
   );
 }
 
-function Segmented({
-  options,
-  value,
-  onChange,
-}: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex bg-panel2 rounded-[10px] p-[3px] gap-0.5">
-      {options.map((o) => (
-        <button
-          key={o}
-          onClick={() => onChange(o)}
-          className={[
-            "border-none cursor-pointer px-[11px] py-[5px] rounded-[7px] text-[12px] font-medium",
-            value === o ? "bg-accent text-accentFg" : "bg-transparent text-muted",
-          ].join(" ")}
-        >
-          {o}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function HeroSpark({ values, privacy }: { values: number[]; privacy: boolean }) {
   const W = 340;
   const H = 90;
@@ -535,6 +697,14 @@ function ymLabel(ym: string) {
   const [yr, mo] = ym.split("-");
   return `${MO[+mo - 1]} '${yr.slice(2)}`;
 }
+function ymToTime(ym: string) {
+  const [yr, mo] = ym.split("-").map(Number);
+  return new Date(yr, mo - 1, 1).getTime();
+}
+function dateLabel(t: number) {
+  const d = new Date(t);
+  return `${d.getDate()} ${MO[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
+}
 
 function NetWorthChart({ points, privacy }: { points: { ym: string; value: number }[]; privacy: boolean }) {
   const values = points.map(p => p.value);
@@ -542,15 +712,8 @@ function NetWorthChart({ points, privacy }: { points: { ym: string; value: numbe
   const H = 260;
   const PAD_B = 28; // space for x-axis labels
   const svgRef = useRef<SVGSVGElement>(null);
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-
-  const pts = scalePoints(values, W, H - PAD_B, 30, 36);
-  const line = catmullRomPath(pts);
-  const area = areaPath(line, W, H - PAD_B);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const gridVals = [max, (max + min) / 2, min];
-  const last = pts[pts.length - 1];
+  // Continuous hover position: index of the segment start + fractional progress into it.
+  const [hoverT, setHoverT] = useState<{ i: number; t: number } | null>(null);
 
   // Pick ~6 evenly spaced x-axis labels, never overlapping (min 80px apart)
   const MIN_PX = 90;
@@ -563,25 +726,47 @@ function NetWorthChart({ points, privacy }: { points: { ym: string; value: numbe
     return idxs;
   }, [points.length]);
 
+  if (points.length < 2) {
+    return (
+      <div style={{ height: H }} className="flex flex-col items-center justify-center gap-1.5 text-center px-6">
+        <div className="text-muted text-[13px] font-medium">Aún no hay historial suficiente</div>
+        <div className="text-dim text-[12px] max-w-[280px]">
+          Registra tu primera transacción, acción o cripto para ver la evolución de tu patrimonio.
+        </div>
+      </div>
+    );
+  }
+
+  const pts = scalePoints(values, W, H - PAD_B, 30, 36);
+  const line = catmullRomPath(pts);
+  const area = areaPath(line, W, H - PAD_B);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const gridVals = [max, (max + min) / 2, min];
+  const last = pts[pts.length - 1];
+
   const onMouseMove = (e: React.MouseEvent<SVGRectElement>) => {
     if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    const svgX = ratio * W;
-    // find nearest point
-    let best = 0;
-    let bestDist = Infinity;
-    pts.forEach(([px], i) => {
-      const d = Math.abs(px - svgX);
-      if (d < bestDist) { bestDist = d; best = i; }
-    });
-    setHoverIdx(best);
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    // Points are spaced evenly by index, so the ratio maps directly to a
+    // continuous "index position" — interpolate between its two neighbors.
+    const idxFloat = ratio * (pts.length - 1);
+    const i = Math.min(pts.length - 2, Math.floor(idxFloat));
+    setHoverT({ i, t: idxFloat - i });
   };
 
-  const hov = hoverIdx !== null ? hoverIdx : null;
-  const hovPt = hov !== null ? pts[hov] : null;
-  const hovVal = hov !== null ? values[hov] : null;
-  const hovYM  = hov !== null ? points[hov].ym : null;
+  const hov = hoverT;
+  const hovPt: [number, number] | null = hov
+    ? [
+        pts[hov.i][0] + (pts[hov.i + 1][0] - pts[hov.i][0]) * hov.t,
+        pts[hov.i][1] + (pts[hov.i + 1][1] - pts[hov.i][1]) * hov.t,
+      ]
+    : null;
+  const hovVal = hov ? values[hov.i] + (values[hov.i + 1] - values[hov.i]) * hov.t : null;
+  const hovTime = hov
+    ? ymToTime(points[hov.i].ym) + (ymToTime(points[hov.i + 1].ym) - ymToTime(points[hov.i].ym)) * hov.t
+    : null;
 
   // Tooltip box: keep it inside the SVG
   const TT_W = 130; const TT_H = 42;
@@ -624,7 +809,7 @@ function NetWorthChart({ points, privacy }: { points: { ym: string; value: numbe
           {/* Tooltip */}
           <rect x={ttX} y={ttY} width={TT_W} height={TT_H} rx={8} fill="var(--panel)" stroke="var(--line)" strokeWidth={1} />
           <text x={ttX + TT_W / 2} y={ttY + 15} textAnchor="middle" fill="var(--dim)" fontSize={11} fontFamily="'IBM Plex Mono', monospace">
-            {hovYM ? ymLabel(hovYM) : ""}
+            {hovTime !== null ? dateLabel(hovTime) : ""}
           </text>
           <text x={ttX + TT_W / 2} y={ttY + 32} textAnchor="middle" fill="var(--fg)" fontSize={13} fontFamily="'IBM Plex Mono', monospace" fontWeight="500">
             {privacy ? "••••••" : (hovVal !== null ? COPSHORT(hovVal) : "")}
@@ -656,7 +841,7 @@ function NetWorthChart({ points, privacy }: { points: { ym: string; value: numbe
         x={0} y={0} width={W} height={H - PAD_B}
         fill="transparent"
         onMouseMove={onMouseMove}
-        onMouseLeave={() => setHoverIdx(null)}
+        onMouseLeave={() => setHoverT(null)}
         style={{ cursor: "crosshair" }}
       />
     </svg>

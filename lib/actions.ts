@@ -8,7 +8,7 @@ import {
   type SaleItemInput, type PurchaseItemInput,
 } from "./db";
 import { cookies } from "next/headers";
-import type { Stock, Crypto, Finance, Hys, Cash, BankAccount } from '../src/types';
+import type { Stock, Crypto, Finance, Hys, Cash, BankAccount, Bien } from '../src/types';
 import { GENERIC_CATS_IN, GENERIC_CATS_OUT } from '../src/data/constants';
 
 async function getSessionUserId() {
@@ -90,7 +90,7 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, sharesGiven, sharesReceived] =
+  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, sharesGiven, sharesReceived] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
@@ -102,6 +102,7 @@ async function _loadAll() {
       prisma.cash.findUnique({ where: { userId: targetUserId } }),
       prisma.userConfig.findUnique({ where: { userId: targetUserId } }),
       prisma.bankAccount.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true, bank: true, type: true, balance: true, color: true } }),
+      prisma.bien.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
       prisma.activityLog.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'desc' }, take: 100 }),
       prisma.budget.findMany({ where: { userId: targetUserId }, orderBy: { category: 'asc' } }),
       prisma.budgetConfig.findMany({ where: { userId: targetUserId } }),
@@ -217,6 +218,7 @@ async function _loadAll() {
       showHys: config.showHys,
       showActivity: config.showActivity,
       showGoals: config.showGoals,
+      showBienes: config.showBienes,
       baseCurrency: config.baseCurrency as "COP" | "USD",
       trm: config.trm,
       trmUpdatedAt: config.trmUpdatedAt?.toISOString() ?? null,
@@ -226,6 +228,7 @@ async function _loadAll() {
       salesGoal: config.salesGoal,
     } : null,
     bankAccounts: typedBankAccounts,
+    bienes: bienes.map(b => ({ id: b.id, name: b.name, value: b.value, date: b.date })),
     activityLogs: typedActivityLogs,
     budgets: budgets.map(b => ({
       id: b.id, category: b.category, amount: b.amount,
@@ -295,7 +298,7 @@ async function _loadAll() {
       summary: c.summary ? JSON.parse(c.summary) : null,
     })),
     transfers: transfers.map(t => ({
-      id: t.id, date: t.date, amount: t.amount,
+      id: t.id, date: t.date, amount: t.amount, costBasis: t.costBasis ?? undefined,
       fromAccountId: t.fromAccountId, fromAccountName: t.fromAccountName ?? undefined,
       toAccountId: t.toAccountId, toAccountName: t.toAccountName ?? undefined,
       note: t.note ?? undefined,
@@ -360,7 +363,8 @@ export async function addStock(item: Omit<Stock, "id">) {
 
 export async function addCrypto(item: Omit<Crypto, "id">) {
   const userId = await getUserId();
-  await prisma.crypto.create({ data: { ...item, id: crypto.randomUUID(), userId } });
+  const trm = await resolveTrmForDate(item.date);
+  await prisma.crypto.create({ data: { ...item, trm, id: crypto.randomUUID(), userId } });
   await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
   await logActivity(userId, "crypto_buy", `Compra cripto: ${item.ticker}`, {
     amount: item.priceCOP * item.qty,
@@ -392,7 +396,8 @@ export async function deleteStock(id: string) {
 export async function updateCrypto(id: string, item: Omit<Crypto, "id">) {
   const userId = await getUserId();
   const old = await prisma.crypto.findUnique({ where: { id } });
-  await prisma.crypto.update({ where: { id, userId }, data: item });
+  const trm = old && old.date === item.date ? old.trm : await resolveTrmForDate(item.date);
+  await prisma.crypto.update({ where: { id, userId }, data: { ...item, trm } });
   if (old?.accountId) await adjustBalance(userId, old.accountId, old.priceCOP * old.qty + old.commission);
   await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
   await logActivity(userId, "crypto_edit", `Edición cripto: ${item.ticker}`, { ticker: item.ticker });
@@ -436,38 +441,61 @@ export async function deleteTransfer(id: string) {
   await logActivity(userId, "transfer_delete", `Transferencia eliminada`, { amount: row.amount });
 }
 
-export async function sellStock(id: string, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+export async function sellStock(id: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
   const userId = await getUserId();
   const row = await prisma.stock.findFirst({ where: { id, userId } });
   if (!row) throw new Error("Acción no encontrada");
+  if (qty <= 0 || qty > row.qty + 1e-9) throw new Error("Cantidad inválida");
   const d = date ?? todayISO();
-  await prisma.stock.delete({ where: { id } });
+  // Full sale (allowing for float rounding) vs. partial: a partial sale shrinks
+  // the lot instead of deleting it, prorating the original commission so the
+  // remaining position's cost basis stays accurate.
+  const isFullSale = qty >= row.qty - 1e-9;
+  const soldQty = isFullSale ? row.qty : qty;
+  const soldCommission = row.commission * (soldQty / row.qty);
+  const costBasis = row.priceCOP * soldQty + soldCommission;
+  const realizedPL = sellPriceCOP - costBasis;
+  if (isFullSale) {
+    await prisma.stock.delete({ where: { id } });
+  } else {
+    await prisma.stock.update({ where: { id }, data: { qty: row.qty - soldQty, commission: row.commission - soldCommission } });
+  }
   await adjustBalance(userId, toAccountId, sellPriceCOP);
   await prisma.transfer.create({
     data: {
-      userId, date: d, amount: sellPriceCOP, note: `Venta ${row.ticker} (${row.qty} uds)`,
+      userId, date: d, amount: sellPriceCOP, costBasis, note: `Venta ${row.ticker} (${soldQty} uds)`,
       fromAccountId: `stock:${row.ticker}`, fromAccountName: `Acción ${row.ticker}`,
       toAccountId, toAccountName,
     },
   });
-  await logActivity(userId, "stock_sell", `Venta acción: ${row.ticker}`, { amount: sellPriceCOP, ticker: row.ticker, accountName: toAccountName });
+  await logActivity(userId, "stock_sell", `Venta acción: ${row.ticker}`, { amount: realizedPL, ticker: row.ticker, accountName: toAccountName });
 }
 
-export async function sellCrypto(id: string, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+export async function sellCrypto(id: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
   const userId = await getUserId();
   const row = await prisma.crypto.findFirst({ where: { id, userId } });
   if (!row) throw new Error("Cripto no encontrada");
+  if (qty <= 0 || qty > row.qty + 1e-9) throw new Error("Cantidad inválida");
   const d = date ?? todayISO();
-  await prisma.crypto.delete({ where: { id } });
+  const isFullSale = qty >= row.qty - 1e-9;
+  const soldQty = isFullSale ? row.qty : qty;
+  const soldCommission = row.commission * (soldQty / row.qty);
+  const costBasis = row.priceCOP * soldQty + soldCommission;
+  const realizedPL = sellPriceCOP - costBasis;
+  if (isFullSale) {
+    await prisma.crypto.delete({ where: { id } });
+  } else {
+    await prisma.crypto.update({ where: { id }, data: { qty: row.qty - soldQty, commission: row.commission - soldCommission } });
+  }
   await adjustBalance(userId, toAccountId, sellPriceCOP);
   await prisma.transfer.create({
     data: {
-      userId, date: d, amount: sellPriceCOP, note: `Venta ${row.ticker} (${row.qty} uds)`,
+      userId, date: d, amount: sellPriceCOP, costBasis, note: `Venta ${row.ticker} (${soldQty} uds)`,
       fromAccountId: `crypto:${row.ticker}`, fromAccountName: `Cripto ${row.ticker}`,
       toAccountId, toAccountName,
     },
   });
-  await logActivity(userId, "crypto_sell", `Venta cripto: ${row.ticker}`, { amount: sellPriceCOP, ticker: row.ticker, accountName: toAccountName });
+  await logActivity(userId, "crypto_sell", `Venta cripto: ${row.ticker}`, { amount: realizedPL, ticker: row.ticker, accountName: toAccountName });
 }
 
 // ── BANK ACCOUNTS ──
@@ -488,6 +516,36 @@ export async function deleteBankAccount(id: string) {
   const row = await prisma.bankAccount.findUnique({ where: { id } });
   await prisma.bankAccount.delete({ where: { id, userId } });
   await logActivity(userId, "account_delete", `Cuenta eliminada: ${row?.name ?? id}`, { accountName: row?.name });
+}
+
+// ── BIENES (patrimonio no monetario: moto, carro, inmueble, etc.) ──
+export async function createBien(item: Omit<Bien, "id">) {
+  const userId = await getUserId();
+  await prisma.bien.create({ data: { ...item, userId } });
+  await logActivity(userId, "bien_create", `Nuevo bien: ${item.name}`, { amount: item.value });
+}
+
+export async function updateBien(id: string, item: Omit<Bien, "id">) {
+  const userId = await getUserId();
+  await prisma.bien.update({ where: { id, userId }, data: item });
+  await logActivity(userId, "bien_edit", `Bien editado: ${item.name}`, { amount: item.value });
+}
+
+const BIEN_LOSS_REASONS: Record<string, string> = {
+  venta: "Venta",
+  robo: "Robo o hurto",
+  dano: "Daño o pérdida",
+  otro: "Otro",
+};
+
+// A bien leaving the patrimonio is never a money transaction — no balance is
+// touched, we just keep a record of why it left via the activity log.
+export async function loseBien(id: string, reason: string) {
+  const userId = await getUserId();
+  const row = await prisma.bien.findUnique({ where: { id } });
+  await prisma.bien.delete({ where: { id, userId } });
+  const reasonLabel = BIEN_LOSS_REASONS[reason] ?? reason;
+  await logActivity(userId, "bien_lost", `Bien dado de baja: ${row?.name ?? id} (${reasonLabel})`, { amount: row?.value });
 }
 
 // ── REFRESH MARKET PRICES ──
@@ -516,13 +574,21 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
   const ids = cryptoTickers.map(t => COINGECKO_IDS[t.toUpperCase()]).filter(Boolean);
   if (ids.length > 0) {
     try {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=cop`;
+      // CoinGecko's simple/price endpoint does not support "cop" as vs_currency
+      // (it silently returns an empty object for unsupported currencies instead
+      // of erroring) — fetch in USD and convert with the live USD→COP rate.
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`;
       const res = await fetch(url, { next: { revalidate: 0 } });
       if (res.ok) {
         const json = await res.json();
-        for (const ticker of cryptoTickers) {
-          const coinId = COINGECKO_IDS[ticker.toUpperCase()];
-          if (coinId && json[coinId]?.cop) pricesMap[ticker.toUpperCase()] = json[coinId].cop;
+        const todayISO = new Date().toISOString().slice(0, 10);
+        const usdToCop = (await fetchOfficialTrmForDate(todayISO)) ?? (await fetchUsdToCop());
+        if (usdToCop) {
+          for (const ticker of cryptoTickers) {
+            const coinId = COINGECKO_IDS[ticker.toUpperCase()];
+            const usd = coinId && json[coinId]?.usd;
+            if (usd) pricesMap[ticker.toUpperCase()] = usd * usdToCop;
+          }
         }
       }
     } catch { /* skip */ }
@@ -540,6 +606,102 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
     )
   );
   return { updated: Object.keys(pricesMap).length };
+}
+
+// ── PORTFOLIO HISTORY (real mark-to-market, for P/G-over-time — not just
+// cumulative cost basis, which conflates new contributions with actual gains) ──
+
+// One request covering ~13 months of official TRM, reused across every crypto
+// ticker instead of one call per (ticker, month).
+async function fetchOfficialTrmRange(): Promise<{ ym: string; value: number }[]> {
+  try {
+    const from = new Date();
+    from.setDate(from.getDate() - 400);
+    const fromIso = `${from.toISOString().slice(0, 10)}T00:00:00.000`;
+    const params = new URLSearchParams({
+      $where: `vigenciadesde>='${fromIso}'`,
+      $order: "vigenciadesde ASC",
+      $limit: "500",
+    });
+    const res = await fetch(`https://www.datos.gov.co/resource/32sa-8pi3.json?${params}`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json
+      .map((r: any) => ({ ym: String(r.vigenciadesde).slice(0, 7), value: parseFloat(r.valor) }))
+      .filter((r: any) => r.value > 0);
+  } catch {
+    return [];
+  }
+}
+
+function trmForMonth(range: { ym: string; value: number }[], ym: string): number | null {
+  let best: number | null = null;
+  for (const r of range) { if (r.ym <= ym) best = r.value; }
+  return best ?? range[0]?.value ?? null;
+}
+
+// Monthly COP closes straight from Yahoo (BVC tickers already quote in COP).
+// Some illiquid months come back as `null` (no trades) — forward-fill from the
+// last known close so the series has no gaps.
+async function fetchStockMonthlyHistory(ticker: string): Promise<Record<string, number>> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.CL?range=5y&interval=1mo`;
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 3600 } });
+    if (!res.ok) return {};
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    const timestamps: number[] = result?.timestamp ?? [];
+    const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close ?? [];
+    const map: Record<string, number> = {};
+    let lastKnown: number | null = null;
+    timestamps.forEach((t, i) => {
+      const ym = new Date(t * 1000).toISOString().slice(0, 7);
+      const close = closes[i];
+      if (close != null) lastKnown = close;
+      if (lastKnown != null) map[ym] = lastKnown;
+    });
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// CoinGecko's public API caps historical data at 365 days back — months older
+// than that simply have no entry (the caller falls back to cost for those).
+async function fetchCryptoMonthlyHistory(ticker: string, trmRange: { ym: string; value: number }[]): Promise<Record<string, number>> {
+  const coinId = COINGECKO_IDS[ticker.toUpperCase()];
+  if (!coinId) return {};
+  try {
+    const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=365`;
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    if (!res.ok) return {};
+    const json = await res.json();
+    const prices: [number, number][] = json?.prices ?? [];
+    // Downsample daily points to one per month (last point in the month wins,
+    // i.e. an approximate month-end mark).
+    const monthlyUsd: Record<string, number> = {};
+    for (const [t, usd] of prices) monthlyUsd[new Date(t).toISOString().slice(0, 7)] = usd;
+    const map: Record<string, number> = {};
+    for (const [ym, usd] of Object.entries(monthlyUsd)) {
+      const trm = trmForMonth(trmRange, ym);
+      if (trm) map[ym] = usd * trm;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+export async function getPortfolioHistory(stockTickers: string[], cryptoTickers: string[]) {
+  const trmRange = cryptoTickers.length > 0 ? await fetchOfficialTrmRange() : [];
+  const [stockEntries, cryptoEntries] = await Promise.all([
+    Promise.all(stockTickers.map(async (t) => [t, await fetchStockMonthlyHistory(t)] as const)),
+    Promise.all(cryptoTickers.map(async (t) => [t, await fetchCryptoMonthlyHistory(t, trmRange)] as const)),
+  ]);
+  const history: Record<string, Record<string, number>> = {};
+  for (const [t, m] of stockEntries) history[t] = m;
+  for (const [t, m] of cryptoEntries) history[t] = m;
+  return history;
 }
 
 // ── STOCKS ──
@@ -861,6 +1023,7 @@ export async function updateModules(modules: {
   showHys: boolean;
   showActivity: boolean;
   showGoals: boolean;
+  showBienes: boolean;
   showCommerce: boolean;
 }) {
   const userId = await getUserId();
@@ -896,20 +1059,72 @@ export async function saveCurrency(baseCurrency: string) {
   });
 }
 
+// Colombia's official daily TRM (Tasa Representativa del Mercado), published by
+// the Superintendencia Financiera — this is the actual "TRM" Colombians mean,
+// as opposed to a generic market feed or a P2P exchange's own negotiated price.
+async function fetchOfficialTrmForDate(dateISO: string): Promise<number | null> {
+  try {
+    const iso = `${dateISO}T00:00:00.000`;
+    const params = new URLSearchParams({
+      $where: `vigenciadesde<='${iso}' AND vigenciahasta>='${iso}'`,
+      $limit: "1",
+    });
+    const res = await fetch(`https://www.datos.gov.co/resource/32sa-8pi3.json?${params}`, { next: { revalidate: 0 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const valor = parseFloat(json?.[0]?.valor);
+    return valor > 0 ? valor : null;
+  } catch {
+    return null;
+  }
+}
+
+// Fallback used only if the official government endpoint is unreachable.
+async function fetchUsdToCop(): Promise<number | null> {
+  try {
+    const res = await fetch("https://latest.currency-api.pages.dev/v1/currencies/usd.json", { next: { revalidate: 0 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const cop = json?.usd?.cop;
+    return cop && cop > 0 ? (cop as number) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUsdToCopForDate(dateISO: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://${dateISO}.currency-api.pages.dev/v1/currencies/usd.json`, { next: { revalidate: 0 } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const cop = json?.usd?.cop;
+    return cop && cop > 0 ? (cop as number) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveTrmForDate(dateISO: string): Promise<number> {
+  return (
+    (await fetchOfficialTrmForDate(dateISO)) ??
+    (await fetchUsdToCopForDate(dateISO)) ??
+    (await fetchUsdToCop()) ??
+    1
+  );
+}
+
 export async function refreshTrm() {
   const userId = await getUserId();
-  const res = await fetch("https://latest.currency-api.pages.dev/v1/currencies/usd.json", { next: { revalidate: 0 } });
-  if (!res.ok) throw new Error("No se pudo consultar la tasa de cambio");
-  const json = await res.json();
-  const cop = json?.usd?.cop;
-  if (!cop || cop <= 0) throw new Error("TRM no disponible");
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const cop = (await fetchOfficialTrmForDate(todayISO)) ?? (await fetchUsdToCop());
+  if (!cop) throw new Error("TRM no disponible");
   const now = new Date();
   await prisma.userConfig.upsert({
     where: { userId },
     create: { userId, trm: cop, trmUpdatedAt: now },
     update: { trm: cop, trmUpdatedAt: now },
   });
-  return cop as number;
+  return cop;
 }
 
 // ── SUMMARY WIDGETS ──

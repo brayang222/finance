@@ -81,6 +81,9 @@ export const CATEGORIES: Record<TxType, string[]> = {
 export const COP = (n: number) =>
   new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(n);
 
+export const USD = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+
 export const COPSHORT = (n: number) => {
   if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;

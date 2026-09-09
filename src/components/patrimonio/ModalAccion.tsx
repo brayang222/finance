@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { today } from "../../data/mock";
+import { today, COP } from "../../data/mock";
 import { addStock, updateStock } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
 import { useToast } from "./Toast";
@@ -77,7 +77,7 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
           <input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" className={fieldClass} />
         </div>
         <div className="flex-1">
-          <label className={labelClass}>Precio COP</label>
+          <label className={labelClass}>Precio por acción (COP)</label>
           <MoneyInput value={priceCOP} onChange={setPriceCOP} prefix="$" />
         </div>
       </div>
@@ -92,6 +92,13 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
           <input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className={fieldClass} />
         </div>
       </div>
+
+      {num(qty) > 0 && num(priceCOP) > 0 && (
+        <div className="text-[13px] text-dim">
+          Total a pagar: <span className="text-muted font-medium">{COP(num(qty) * num(priceCOP) + num(commission))}</span>
+          {" "}({num(qty)} × {COP(num(priceCOP))} + comisión {COP(num(commission))})
+        </div>
+      )}
 
       {bankAccounts.length > 0 && (
         <div>
