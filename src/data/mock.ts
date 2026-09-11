@@ -12,7 +12,8 @@ export type Asset = {
   name: string;
   mono: string;
   qty: number;
-  avg: number;
+  avg: number; // weighted average price paid per unit — no commission (this is the PPA brokers quote)
+  totalCost: number; // full cash outlay: qty * price paid + commission — use this for P/G, not qty * avg
   price: number;
   dayPct: number;
   spark: number[];
@@ -37,24 +38,6 @@ export const ACCOUNTS: Account[] = [
   { id: "trii", name: "Trii", type: "Efectivo en comisionista", kind: "Inversión", mono: "TR", balance: 3200000 },
   { id: "nequi", name: "Nequi", type: "Billetera digital", kind: "Efectivo", mono: "NQ", balance: 1850000 },
   { id: "caja", name: "Efectivo", type: "Caja", kind: "Efectivo", mono: "$", balance: 600000 },
-];
-
-export const HOLDINGS: Asset[] = [
-  { ticker: "ECOPETROL", name: "Ecopetrol S.A.", mono: "EC", qty: 1200, avg: 2180, price: 2415, dayPct: 0.021, spark: [2360, 2378, 2350, 2392, 2405, 2398, 2415] },
-  { ticker: "PFBCOLOM", name: "Bancolombia Pref.", mono: "BC", qty: 300, avg: 31500, price: 34200, dayPct: 0.008, spark: [33800, 33950, 34100, 34000, 34150, 34120, 34200] },
-  { ticker: "GRUPOSURA", name: "Grupo SURA", mono: "SU", qty: 250, avg: 38900, price: 42100, dayPct: -0.006, spark: [42400, 42300, 42250, 42350, 42200, 42160, 42100] },
-  { ticker: "ISA", name: "Interconexión Eléctrica", mono: "IS", qty: 400, avg: 15200, price: 16850, dayPct: 0.014, spark: [16500, 16620, 16580, 16700, 16780, 16820, 16850] },
-  { ticker: "NUTRESA", name: "Grupo Nutresa", mono: "NU", qty: 180, avg: 62000, price: 58400, dayPct: -0.012, spark: [59200, 59000, 58900, 58600, 58500, 58450, 58400] },
-  { ticker: "CEMARGOS", name: "Cementos Argos", mono: "CA", qty: 900, avg: 4100, price: 4780, dayPct: 0.031, spark: [4600, 4650, 4620, 4700, 4740, 4760, 4780] },
-  { ticker: "CORFICOLCF", name: "Corficolombiana", mono: "CF", qty: 150, avg: 22000, price: 20500, dayPct: -0.004, spark: [20700, 20650, 20600, 20560, 20530, 20510, 20500] },
-];
-
-export const CRYPTO: Asset[] = [
-  { ticker: "BTC", name: "Bitcoin", mono: "BT", qty: 0.03, avg: 210000000, price: 268000000, dayPct: 0.018, spark: [255000000, 258000000, 254000000, 261000000, 265000000, 264000000, 268000000] },
-  { ticker: "ETH", name: "Ethereum", mono: "ET", qty: 0.5, avg: 12800000, price: 14600000, dayPct: 0.025, spark: [13800000, 14000000, 13900000, 14200000, 14450000, 14400000, 14600000] },
-  { ticker: "SOL", name: "Solana", mono: "SO", qty: 5, avg: 620000, price: 840000, dayPct: 0.041, spark: [760000, 780000, 770000, 800000, 820000, 825000, 840000] },
-  { ticker: "ADA", name: "Cardano", mono: "AD", qty: 2000, avg: 2200, price: 1900, dayPct: -0.015, spark: [2050, 2020, 2000, 1970, 1940, 1920, 1900] },
-  { ticker: "USDT", name: "Tether", mono: "UT", qty: 400, avg: 4100, price: 4180, dayPct: 0.001, spark: [4160, 4165, 4170, 4172, 4175, 4178, 4180] },
 ];
 
 export const TRANSACTIONS: Transaction[] = [

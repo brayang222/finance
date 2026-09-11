@@ -32,22 +32,28 @@ function metaFor(ticker: string) {
 }
 
 export function toAssets(rows: Stock[] | CryptoType[], prices: Record<string, number>): Asset[] {
-  const map = new Map<string, { totalQty: number; totalCost: number }>();
+  const map = new Map<string, { totalQty: number; totalPricePaid: number; totalCost: number }>();
   for (const r of rows) {
     const key = r.ticker.toUpperCase();
-    const prev = map.get(key) ?? { totalQty: 0, totalCost: 0 };
+    const prev = map.get(key) ?? { totalQty: 0, totalPricePaid: 0, totalCost: 0 };
     map.set(key, {
       totalQty: prev.totalQty + r.qty,
-      totalCost: prev.totalCost + r.qty * r.priceCOP,
+      // No commission here — this backs `avg`, the PPA (precio promedio de
+      // adquisición) brokers quote, which is a price-per-share figure. Mixing
+      // commission into it can push it above every price actually paid.
+      totalPricePaid: prev.totalPricePaid + r.qty * r.priceCOP,
+      // Commission included here — this backs `totalCost`, the real cash
+      // outlay used for P/G, which must match the portfolio evolution chart.
+      totalCost: prev.totalCost + r.qty * r.priceCOP + (r.commission ?? 0),
     });
   }
   return Array.from(map.entries())
     .filter(([, v]) => v.totalQty > 0)
     .map(([ticker, v]) => {
-      const avg = v.totalCost / v.totalQty;
+      const avg = v.totalPricePaid / v.totalQty;
       const price = prices[ticker] ?? avg;
       const { name, mono } = metaFor(ticker);
-      return { ticker, name, mono, qty: v.totalQty, avg, price, dayPct: 0, spark: [] };
+      return { ticker, name, mono, qty: v.totalQty, avg, totalCost: v.totalCost, price, dayPct: 0, spark: [] };
     });
 }
 

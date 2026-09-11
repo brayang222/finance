@@ -611,9 +611,11 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
 // ── PORTFOLIO HISTORY (real mark-to-market, for P/G-over-time — not just
 // cumulative cost basis, which conflates new contributions with actual gains) ──
 
-// One request covering ~13 months of official TRM, reused across every crypto
-// ticker instead of one call per (ticker, month).
-async function fetchOfficialTrmRange(): Promise<{ ym: string; value: number }[]> {
+const DAY_MS = 86400000;
+
+// One request covering ~400 days of official TRM, reused across every crypto
+// ticker instead of one call per (ticker, day).
+async function fetchOfficialTrmRange(): Promise<{ day: string; value: number }[]> {
   try {
     const from = new Date();
     from.setDate(from.getDate() - 400);
@@ -627,48 +629,90 @@ async function fetchOfficialTrmRange(): Promise<{ ym: string; value: number }[]>
     if (!res.ok) return [];
     const json = await res.json();
     return json
-      .map((r: any) => ({ ym: String(r.vigenciadesde).slice(0, 7), value: parseFloat(r.valor) }))
+      .map((r: any) => ({ day: String(r.vigenciadesde).slice(0, 10), value: parseFloat(r.valor) }))
       .filter((r: any) => r.value > 0);
   } catch {
     return [];
   }
 }
 
-function trmForMonth(range: { ym: string; value: number }[], ym: string): number | null {
+function trmForDay(range: { day: string; value: number }[], day: string): number | null {
   let best: number | null = null;
-  for (const r of range) { if (r.ym <= ym) best = r.value; }
+  for (const r of range) { if (r.day <= day) best = r.value; }
   return best ?? range[0]?.value ?? null;
 }
 
-// Monthly COP closes straight from Yahoo (BVC tickers already quote in COP).
-// Some illiquid months come back as `null` (no trades) — forward-fill from the
-// last known close so the series has no gaps.
-async function fetchStockMonthlyHistory(ticker: string): Promise<Record<string, number>> {
+// Fills every day in [first known trade, last known trade] from a sparse map
+// of real (traded) closes keyed by ISO day, linearly interpolating across any
+// gap between two real trades instead of leaving it flat or empty — a
+// straight line between two confirmed prices is a closer approximation of
+// what actually happened than either a fabricated flat price or an invisible
+// gap. Pure UTC-ms stepping throughout: no local-timezone date arithmetic, so
+// no risk of the off-by-one that bit the month-stepping version of this.
+function fillDailyGaps(realByDay: Record<string, number>): Record<string, number> {
+  const knownDays = Object.keys(realByDay).sort();
+  if (knownDays.length === 0) return {};
+  const map: Record<string, number> = {};
+  const startMs = new Date(knownDays[0] + "T00:00:00.000Z").getTime();
+  const endMs = new Date(knownDays[knownDays.length - 1] + "T00:00:00.000Z").getTime();
+  for (let ms = startMs; ms <= endMs; ms += DAY_MS) {
+    const day = new Date(ms).toISOString().slice(0, 10);
+    if (realByDay[day] != null) {
+      map[day] = realByDay[day];
+      continue;
+    }
+    const before = [...knownDays].reverse().find(k => k < day);
+    const after = knownDays.find(k => k > day);
+    if (before && after) {
+      const beforeMs = new Date(before + "T00:00:00.000Z").getTime();
+      const afterMs = new Date(after + "T00:00:00.000Z").getTime();
+      const frac = (ms - beforeMs) / (afterMs - beforeMs);
+      map[day] = realByDay[before] + (realByDay[after] - realByDay[before]) * frac;
+    } else if (before) {
+      map[day] = realByDay[before];
+    }
+  }
+  return map;
+}
+
+// Daily COP closes straight from Yahoo (BVC tickers already quote in COP).
+//
+// Fetched at daily resolution deliberately, not monthly: Yahoo's own `1mo`
+// bucketing turned out to be unreliable for thin BVC tickers (it silently
+// drops a month near a listing date, and for a no-trade month it doesn't
+// leave the price `null` — it repeats the listing/reference price with
+// volume=0, so a fake month looks like a real historical close). It also
+// collapses a real intra-month swing — a stock that spiked and gave it back
+// within the same month — down to a single flat point, hiding it entirely.
+// `volume` tells a real trade apart from a placeholder for every single day.
+async function fetchStockDailyHistory(ticker: string): Promise<Record<string, number>> {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.CL?range=5y&interval=1mo`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.CL?range=5y&interval=1d`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 3600 } });
     if (!res.ok) return {};
     const json = await res.json();
     const result = json?.chart?.result?.[0];
     const timestamps: number[] = result?.timestamp ?? [];
-    const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close ?? [];
-    const map: Record<string, number> = {};
-    let lastKnown: number | null = null;
+    const quote = result?.indicators?.quote?.[0] ?? {};
+    const closes: (number | null)[] = quote.close ?? [];
+    const volumes: (number | null)[] = quote.volume ?? [];
+
+    const realByDay: Record<string, number> = {};
     timestamps.forEach((t, i) => {
-      const ym = new Date(t * 1000).toISOString().slice(0, 7);
       const close = closes[i];
-      if (close != null) lastKnown = close;
-      if (lastKnown != null) map[ym] = lastKnown;
+      const traded = (volumes[i] ?? 0) > 0;
+      if (close == null || !traded) return;
+      realByDay[new Date(t * 1000).toISOString().slice(0, 10)] = close;
     });
-    return map;
+    return fillDailyGaps(realByDay);
   } catch {
     return {};
   }
 }
 
-// CoinGecko's public API caps historical data at 365 days back — months older
+// CoinGecko's public API caps historical data at 365 days back — days older
 // than that simply have no entry (the caller falls back to cost for those).
-async function fetchCryptoMonthlyHistory(ticker: string, trmRange: { ym: string; value: number }[]): Promise<Record<string, number>> {
+async function fetchCryptoDailyHistory(ticker: string, trmRange: { day: string; value: number }[]): Promise<Record<string, number>> {
   const coinId = COINGECKO_IDS[ticker.toUpperCase()];
   if (!coinId) return {};
   try {
@@ -677,14 +721,14 @@ async function fetchCryptoMonthlyHistory(ticker: string, trmRange: { ym: string;
     if (!res.ok) return {};
     const json = await res.json();
     const prices: [number, number][] = json?.prices ?? [];
-    // Downsample daily points to one per month (last point in the month wins,
-    // i.e. an approximate month-end mark).
-    const monthlyUsd: Record<string, number> = {};
-    for (const [t, usd] of prices) monthlyUsd[new Date(t).toISOString().slice(0, 7)] = usd;
+    // CoinGecko returns several intraday points per day at this range — keep
+    // the last one of each day as that day's mark.
+    const dailyUsd: Record<string, number> = {};
+    for (const [t, usd] of prices) dailyUsd[new Date(t).toISOString().slice(0, 10)] = usd;
     const map: Record<string, number> = {};
-    for (const [ym, usd] of Object.entries(monthlyUsd)) {
-      const trm = trmForMonth(trmRange, ym);
-      if (trm) map[ym] = usd * trm;
+    for (const [day, usd] of Object.entries(dailyUsd)) {
+      const trm = trmForDay(trmRange, day);
+      if (trm) map[day] = usd * trm;
     }
     return map;
   } catch {
@@ -695,8 +739,8 @@ async function fetchCryptoMonthlyHistory(ticker: string, trmRange: { ym: string;
 export async function getPortfolioHistory(stockTickers: string[], cryptoTickers: string[]) {
   const trmRange = cryptoTickers.length > 0 ? await fetchOfficialTrmRange() : [];
   const [stockEntries, cryptoEntries] = await Promise.all([
-    Promise.all(stockTickers.map(async (t) => [t, await fetchStockMonthlyHistory(t)] as const)),
-    Promise.all(cryptoTickers.map(async (t) => [t, await fetchCryptoMonthlyHistory(t, trmRange)] as const)),
+    Promise.all(stockTickers.map(async (t) => [t, await fetchStockDailyHistory(t)] as const)),
+    Promise.all(cryptoTickers.map(async (t) => [t, await fetchCryptoDailyHistory(t, trmRange)] as const)),
   ]);
   const history: Record<string, Record<string, number>> = {};
   for (const [t, m] of stockEntries) history[t] = m;

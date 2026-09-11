@@ -28,11 +28,22 @@ const microLabel = "text-[11px] tracking-[0.08em] uppercase text-dim font-medium
 const kpiValueClass = "text-[27px] font-medium tabular-nums";
 const sectionTitle = "text-[14px] font-medium";
 
+// Steps to the first of the next month, staying in UTC throughout. `minYM +
+// "-01"` parses as UTC midnight, but stepping via local getFullYear/getMonth
+// mixes in the browser's offset — for any negative-UTC timezone (all of
+// Latin America) that silently drops the current month from the range and
+// duplicates the first one instead.
+function nextMonthUTC(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+}
+
+const DAY_MS = 86400000;
+
 function valueOf(asset: { qty: number; price: number }) {
   return asset.qty * asset.price;
 }
-function costOf(asset: { qty: number; avg: number }) {
-  return asset.qty * asset.avg;
+function costOf(asset: { totalCost: number }) {
+  return asset.totalCost;
 }
 
 const MONTHS = ["Jul", "Ago", "Sep", "Oct", "Nov", "Dic", "Ene", "Feb", "Mar", "Abr", "May", "Jun"];
@@ -179,7 +190,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
     const end = new Date(maxYM + "-01");
     while (cur <= end) {
       months.push(cur.toISOString().slice(0, 7));
-      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+      cur = nextMonthUTC(cur);
     }
     let running = 0;
     const result = months.map((ym) => {
@@ -191,6 +202,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   }, [initialData, total]);
 
   const rangeMonths: Record<string, number> = { "1M": 1, "6M": 6, "1A": 12, "Todo": 9999 };
+  const rangeDays: Record<string, number> = { "1M": 31, "6M": 183, "1A": 366, "Todo": 999999 };
   const series = useMemo(() => {
     // Always keep at least 2 points (when available) so the chart can draw a line
     // instead of collapsing to a single floating dot for narrow ranges like "1M".
@@ -245,9 +257,15 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioTickers.stocks.join(","), portfolioTickers.crypto.join(",")]);
 
-  // Per-month: real market value (using historical prices where known, else a
-  // flat fallback at cost), cumulative cost basis, and total P/G = unrealized
-  // (value - cost, for currently-held lots) + realized (from actual sales).
+  // Day by day (not month by month): real market value (using historical
+  // prices where known, else a flat fallback at cost), cumulative cost basis,
+  // and total P/G = unrealized (value - cost, for currently-held lots) +
+  // realized (from actual sales). Monthly buckets used to erase any swing
+  // that happened and reverted within the same month — a stock that spiked
+  // mid-month and gave it back would just show as a flat line, because only
+  // the month's last known price ever got plotted. `ym` below holds a full
+  // ISO day ("YYYY-MM-DD"), not a year-month — the field name is kept only
+  // to match the shared NetWorthChart point type.
   const portfolioFullSeries = useMemo(() => {
     type Lot = { date: string; qty: number; cost: number };
     const byTicker = new Map<string, Lot[]>();
@@ -275,52 +293,78 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
       ...[...byTicker.values()].flat().map(l => l.date),
       ...realizedSales.map(r => r.date),
     ];
-    const nowYM = new Date().toISOString().slice(0, 7);
-    if (allDates.length === 0) return [{ ym: nowYM, value: 0, cost: 0, pg: 0 }];
+    const today = new Date().toISOString().slice(0, 10);
+    if (allDates.length === 0) return [{ ym: today, value: 0, cost: 0, pg: 0 }];
 
-    const minYM = allDates.sort()[0].slice(0, 7);
-    const months: string[] = [];
-    let cur = new Date(minYM + "-01");
-    const end = new Date(minYM <= nowYM ? nowYM + "-01" : minYM + "-01");
-    while (cur <= end) {
-      months.push(cur.toISOString().slice(0, 7));
-      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    const minDate = allDates.sort()[0];
+    const days: string[] = [];
+    const startMs = new Date(minDate + "T00:00:00.000Z").getTime();
+    const endMs = new Date((minDate <= today ? today : minDate) + "T00:00:00.000Z").getTime();
+    for (let ms = startMs; ms <= endMs; ms += DAY_MS) {
+      days.push(new Date(ms).toISOString().slice(0, 10));
     }
 
     let cumRealized = 0;
-    return months.map((ym) => {
+    const result = days.map((day) => {
       let value = 0, cost = 0;
       for (const [ticker, lots] of byTicker) {
-        const held = lots.filter(l => l.date.slice(0, 7) <= ym);
+        const held = lots.filter(l => l.date <= day);
         if (held.length === 0) continue;
         const qty = held.reduce((s, l) => s + l.qty, 0);
         const c = held.reduce((s, l) => s + l.cost, 0);
         cost += c;
         const hist = priceHistory[ticker];
-        const knownYms = hist ? Object.keys(hist).sort() : [];
-        const pastYms = knownYms.filter(k => k <= ym);
-        const price = pastYms.length ? hist![pastYms[pastYms.length - 1]] : (knownYms.length ? hist![knownYms[0]] : null);
-        value += price != null ? qty * price : c; // no historical price known → assume flat (no unrealized move) that month
+        const knownDays = hist ? Object.keys(hist).sort() : [];
+        const pastDays = knownDays.filter(k => k <= day);
+        // Extending the earliest known price backward is a reasonable stand-in
+        // when there are several real data points to anchor it (an actively
+        // traded ticker with one still-thin patch). With only one point total
+        // — a brand-new listing Yahoo has barely started tracking — that same
+        // extension would flat-line the *entire* pre-listing history at
+        // today's price, implying we've always known its value when we
+        // genuinely have zero market data for that period. Cost (no assumed
+        // move) is the more honest default there.
+        const price = pastDays.length
+          ? hist![pastDays[pastDays.length - 1]]
+          : (knownDays.length >= 2 ? hist![knownDays[0]] : null);
+        value += price != null ? qty * price : c; // no historical price known → assume flat (no unrealized move) that day
       }
-      realizedSales.filter(r => r.date.slice(0, 7) === ym).forEach(r => { cumRealized += r.pl; });
-      return { ym, value, cost, pg: value - cost + cumRealized };
+      realizedSales.filter(r => r.date === day).forEach(r => { cumRealized += r.pl; });
+      return { ym: day, value, cost, pg: value - cost + cumRealized };
     });
-  }, [initialData.stocks, initialData.crypto, initialData.transfers, priceHistory, tickerFilter]);
 
+    // Today uses whatever the historical fetch last knew, which can lag
+    // behind right now (e.g. no new trade yet today) — force it to the same
+    // live prices the Inversiones page shows, so the two agree exactly
+    // instead of merely being close.
+    const lastIdx = result.length - 1;
+    if (result[lastIdx]?.ym === today) {
+      let liveValue = 0;
+      for (const [ticker, lots] of byTicker) {
+        const qty = lots.reduce((s, l) => s + l.qty, 0);
+        const livePrice = initialData.prices[ticker];
+        liveValue += livePrice != null ? qty * livePrice : lots.reduce((s, l) => s + l.cost, 0);
+      }
+      result[lastIdx] = { ...result[lastIdx], value: liveValue, pg: liveValue - result[lastIdx].cost + cumRealized };
+    }
+
+    return result;
+  }, [initialData.stocks, initialData.crypto, initialData.transfers, initialData.prices, priceHistory, tickerFilter]);
+
+  // portfolioFullSeries is daily (see above), so slicing needs a day count
+  // per range, not the month count used for the (still monthly) net-worth
+  // series above.
   const portfolioSeries = useMemo(() => {
-    const n = Math.max(2, rangeMonths[portfolioRange]);
+    const n = Math.max(2, rangeDays[portfolioRange]);
     const slice = portfolioFullSeries.slice(-n);
     return slice.map(p => ({ ym: p.ym, value: portfolioMode === "pg" ? p.pg : p.value }));
   }, [portfolioFullSeries, portfolioRange, portfolioMode]);
 
   const portfolioLast = portfolioFullSeries[portfolioFullSeries.length - 1];
-  const portfolio12mAgo = portfolioFullSeries.length > 12
-    ? portfolioFullSeries[portfolioFullSeries.length - 13]
-    : portfolioFullSeries[0];
-  const portfolioChange12m = portfolioMode === "valor"
-    ? (portfolio12mAgo.value > 0 ? (portfolioLast.value - portfolio12mAgo.value) / portfolio12mAgo.value : 0)
-    : null; // P/G mode shows an absolute COP delta instead of a %, see below
-  const portfolioPgDelta12m = portfolioLast.pg - portfolio12mAgo.pg;
+  // Retorno real: ganancia (no realizada + realizada) sobre lo efectivamente
+  // invertido. No se compara el valor de mercado contra el de hace 12 meses,
+  // porque eso mezcla aportes nuevos (comprar más) con rentabilidad real.
+  const portfolioReturnPct = portfolioLast.cost > 0 ? portfolioLast.pg / portfolioLast.cost : 0;
 
   const heroSpark = useMemo(() => allSeries.slice(-12).map(s => s.value), [allSeries]);
 
@@ -461,21 +505,10 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
           <div>
             <div className={sectionTitle}>Evolución del portafolio</div>
             <div className="text-[12.5px] text-muted mt-0.5">
-              {portfolioMode === "valor" ? (
-                <>
-                  <span className={portfolioChange12m! >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
-                    {portfolioChange12m! >= 0 ? "▲" : "▼"} {PCT(Math.abs(portfolioChange12m!))}
-                  </span>{" "}
-                  últimos 12 meses
-                </>
-              ) : (
-                <>
-                  <span className={portfolioPgDelta12m >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
-                    {portfolioPgDelta12m >= 0 ? "▲ +" : "▼ "}{privacy ? "••••" : COP(portfolioPgDelta12m)}
-                  </span>{" "}
-                  últimos 12 meses
-                </>
-              )}
+              <span className={portfolioLast.pg >= 0 ? "text-pos font-medium" : "text-neg font-medium"}>
+                {portfolioLast.pg >= 0 ? "▲" : "▼"} {PCT(portfolioReturnPct)}
+              </span>{" "}
+              · {privacy ? "••••" : `${portfolioLast.pg >= 0 ? "+" : ""}${COP(portfolioLast.pg)}`} sobre lo invertido
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -698,8 +731,10 @@ function ymLabel(ym: string) {
   return `${MO[+mo - 1]} '${yr.slice(2)}`;
 }
 function ymToTime(ym: string) {
-  const [yr, mo] = ym.split("-").map(Number);
-  return new Date(yr, mo - 1, 1).getTime();
+  // Handles both a year-month ("2026-07", net-worth series → day defaults
+  // to 1) and a full ISO day ("2026-07-15", portfolio series).
+  const [yr, mo, day] = ym.split("-").map(Number);
+  return new Date(yr, mo - 1, day || 1).getTime();
 }
 function dateLabel(t: number) {
   const d = new Date(t);

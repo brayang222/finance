@@ -72,7 +72,7 @@ function AssetTable({
           <tbody>
             {assets.map((a) => {
               const value = a.qty * a.price;
-              const cost  = a.qty * a.avg;
+              const cost  = a.totalCost;
               const pl    = value - cost;
               const plPct = cost > 0 ? pl / cost : 0;
               const pos   = pl >= 0;
@@ -126,7 +126,7 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
   const assets = toAssets(initialData.stocks, initialData.prices);
   const onSelect = (t: string) => router.push(`/detail/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
-  const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
+  const totalCost  = assets.reduce((s, a) => s + a.totalCost, 0);
   const totalPL    = totalValue - totalCost;
   const [refreshing, setRefreshing] = useState(false);
 
@@ -185,7 +185,7 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
   const assets = toAssets(initialData.crypto, initialData.prices);
   const onSelect = (t: string) => router.push(`/detail/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
-  const totalCost  = assets.reduce((s, a) => s + a.qty * a.avg, 0);
+  const totalCost  = assets.reduce((s, a) => s + a.totalCost, 0);
   const totalPL    = totalValue - totalCost;
   const [refreshing, setRefreshing] = useState(false);
   const [currency, setCurrency] = useState<"COP" | "USD">("COP");
@@ -268,8 +268,8 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const selFrom: "inversiones" | "cripto" = isCrypto ? "cripto" : "inversiones";
   const onBack = () => router.push(isCrypto ? "/crypto" : "/investments");
   const asset = [...holdings, ...cryptoAssets].find((a) => a.ticker === selected);
-  const pl = asset ? asset.qty * asset.price - asset.qty * asset.avg : 0;
-  const plPct = asset && asset.avg > 0 ? pl / (asset.qty * asset.avg) : 0;
+  const pl = asset ? asset.qty * asset.price - asset.totalCost : 0;
+  const plPct = asset && asset.totalCost > 0 ? pl / asset.totalCost : 0;
 
   const rawTrades = isCrypto
     ? initialData.crypto.filter(t => t.ticker.toUpperCase() === selected)
@@ -352,6 +352,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
             <SummaryCard label="Cantidad"       value={<>{asset.qty % 1 === 0 ? asset.qty.toLocaleString("es-CO") : asset.qty.toFixed(4)}</>} />
             <SummaryCard label="Precio actual"  value={<Bal n={asset.price} privacy={privacy} />} />
             <SummaryCard label="Costo promedio" value={<Bal n={asset.avg} privacy={privacy} />} />
+            <SummaryCard label="Total invertido" value={<Bal n={asset.totalCost} privacy={privacy} />} />
             <SummaryCard label="Valor mercado"  value={<Bal n={asset.qty * asset.price} privacy={privacy} />} />
             <SummaryCard
               label="P/G no realizada"
