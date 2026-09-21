@@ -127,14 +127,30 @@ function AppShellInner({
 
   // SW registration + offline queue flush on reconnect
   useEffect(() => {
+    // Dev mode only: Turbopack can reuse a chunk's content-hashed filename
+    // across recompiles, which breaks the SW's "cache /_next/static/ forever"
+    // assumption and serves stale JS/CSS indefinitely. Production builds give
+    // every changed chunk a new hash, so this is safe there.
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").then(() => {
-        // Warm key routes so they're available offline.
-        // SW intercepts these fetches and caches by pathname — same key as navigate requests.
-        ["/transactions", "/summary", "/accounts"].forEach(route => {
-          fetch(route).catch(() => {});
-        });
-      }).catch(() => {});
+      if (process.env.NODE_ENV === "production") {
+        navigator.serviceWorker.register("/sw.js").then(() => {
+          // Warm key routes so they're available offline.
+          // SW intercepts these fetches and caches by pathname — same key as navigate requests.
+          ["/transactions", "/summary", "/accounts"].forEach(route => {
+            fetch(route).catch(() => {});
+          });
+        }).catch(() => {});
+      } else {
+        // Self-heal any SW + cache left over from before this dev/prod split
+        // (or from `next build && next start` run locally) so dev never
+        // silently serves stale chunks again.
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(r => r.unregister());
+        }).catch(() => {});
+        if ("caches" in window) {
+          caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
+        }
+      }
     }
     const flush = async () => {
       // small delay so the connection is stable before hitting the server

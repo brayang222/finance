@@ -224,6 +224,9 @@ export interface Transfer {
   toAccountName?: string
   amount: number
   costBasis?: number
+  qty?: number
+  commission?: number
+  detail?: string
   note?: string
 }
 

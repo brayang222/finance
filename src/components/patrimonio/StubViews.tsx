@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Asset, Account, COP, USD, PCT, today } from "../../data/mock";
-import type { AllData, Stock, Crypto, Bien } from "../../types";
+import type { AllData, Stock, Crypto, Bien, Transfer } from "../../types";
 import { Bal, Segmented } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
@@ -120,6 +120,78 @@ function AssetTable({
   );
 }
 
+function SalesHistoryTable({
+  transfers,
+  prefix,
+  privacy,
+}: {
+  transfers: Transfer[];
+  prefix: "stock:" | "crypto:";
+  privacy: boolean;
+}) {
+  const sales = transfers.filter(t => t.fromAccountId.startsWith(prefix));
+
+  if (sales.length === 0) {
+    return (
+      <div className={`${cardClass} text-muted text-[13px]`}>
+        Aún no has registrado ninguna venta.
+      </div>
+    );
+  }
+
+  return (
+    <div className={cardClass}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse min-w-160">
+          <thead>
+            <tr>
+              <th className={thClass}>Fecha</th>
+              <th className={`${thClass} pl-6`}>Activo</th>
+              <th className={`${thClass} pl-6 text-right`}>Cantidad</th>
+              <th className={`${thClass} pl-6 text-right`}>Precio total</th>
+              <th className={`${thClass} pl-6 text-right`}>Comisión</th>
+              <th className={`${thClass} pl-6 text-right`}>P/G</th>
+              <th className={`${thClass} pl-6`}>Cuenta</th>
+              <th className={`${thClass} pl-6`}>Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sales.map((t) => {
+              const ticker = t.fromAccountId.slice(prefix.length);
+              const commission = t.commission ?? 0;
+              const gross = t.amount + commission;
+              const pl = t.amount - (t.costBasis ?? 0);
+              const pos = pl >= 0;
+              return (
+                <tr key={t.id}>
+                  <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.date}</td>
+                  <td className={`${tdClass} pl-6`} style={monoStyle}>{ticker}</td>
+                  <td className={`${tdClass} pl-6 text-right tabular-nums`} style={monoStyle}>
+                    {t.qty == null ? "—" : t.qty % 1 === 0 ? t.qty.toLocaleString("es-CO") : t.qty.toFixed(8)}
+                  </td>
+                  <td className={`${tdClass} pl-6 text-right tabular-nums`} style={monoStyle}>
+                    {privacy ? "••••" : COP(gross)}
+                  </td>
+                  <td className={`${tdClass} pl-6 text-right tabular-nums text-muted`} style={monoStyle}>
+                    {privacy ? "••" : COP(commission)}
+                  </td>
+                  <td className={`${tdClass} pl-6 text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
+                    {privacy ? "••••" : `${pos ? "+" : ""}${COP(pl)}`}
+                  </td>
+                  <td className={`${tdClass} pl-6 text-muted`}>{t.toAccountName ?? "—"}</td>
+                  <td className={`${tdClass} pl-6 text-muted text-[12.5px] max-w-40 truncate`} title={t.detail ?? undefined}>
+                    {t.detail ?? "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function ViewInversiones({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
   const router = useRouter();
@@ -129,6 +201,7 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
   const totalCost  = assets.reduce((s, a) => s + a.totalCost, 0);
   const totalPL    = totalValue - totalCost;
   const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState<"Actuales" | "Histórico">("Actuales");
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -146,7 +219,7 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between">
-        
+
         <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           <SummaryCard label="Valor del portafolio" value={<Bal n={totalValue} privacy={privacy} />} />
           <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
@@ -168,12 +241,17 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
         </div>
       </div>
 
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center justify-between gap-2.5">
           <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
             {refreshing ? "Actualizando…" : "Actualizar precios"}
           </button>
+          <Segmented options={["Actuales", "Histórico"]} value={tab} onChange={(v) => setTab(v as "Actuales" | "Histórico")} />
         </div>
-      <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
+      {tab === "Actuales" ? (
+        <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
+      ) : (
+        <SalesHistoryTable transfers={initialData.transfers} prefix="stock:" privacy={privacy} />
+      )}
     </div>
   );
 }
@@ -191,6 +269,7 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
   const [currency, setCurrency] = useState<"COP" | "USD">("COP");
   const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
   const [loadingTrm, setLoadingTrm] = useState(false);
+  const [tab, setTab] = useState<"Actuales" | "Histórico">("Actuales");
   const inUSD = currency === "USD" && !!trm;
   const fmt = (copValue: number) => (inUSD ? USD(copValue / trm!) : COP(copValue));
 
@@ -245,15 +324,22 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
           />
         </div>
       </div>
-      <div className="shrink-0 flex items-center gap-2.5">
-          <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
-            {refreshing ? "Actualizando…" : "Actualizar precios"}
-          </button>
-          <Segmented options={["COP", "USD"]} value={currency} onChange={handleCurrencyChange} />
-          {loadingTrm && <span className="text-dim text-[12px]">Consultando TRM…</span>}
-          {inUSD && <span className="text-dim text-[12px]">TRM: {COP(trm!)}</span>}
+      <div className="shrink-0 flex items-center justify-between gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
+              {refreshing ? "Actualizando…" : "Actualizar precios"}
+            </button>
+            {tab === "Actuales" && <Segmented options={["COP", "USD"]} value={currency} onChange={handleCurrencyChange} />}
+            {tab === "Actuales" && loadingTrm && <span className="text-dim text-[12px]">Consultando TRM…</span>}
+            {tab === "Actuales" && inUSD && <span className="text-dim text-[12px]">TRM: {COP(trm!)}</span>}
+          </div>
+          <Segmented options={["Actuales", "Histórico"]} value={tab} onChange={(v) => setTab(v as "Actuales" | "Histórico")} />
       </div>
-      <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} currency={currency} trm={trm} />
+      {tab === "Actuales" ? (
+        <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} currency={currency} trm={trm} />
+      ) : (
+        <SalesHistoryTable transfers={initialData.transfers} prefix="crypto:" privacy={privacy} />
+      )}
     </div>
   );
 }
@@ -276,7 +362,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
     : initialData.stocks.filter(t => t.ticker.toUpperCase() === selected);
 
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
-  const [sellItem, setSellItem] = useState<Stock | Crypto | null>(null);
+  const [sellItem, setSellItem] = useState<Asset | null>(null);
   const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
 
   const handleDelete = async (id: string) => {
@@ -330,7 +416,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
             <div className="flex items-center gap-3">
               {rawTrades.length > 0 && (
                 <button
-                  onClick={() => setSellItem(rawTrades[0])}
+                  onClick={() => setSellItem(asset)}
                   className="border border-line bg-panel2 text-fg text-[12px] px-3 py-1.5 rounded-lg cursor-pointer hover:border-accent"
                 >
                   Vender
@@ -447,11 +533,10 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
       )}
       {sellItem && (
         <ModalSellInvestment
-          item={sellItem}
+          asset={sellItem}
           kind={isCrypto ? "crypto" : "stock"}
           bankAccounts={initialData.bankAccounts}
           hasHys={!!initialData.hys}
-          currentPrice={asset?.price}
           onClose={() => setSellItem(null)}
         />
       )}

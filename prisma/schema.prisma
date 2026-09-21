@@ -414,6 +414,9 @@ model Transfer {
   toAccountName   String?
   amount          Float
   costBasis       Float?   // set only on stock/crypto sales — realized P/G = amount - costBasis
+  qty             Float?   // set only on stock/crypto sales — units sold
+  commission      Float?   // set only on stock/crypto sales — sale-side commission (already deducted from `amount`)
+  detail          String?  // optional user note on why a stock/crypto sale was made
   note            String?
   createdAt       DateTime @default(now())
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)

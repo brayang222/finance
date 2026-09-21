@@ -299,6 +299,7 @@ async function _loadAll() {
     })),
     transfers: transfers.map(t => ({
       id: t.id, date: t.date, amount: t.amount, costBasis: t.costBasis ?? undefined,
+      qty: t.qty ?? undefined, commission: t.commission ?? undefined, detail: t.detail ?? undefined,
       fromAccountId: t.fromAccountId, fromAccountName: t.fromAccountName ?? undefined,
       toAccountId: t.toAccountId, toAccountName: t.toAccountName ?? undefined,
       note: t.note ?? undefined,
@@ -441,61 +442,80 @@ export async function deleteTransfer(id: string) {
   await logActivity(userId, "transfer_delete", `Transferencia eliminada`, { amount: row.amount });
 }
 
-export async function sellStock(id: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+// A position can be split across several buy lots (rows). Selling must draw
+// from the whole position, not just one lot — and proportionally, so the
+// booked cost basis matches the weighted-average cost (`avg`/`totalCost`)
+// already shown everywhere else in the UI (see transforms.ts toAssets()).
+export async function sellStock(ticker: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string, commissionCOP: number = 0, detail?: string) {
   const userId = await getUserId();
-  const row = await prisma.stock.findFirst({ where: { id, userId } });
-  if (!row) throw new Error("Acción no encontrada");
-  if (qty <= 0 || qty > row.qty + 1e-9) throw new Error("Cantidad inválida");
+  const rows = await prisma.stock.findMany({ where: { userId, ticker } });
+  const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+  if (rows.length === 0 || totalQty <= 0) throw new Error("Acción no encontrada");
+  if (qty <= 0 || qty > totalQty + 1e-9) throw new Error("Cantidad inválida");
   const d = date ?? todayISO();
-  // Full sale (allowing for float rounding) vs. partial: a partial sale shrinks
-  // the lot instead of deleting it, prorating the original commission so the
-  // remaining position's cost basis stays accurate.
-  const isFullSale = qty >= row.qty - 1e-9;
-  const soldQty = isFullSale ? row.qty : qty;
-  const soldCommission = row.commission * (soldQty / row.qty);
-  const costBasis = row.priceCOP * soldQty + soldCommission;
-  const realizedPL = sellPriceCOP - costBasis;
-  if (isFullSale) {
-    await prisma.stock.delete({ where: { id } });
-  } else {
-    await prisma.stock.update({ where: { id }, data: { qty: row.qty - soldQty, commission: row.commission - soldCommission } });
+  const totalCost = rows.reduce((s, r) => s + r.qty * r.priceCOP + r.commission, 0);
+  const isFullSale = qty >= totalQty - 1e-9;
+  const soldQty = isFullSale ? totalQty : qty;
+  const sellFraction = soldQty / totalQty;
+  const costBasis = totalCost * sellFraction;
+
+  for (const row of rows) {
+    const keepQty = isFullSale ? 0 : row.qty * (1 - sellFraction);
+    if (keepQty < 1e-9) {
+      await prisma.stock.delete({ where: { id: row.id } });
+    } else {
+      await prisma.stock.update({ where: { id: row.id }, data: { qty: keepQty, commission: row.commission * (1 - sellFraction) } });
+    }
   }
-  await adjustBalance(userId, toAccountId, sellPriceCOP);
+
+  const netProceeds = sellPriceCOP - commissionCOP;
+  const realizedPL = netProceeds - costBasis;
+  await adjustBalance(userId, toAccountId, netProceeds);
   await prisma.transfer.create({
     data: {
-      userId, date: d, amount: sellPriceCOP, costBasis, note: `Venta ${row.ticker} (${soldQty} uds)`,
-      fromAccountId: `stock:${row.ticker}`, fromAccountName: `Acción ${row.ticker}`,
+      userId, date: d, amount: netProceeds, costBasis, qty: soldQty, commission: commissionCOP, detail: detail || undefined,
+      note: `Venta ${ticker} (${soldQty} uds)${commissionCOP > 0 ? ` · comisión ${commissionCOP}` : ""}`,
+      fromAccountId: `stock:${ticker}`, fromAccountName: `Acción ${ticker}`,
       toAccountId, toAccountName,
     },
   });
-  await logActivity(userId, "stock_sell", `Venta acción: ${row.ticker}`, { amount: realizedPL, ticker: row.ticker, accountName: toAccountName });
+  await logActivity(userId, "stock_sell", `Venta acción: ${ticker}`, { amount: realizedPL, ticker, accountName: toAccountName });
 }
 
-export async function sellCrypto(id: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string) {
+export async function sellCrypto(ticker: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string, commissionCOP: number = 0, detail?: string) {
   const userId = await getUserId();
-  const row = await prisma.crypto.findFirst({ where: { id, userId } });
-  if (!row) throw new Error("Cripto no encontrada");
-  if (qty <= 0 || qty > row.qty + 1e-9) throw new Error("Cantidad inválida");
+  const rows = await prisma.crypto.findMany({ where: { userId, ticker } });
+  const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+  if (rows.length === 0 || totalQty <= 0) throw new Error("Cripto no encontrada");
+  if (qty <= 0 || qty > totalQty + 1e-9) throw new Error("Cantidad inválida");
   const d = date ?? todayISO();
-  const isFullSale = qty >= row.qty - 1e-9;
-  const soldQty = isFullSale ? row.qty : qty;
-  const soldCommission = row.commission * (soldQty / row.qty);
-  const costBasis = row.priceCOP * soldQty + soldCommission;
-  const realizedPL = sellPriceCOP - costBasis;
-  if (isFullSale) {
-    await prisma.crypto.delete({ where: { id } });
-  } else {
-    await prisma.crypto.update({ where: { id }, data: { qty: row.qty - soldQty, commission: row.commission - soldCommission } });
+  const totalCost = rows.reduce((s, r) => s + r.qty * r.priceCOP + r.commission, 0);
+  const isFullSale = qty >= totalQty - 1e-9;
+  const soldQty = isFullSale ? totalQty : qty;
+  const sellFraction = soldQty / totalQty;
+  const costBasis = totalCost * sellFraction;
+
+  for (const row of rows) {
+    const keepQty = isFullSale ? 0 : row.qty * (1 - sellFraction);
+    if (keepQty < 1e-9) {
+      await prisma.crypto.delete({ where: { id: row.id } });
+    } else {
+      await prisma.crypto.update({ where: { id: row.id }, data: { qty: keepQty, commission: row.commission * (1 - sellFraction) } });
+    }
   }
-  await adjustBalance(userId, toAccountId, sellPriceCOP);
+
+  const netProceeds = sellPriceCOP - commissionCOP;
+  const realizedPL = netProceeds - costBasis;
+  await adjustBalance(userId, toAccountId, netProceeds);
   await prisma.transfer.create({
     data: {
-      userId, date: d, amount: sellPriceCOP, costBasis, note: `Venta ${row.ticker} (${soldQty} uds)`,
-      fromAccountId: `crypto:${row.ticker}`, fromAccountName: `Cripto ${row.ticker}`,
+      userId, date: d, amount: netProceeds, costBasis, qty: soldQty, commission: commissionCOP, detail: detail || undefined,
+      note: `Venta ${ticker} (${soldQty} uds)${commissionCOP > 0 ? ` · comisión ${commissionCOP}` : ""}`,
+      fromAccountId: `crypto:${ticker}`, fromAccountName: `Cripto ${ticker}`,
       toAccountId, toAccountName,
     },
   });
-  await logActivity(userId, "crypto_sell", `Venta cripto: ${row.ticker}`, { amount: realizedPL, ticker: row.ticker, accountName: toAccountName });
+  await logActivity(userId, "crypto_sell", `Venta cripto: ${ticker}`, { amount: realizedPL, ticker, accountName: toAccountName });
 }
 
 // ── BANK ACCOUNTS ──
