@@ -3,22 +3,24 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Asset, Account, COP, USD, PCT, today } from "../../data/mock";
-import type { AllData, Stock, Crypto, Bien, Transfer } from "../../types";
+import type { AllData, Stock, Crypto, Bien, Transfer, Dividend as DividendT } from "../../types";
 import { Bal, Segmented } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer, deleteDividend } from "../../../lib/actions";
 import ModalTransfer from "./ModalTransfer";
 import ModalSellInvestment from "./ModalSellInvestment";
 import { useToast } from "./Toast";
 import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
+import ModalDividend from "./ModalDividend";
 import ModalCuenta from "./ModalCuenta";
 import ModalBien from "./ModalBien";
 import ModalLoseBien from "./ModalLoseBien";
 import ModalMovimiento from "./ModalMovimiento";
 import ModalShell from "./ModalShell";
 import { IconEdit, IconTrash } from "./Icons";
+import AssetTechnical from "./AssetTechnical";
 
 // ponytail: shared style objects replaced with className strings
 const cardClass = "border border-line bg-panel rounded-[18px] p-5.5";
@@ -364,11 +366,24 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
   const [sellItem, setSellItem] = useState<Asset | null>(null);
   const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
+  const [tab, setTab] = useState<"Resumen" | "Técnico">("Resumen");
+  const [dividendModal, setDividendModal] = useState<{ prefill?: DividendT } | null>(null);
+  const firstPurchaseDate = rawTrades.length > 0
+    ? rawTrades.reduce((min, t) => (t.date < min ? t.date : min), rawTrades[0].date)
+    : undefined;
+  const dividends = initialData.dividends.filter(d => d.ticker.toUpperCase() === selected);
+  const totalDividends = dividends.reduce((s, d) => s + d.amount, 0);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("¿Eliminar esta operación?")) return;
     if (isCrypto) await deleteCrypto(id);
     else await deleteStock(id);
+    router.refresh();
+  };
+
+  const handleDeleteDividend = async (id: string) => {
+    if (!window.confirm("¿Eliminar este dividendo?")) return;
+    await deleteDividend(id);
     router.refresh();
   };
 
@@ -433,93 +448,167 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
             </div>
           </div>
 
-          {/* Stats grid */}
-          <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-            <SummaryCard label="Cantidad"       value={<>{asset.qty % 1 === 0 ? asset.qty.toLocaleString("es-CO") : asset.qty.toFixed(4)}</>} />
-            <SummaryCard label="Precio actual"  value={<Bal n={asset.price} privacy={privacy} />} />
-            <SummaryCard label="Costo promedio" value={<Bal n={asset.avg} privacy={privacy} />} />
-            <SummaryCard label="Total invertido" value={<Bal n={asset.totalCost} privacy={privacy} />} />
-            <SummaryCard label="Valor mercado"  value={<Bal n={asset.qty * asset.price} privacy={privacy} />} />
-            <SummaryCard
-              label="P/G no realizada"
-              value={
-                <span className={pl >= 0 ? "text-pos" : "text-neg"}>
-                  <Bal n={Math.abs(pl)} privacy={privacy} />
-                </span>
-              }
-              sub={<span className={pl >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
-            />
-          </div>
+          {/* Tabs */}
+          <Segmented options={["Resumen", "Técnico"]} value={tab} onChange={(v) => setTab(v as any)} />
 
-          {hasFxBreakdown && (
-            <div className={cardClass}>
-              <div className="text-[13px] font-medium mb-2">Desglose del rendimiento (USD)</div>
-              <div className="text-[12px] text-dim mb-3.5">
-                Tu P/G en pesos mezcla el movimiento de {asset.ticker} en dólares y el movimiento del tipo de cambio (TRM) desde tus compras.
+          {tab === "Resumen" && (
+            <>
+              {/* Stats grid */}
+              <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                <SummaryCard label="Cantidad"       value={<>{asset.qty % 1 === 0 ? asset.qty.toLocaleString("es-CO") : asset.qty.toFixed(4)}</>} />
+                <SummaryCard label="Precio actual"  value={<Bal n={asset.price} privacy={privacy} />} />
+                <SummaryCard label="Costo promedio" value={<Bal n={asset.avg} privacy={privacy} />} />
+                <SummaryCard label="Total invertido" value={<Bal n={asset.totalCost} privacy={privacy} />} />
+                <SummaryCard label="Valor mercado"  value={<Bal n={asset.qty * asset.price} privacy={privacy} />} />
+                <SummaryCard
+                  label="P/G no realizada"
+                  value={
+                    <span className={pl >= 0 ? "text-pos" : "text-neg"}>
+                      <Bal n={Math.abs(pl)} privacy={privacy} />
+                    </span>
+                  }
+                  sub={<span className={pl >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
+                />
               </div>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] text-muted">Por movimiento de {asset.ticker} (USD)</span>
-                  <span className={`text-[13px] font-medium ${assetReturn! >= 0 ? "text-pos" : "text-neg"}`}>{PCT(assetReturn!)}</span>
+
+              {hasFxBreakdown && (
+                <div className={cardClass}>
+                  <div className="text-[13px] font-medium mb-2">Desglose del rendimiento (USD)</div>
+                  <div className="text-[12px] text-dim mb-3.5">
+                    Tu P/G en pesos mezcla el movimiento de {asset.ticker} en dólares y el movimiento del tipo de cambio (TRM) desde tus compras.
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-muted">Por movimiento de {asset.ticker} (USD)</span>
+                      <span className={`text-[13px] font-medium ${assetReturn! >= 0 ? "text-pos" : "text-neg"}`}>{PCT(assetReturn!)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-muted">Por tipo de cambio (TRM)</span>
+                      <span className={`text-[13px] font-medium ${fxReturn! >= 0 ? "text-pos" : "text-neg"}`}>{PCT(fxReturn!)}</span>
+                    </div>
+                  </div>
+                  <div className="text-[11.5px] text-dim mt-3 pt-3 border-t border-line">
+                    TRM promedio de compra: {COP(avgTrm!)} · TRM actual: {COP(trm!)}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] text-muted">Por tipo de cambio (TRM)</span>
-                  <span className={`text-[13px] font-medium ${fxReturn! >= 0 ? "text-pos" : "text-neg"}`}>{PCT(fxReturn!)}</span>
+              )}
+
+              {/* Trade history */}
+              <div className={cardClass}>
+                <div className="text-[13px] font-medium mb-3.5">Historial de operaciones</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse min-w-120">
+                    <thead>
+                      <tr>
+                        <th className={thClass}>Fecha</th>
+                        <th className={`${thClass} text-right`}>Cantidad</th>
+                        <th className={`${thClass} text-right`}>Precio COP</th>
+                        <th className={`${thClass} text-right`}>Comisión</th>
+                        <th className={thClass}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rawTrades.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className={`${tdClass} text-dim text-center`}>Sin operaciones</td>
+                        </tr>
+                      ) : rawTrades.map((t) => (
+                        <tr key={t.id}>
+                          <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.date}</td>
+                          <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
+                            {t.qty % 1 === 0 ? t.qty.toLocaleString("es-CO") : t.qty.toFixed(8)}
+                          </td>
+                          <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
+                            {privacy ? "••••" : COP(t.priceCOP)}
+                          </td>
+                          <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
+                            {privacy ? "••" : COP(t.commission)}
+                          </td>
+                          <td className={`${tdClass} text-right`}>
+                            <div className="flex items-center justify-end gap-2">
+                              <button onClick={() => setEditItem(t)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg" title="Editar">
+                                <IconEdit />
+                              </button>
+                              <button onClick={() => handleDelete(t.id)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar">
+                                <IconTrash />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-              <div className="text-[11.5px] text-dim mt-3 pt-3 border-t border-line">
-                TRM promedio de compra: {COP(avgTrm!)} · TRM actual: {COP(trm!)}
+
+              {/* Dividends */}
+              <div className={cardClass}>
+                <div className="flex items-center justify-between mb-3.5">
+                  <div className="text-[13px] font-medium">
+                    Dividendos{dividends.length > 0 && <span className="text-dim font-normal"> · {COP(totalDividends)} recibidos</span>}
+                  </div>
+                  <button
+                    onClick={() => setDividendModal({})}
+                    className="border border-line bg-panel2 text-fg text-[12px] px-3 py-1.5 rounded-lg cursor-pointer hover:border-accent"
+                  >
+                    + Registrar dividendo
+                  </button>
+                </div>
+                {dividends.length === 0 ? (
+                  <div className={`${tdClass} text-dim text-center border-t-0`}>Sin dividendos registrados</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse min-w-100">
+                      <thead>
+                        <tr>
+                          <th className={thClass}>Fecha</th>
+                          <th className={`${thClass} text-right`}>Monto</th>
+                          <th className={thClass}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dividends.map((d) => (
+                          <tr key={d.id}>
+                            <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>
+                              {d.date}{d.note ? <span className="text-dim"> · {d.note}</span> : ""}
+                            </td>
+                            <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
+                              {privacy ? "••••" : COP(d.amount)}
+                            </td>
+                            <td className={`${tdClass} text-right`}>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setDividendModal({ prefill: d })}
+                                  className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg text-[11px]"
+                                  title="Re-registrar (duplicar como nuevo pago)"
+                                >
+                                  Repetir
+                                </button>
+                                <button onClick={() => handleDeleteDividend(d.id)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar">
+                                  <IconTrash />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           )}
 
-          {/* Trade history */}
-          <div className={cardClass}>
-            <div className="text-[13px] font-medium mb-3.5">Historial de operaciones</div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-120">
-                <thead>
-                  <tr>
-                    <th className={thClass}>Fecha</th>
-                    <th className={`${thClass} text-right`}>Cantidad</th>
-                    <th className={`${thClass} text-right`}>Precio COP</th>
-                    <th className={`${thClass} text-right`}>Comisión</th>
-                    <th className={thClass}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rawTrades.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className={`${tdClass} text-dim text-center`}>Sin operaciones</td>
-                    </tr>
-                  ) : rawTrades.map((t) => (
-                    <tr key={t.id}>
-                      <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.date}</td>
-                      <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                        {t.qty % 1 === 0 ? t.qty.toLocaleString("es-CO") : t.qty.toFixed(8)}
-                      </td>
-                      <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                        {privacy ? "••••" : COP(t.priceCOP)}
-                      </td>
-                      <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
-                        {privacy ? "••" : COP(t.commission)}
-                      </td>
-                      <td className={`${tdClass} text-right`}>
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => setEditItem(t)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-fg" title="Editar">
-                            <IconEdit />
-                          </button>
-                          <button onClick={() => handleDelete(t.id)} className="text-muted cursor-pointer bg-transparent border-none p-1 rounded hover:text-neg" title="Eliminar">
-                            <IconTrash />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {tab === "Técnico" && (
+            <div className={cardClass}>
+              <AssetTechnical
+                ticker={asset.ticker}
+                kind={isCrypto ? "crypto" : "stock"}
+                purchaseDate={firstPurchaseDate}
+                emaConfig={initialData.config?.chartEmaConfig}
+              />
             </div>
-          </div>
+          )}
         </div>
       ) : (
         <div className={`${cardClass} text-muted`}>Activo no encontrado.</div>
@@ -538,6 +627,14 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
           bankAccounts={initialData.bankAccounts}
           hasHys={!!initialData.hys}
           onClose={() => setSellItem(null)}
+        />
+      )}
+      {dividendModal && (
+        <ModalDividend
+          ticker={selected}
+          prefill={dividendModal.prefill}
+          bankAccounts={initialData.bankAccounts}
+          onClose={() => setDividendModal(null)}
         />
       )}
     </div>
@@ -904,10 +1001,14 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
 
 function AccountCard({
   name, subtitle, balance, privacy, tag, tagColor,
-  onEdit, onDelete,
+  onEdit, onDelete, breakdown,
 }: {
   name: string; subtitle?: string; balance: number; privacy: boolean;
   tag?: string; tagColor?: string; onEdit?: () => void; onDelete?: () => void;
+  // For broker/exchange accounts: split the total into "cash sitting there"
+  // vs. "market value of positions linked to it" — a Bolsa/Cripto account
+  // isn't one number, it's disponible + invertido.
+  breakdown?: { label: string; value: number }[];
 }) {
   return (
     <div className={cardClass}>
@@ -934,6 +1035,16 @@ function AccountCard({
       <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
         <Bal n={balance} privacy={privacy} />
       </div>
+      {breakdown && breakdown.length > 0 && (
+        <div className="flex gap-4 mt-2.5 pt-2.5 border-t border-line">
+          {breakdown.map((b) => (
+            <div key={b.label} className="text-[12px]">
+              <span className="text-dim">{b.label}: </span>
+              <span className="text-muted" style={monoStyle}><Bal n={b.value} privacy={privacy} /></span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -982,24 +1093,29 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const bolsaAccounts  = initialData.bankAccounts.filter(a => a.type === "bolsa");
   const criptoAccounts = initialData.bankAccounts.filter(a => a.type === "cripto");
 
-  // For bolsa/cripto accounts: compute live balance from linked assets
-  const bolsaBalance = (id: string) => {
+  // A Bolsa/Cripto account isn't a single number — it's cash sitting
+  // uninvested in the broker ("disponible", the account's own balance field)
+  // PLUS the market value of whatever stocks/crypto are linked to it
+  // ("invertido"). Both matter and neither should hide the other.
+  const bolsaInvested = (id: string) => {
     const linked = holdings.filter(a => {
       const s = initialData.stocks.find(s => s.ticker === a.ticker);
-      return s?.accountId === id;
+      return s?.accountId === id || s?.accountId2 === id;
     });
-    if (linked.length > 0) return linked.reduce((s, a) => s + a.qty * a.price, 0);
-    return initialData.bankAccounts.find(a => a.id === id)?.balance ?? 0;
+    return linked.reduce((s, a) => s + a.qty * a.price, 0);
   };
+  const bolsaAvailable = (id: string) => initialData.bankAccounts.find(a => a.id === id)?.balance ?? 0;
+  const bolsaBalance = (id: string) => bolsaAvailable(id) + bolsaInvested(id);
 
-  const criptoBalance = (id: string) => {
+  const criptoInvested = (id: string) => {
     const linked = cryptoAssets.filter(a => {
       const c = initialData.crypto.find(c => c.ticker === a.ticker);
-      return c?.accountId === id;
+      return c?.accountId === id || c?.accountId2 === id;
     });
-    if (linked.length > 0) return linked.reduce((s, a) => s + a.qty * a.price, 0);
-    return initialData.bankAccounts.find(a => a.id === id)?.balance ?? 0;
+    return linked.reduce((s, a) => s + a.qty * a.price, 0);
   };
+  const criptoAvailable = (id: string) => initialData.bankAccounts.find(a => a.id === id)?.balance ?? 0;
+  const criptoBalance = (id: string) => criptoAvailable(id) + criptoInvested(id);
 
   // If no bolsa/cripto accounts exist, show totals as unlinked summary
   const unlinkedStockTotal  = bolsaAccounts.length === 0 ? stockTotal : 0;
@@ -1106,6 +1222,10 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
           {bolsaAccounts.map((a) => (
             <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={bolsaBalance(a.id)}
               privacy={privacy} tag="Bolsa" tagColor="var(--accent)22"
+              breakdown={[
+                { label: "Disponible", value: bolsaAvailable(a.id) },
+                { label: "Invertido", value: bolsaInvested(a.id) },
+              ]}
               onEdit={() => setEditItem(a)} onDelete={() => handleDelete(a.id)} />
           ))}
         </Section>
@@ -1122,6 +1242,10 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
           {criptoAccounts.map((a) => (
             <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={criptoBalance(a.id)}
               privacy={privacy} tag="Cripto" tagColor="#8a8f9822"
+              breakdown={[
+                { label: "Disponible", value: criptoAvailable(a.id) },
+                { label: "Invertido", value: criptoInvested(a.id) },
+              ]}
               onEdit={() => setEditItem(a)} onDelete={() => handleDelete(a.id)} />
           ))}
         </Section>

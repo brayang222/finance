@@ -51,6 +51,9 @@ export default async function Page() {
         sharesReceived={data.sharesReceived}
         finances={data.finances}
         transfers={data.transfers}
+        stocks={data.stocks}
+        crypto={data.crypto}
+        hysAccounts={data.hysAccounts}
       />
 
       {/* Sign out */}

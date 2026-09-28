@@ -41,6 +41,9 @@ export default function ModalSellInvestment({ asset, kind, bankAccounts, hasHys,
   const [date, setDate] = useState(today());
   const [detail, setDetail] = useState("");
   const [saving, setSaving] = useState(false);
+  const [useSplit, setUseSplit] = useState(false);
+  const [toAccount2, setToAccount2] = useState("");
+  const [amount2, setAmount2] = useState("");
 
   // Keep the suggested total in sync with the quantity until the user types
   // their own sale price.
@@ -73,15 +76,20 @@ export default function ModalSellInvestment({ asset, kind, bankAccounts, hasHys,
   const remaining = asset.qty - sellQty;
   const valid = sellNum > 0 && sellQtyRaw > 0 && sellQtyRaw <= asset.qty + 1e-9 && !!toAccount;
 
+  const amount2Num = useSplit ? parseInt(amount2, 10) || 0 : undefined;
+  const toAccount2Name = useSplit && toAccount2 ? accountName(toAccount2) : undefined;
+
   const save = async () => {
     if (!valid) return;
     setSaving(true);
     try {
       const trimmedDetail = detail.trim() || undefined;
+      const splitArgs: [string | undefined, string | undefined, number | undefined] =
+        useSplit && toAccount2 ? [toAccount2, toAccount2Name, amount2Num] : [undefined, undefined, undefined];
       if (kind === "stock") {
-        await sellStock(asset.ticker, sellQty, sellNum, toAccount, accountName(toAccount), date, commissionNum, trimmedDetail);
+        await sellStock(asset.ticker, sellQty, sellNum, toAccount, accountName(toAccount), date, commissionNum, trimmedDetail, ...splitArgs);
       } else {
-        await sellCrypto(asset.ticker, sellQty, sellNum, toAccount, accountName(toAccount), date, commissionNum, trimmedDetail);
+        await sellCrypto(asset.ticker, sellQty, sellNum, toAccount, accountName(toAccount), date, commissionNum, trimmedDetail, ...splitArgs);
       }
       if (remaining <= 1e-9) {
         // Selling the whole position leaves nothing for the detail page to
@@ -164,6 +172,43 @@ export default function ModalSellInvestment({ asset, kind, bankAccounts, hasHys,
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </div>
+
+        {accounts.length > 1 && (
+          !useSplit ? (
+            <button
+              type="button"
+              onClick={() => setUseSplit(true)}
+              className="text-[12px] text-accent bg-transparent border-none cursor-pointer px-0 self-start"
+            >
+              + Repartir el dinero entre dos cuentas
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-dim">Segunda cuenta destino</span>
+                <button
+                  type="button"
+                  onClick={() => { setUseSplit(false); setToAccount2(""); setAmount2(""); }}
+                  className="text-[12px] text-dim hover:text-neg bg-transparent border-none cursor-pointer"
+                >
+                  Quitar
+                </button>
+              </div>
+              <select className={fieldClass} value={toAccount2} onChange={e => setToAccount2(e.target.value)}>
+                <option value="">Seleccionar cuenta...</option>
+                {accounts.filter(a => a.id !== toAccount).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <div>
+                <label className={labelClass}>Monto que entra a esta cuenta (COP)</label>
+                <MoneyInput value={amount2} onChange={setAmount2} />
+              </div>
+              <div className="text-[12px] text-dim">
+                Resto a {accountName(toAccount) || "la primera cuenta"}:{" "}
+                <span className="text-muted">{COP(Math.max(0, sellNum - commissionNum - (amount2Num ?? 0)))}</span>
+              </div>
+            </div>
+          )
+        )}
 
         <div>
           <label className={labelClass}>Fecha</label>

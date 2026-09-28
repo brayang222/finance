@@ -11,9 +11,30 @@ export interface Stock {
   source?: string
   accountId?: string
   accountName?: string
+  // Optional second funding source (e.g. broker cash + a complementary bank
+  // transfer) — amount2 is the portion of the total cost taken from
+  // accountId2, the rest comes from accountId.
+  accountId2?: string
+  accountName2?: string
+  amount2?: number
 }
 
 export interface Crypto extends Omit<Stock, 'source'> {}
+
+export interface Dividend {
+  id: string
+  ticker: string
+  date: string
+  amount: number
+  shares?: number
+  perShare?: number
+  grossAmount?: number
+  adminCost?: number
+  tax?: number
+  accountId?: string
+  accountName?: string
+  note?: string
+}
 
 export interface Finance {
   id: string
@@ -70,6 +91,7 @@ export interface UserConfig {
   trm: number | null
   trmUpdatedAt: string | null
   summaryWidgets: string[] | null
+  chartEmaConfig: { id: string; period: number; color: string; visible: boolean }[] | null
   showCommerce: boolean
   telegramId?: string | null
   salesGoal?: number | null
@@ -257,4 +279,5 @@ export interface AllData {
   sales: Sale[]
   cashCloses: CashClose[]
   transfers: Transfer[]
+  dividends: Dividend[]
 }

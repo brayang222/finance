@@ -44,7 +44,11 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
     }
   };
 
-  const showBalance = type === "banco" || type === "otro";
+  // Bolsa/Cripto accounts also need an editable balance now — it represents
+  // "dinero disponible" (uninvested cash sitting in the broker/exchange),
+  // separate from "invertido" (computed from linked stock/crypto positions).
+  const showBalance = true;
+  const balanceLabel = type === "bolsa" || type === "cripto" ? "Dinero disponible (sin invertir, COP)" : "Saldo actual (COP)";
 
   return (
     <ModalShell
@@ -83,7 +87,7 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
 
       {showBalance && (
         <div>
-          <label className={labelClass}>Saldo actual (COP)</label>
+          <label className={labelClass}>{balanceLabel}</label>
           <MoneyInput value={balance} onChange={setBalance} prefix="$" />
         </div>
       )}

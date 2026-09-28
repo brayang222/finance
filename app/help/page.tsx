@@ -86,6 +86,7 @@ const ICONS: Record<string, React.ReactNode> = {
   telegram:    ico("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"),
   atajos:      ico("rect:2,3,20,14,2|M8 21h8|M12 17v4"),
   tema:        ico("M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"),
+  tributario:  ico("M12 1v22|M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"),
 };
 
 const sections: { key: string; title: string; content: React.ReactNode }[] = [
@@ -277,6 +278,65 @@ const sections: { key: string; title: string; content: React.ReactNode }[] = [
             <span style={{ color: "var(--muted)" }}>{desc}</span>
           </div>
         ))}
+      </div>
+    ),
+  },
+  {
+    key: "tributario",
+    title: "Tributario · Consignaciones DIAN",
+    content: (
+      <div className="flex flex-col gap-3">
+        <p style={{ color: "var(--muted)" }} className="text-sm m-0">
+          En <strong>Perfil › Tributario</strong> encuentras un estimado de si superas el tope de
+          «consignaciones bancarias, depósitos o inversiones financieras» — uno de los criterios que
+          obliga a una persona natural a declarar renta en Colombia.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          <p className="font-medium text-sm m-0">¿Cómo se calcula el tope?</p>
+          <p style={{ color: "var(--muted)" }} className="text-sm m-0">
+            El umbral es <strong>1.400 UVT</strong> del año gravable (año calendario, 1 ene–31 dic).
+            La app usa el valor de UVT específico de cada año (certificado por la DIAN en diciembre
+            del año anterior), no un número fijo — así que el tope de 2026 es distinto al de 2025.
+            Solo se cuentan los movimientos del año en curso; algo registrado el año pasado no suma
+            al tope de este año, sino al de la declaración de ese año.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="font-medium text-sm m-0">Qué SÍ cuenta para el tope</p>
+          <Steps items={[
+            "Ingresos registrados como tipo «ingreso» (salario, ventas, etc.) — dinero que entra a una cuenta.",
+            "Transferencias entre tus propias cuentas (cada entrada a una cuenta cuenta, aunque sea plata moviéndose entre bancos tuyos — así lo mide la DIAN, en bruto).",
+            "Venta de una acción o criptomoneda cuyo dinero cae a una cuenta bancaria.",
+            "Compra de acciones o criptomonedas — el monto invertido (precio × cantidad + comisión), aunque la registres directo desde el modal sin crear una transferencia aparte a tu bróker.",
+            "Depósitos («abonos») a una cuenta de alto rendimiento / CDT.",
+            "Ventas de comercio pagadas a una cuenta o efectivo (no a fiado).",
+            "Abonos de un cliente pagando una deuda fiada — el dinero que entra por ese pago.",
+          ]} />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="font-medium text-sm m-0">Qué NO cuenta</p>
+          <Steps items={[
+            "Egresos normales (gastos) — el dinero que sale nunca suma al tope.",
+            "Ventas registradas a fiado mientras no se hayan pagado (no ha entrado dinero todavía).",
+            "Pagos que tú le haces a un proveedor (egreso, no consignación).",
+            "Aportes a una Meta de ahorro — es solo un contador de progreso, no mueve dinero de ninguna cuenta.",
+          ]} />
+        </div>
+
+        <Note>
+          Este cálculo solo incluye lo registrado en la app. Si tienes consignaciones en cuentas
+          bancarias que no llevas aquí, tu cifra real de la DIAN puede ser mayor. Este es un estimado
+          de apoyo, no un dato oficial — verifica siempre en tus extractos o en el portal de la DIAN.
+        </Note>
+
+        <Note>
+          Por ahora este cálculo solo aplica al perfil <strong>personal</strong>. Un negocio (perfil
+          de comercio) tiene obligaciones distintas — IVA, ICA, facturación electrónica, retención en
+          la fuente — que todavía no se calculan en la app.
+        </Note>
       </div>
     ),
   },

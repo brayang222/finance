@@ -8,7 +8,7 @@ import {
   type SaleItemInput, type PurchaseItemInput,
 } from "./db";
 import { cookies } from "next/headers";
-import type { Stock, Crypto, Finance, Hys, Cash, BankAccount, Bien } from '../src/types';
+import type { Stock, Crypto, Finance, Hys, Cash, BankAccount, Bien, Dividend } from '../src/types';
 import { GENERIC_CATS_IN, GENERIC_CATS_OUT } from '../src/data/constants';
 
 async function getSessionUserId() {
@@ -90,7 +90,7 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, sharesGiven, sharesReceived] =
+  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, dividends, sharesGiven, sharesReceived] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
@@ -110,6 +110,7 @@ async function _loadAll() {
       prisma.goal.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
       prisma.recurring.findMany({ where: { userId: targetUserId }, orderBy: { nextDate: 'asc' } }),
       prisma.transfer.findMany({ where: { userId: targetUserId }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
+      prisma.dividend.findMany({ where: { userId: targetUserId }, orderBy: { date: 'desc' } }),
       // Sharing metadata always from the real user
       prisma.shareInvite.findMany({
         where: { ownerId: userId, status: { not: "revoked" } },
@@ -193,12 +194,18 @@ async function _loadAll() {
     ...s,
     accountId: s.accountId ?? undefined,
     accountName: s.accountName ?? undefined,
+    accountId2: s.accountId2 ?? undefined,
+    accountName2: s.accountName2 ?? undefined,
+    amount2: s.amount2 ?? undefined,
   }));
 
   const typedCrypto = crypto.map(c => ({
     ...c,
     accountId: c.accountId ?? undefined,
     accountName: c.accountName ?? undefined,
+    accountId2: c.accountId2 ?? undefined,
+    accountName2: c.accountName2 ?? undefined,
+    amount2: c.amount2 ?? undefined,
   }));
 
   return {
@@ -223,6 +230,7 @@ async function _loadAll() {
       trm: config.trm,
       trmUpdatedAt: config.trmUpdatedAt?.toISOString() ?? null,
       summaryWidgets: config.summaryWidgets ? JSON.parse(config.summaryWidgets) : null,
+      chartEmaConfig: config.chartEmaConfig ? JSON.parse(config.chartEmaConfig) : null,
       showCommerce: realUserConfig?.showCommerce ?? config.showCommerce,
       telegramId: config.telegramId,
       salesGoal: config.salesGoal,
@@ -304,6 +312,12 @@ async function _loadAll() {
       toAccountId: t.toAccountId, toAccountName: t.toAccountName ?? undefined,
       note: t.note ?? undefined,
     })),
+    dividends: dividends.map(d => ({
+      id: d.id, ticker: d.ticker, date: d.date, amount: d.amount,
+      shares: d.shares ?? undefined, perShare: d.perShare ?? undefined, grossAmount: d.grossAmount ?? undefined,
+      adminCost: d.adminCost ?? undefined, tax: d.tax ?? undefined,
+      accountId: d.accountId ?? undefined, accountName: d.accountName ?? undefined, note: d.note ?? undefined,
+    })),
   };
 }
 
@@ -350,11 +364,33 @@ export async function addFinance(item: Omit<Finance, "id">) {
   });
 }
 
+// Splits a total cost/proceeds across up to two accounts — e.g. "I paid
+// part from cash already sitting in the broker, part from a bank transfer".
+// amount2 is clamped to the total so the split can never debit more than
+// was actually spent.
+function splitDebit(total: number, amount2?: number | null) {
+  const a2 = Math.min(Math.max(amount2 ?? 0, 0), total);
+  return { amount1: total - a2, amount2: a2 };
+}
+
+async function applyStockDebit(userId: string, accountId: string | undefined, accountId2: string | undefined | null, total: number, amount2: number | null | undefined) {
+  const { amount1, amount2: a2 } = splitDebit(total, amount2);
+  await adjustBalance(userId, accountId, -amount1);
+  if (accountId2 && a2 > 0) await adjustBalance(userId, accountId2, -a2);
+}
+
+async function reverseStockDebit(userId: string, accountId: string | null | undefined, accountId2: string | null | undefined, total: number, amount2: number | null | undefined) {
+  const { amount1, amount2: a2 } = splitDebit(total, amount2);
+  if (accountId) await adjustBalance(userId, accountId, amount1);
+  if (accountId2 && a2 > 0) await adjustBalance(userId, accountId2, a2);
+}
+
 export async function addStock(item: Omit<Stock, "id">) {
   const userId = await getUserId();
   const { source, ...rest } = item;
   await prisma.stock.create({ data: { ...rest, id: crypto.randomUUID(), userId } });
-  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  const total = item.priceCOP * item.qty + item.commission;
+  await applyStockDebit(userId, item.accountId, item.accountId2, total, item.amount2);
   await logActivity(userId, "stock_buy", `Compra acción: ${item.ticker}`, {
     amount: item.priceCOP * item.qty,
     ticker: item.ticker,
@@ -366,7 +402,8 @@ export async function addCrypto(item: Omit<Crypto, "id">) {
   const userId = await getUserId();
   const trm = await resolveTrmForDate(item.date);
   await prisma.crypto.create({ data: { ...item, trm, id: crypto.randomUUID(), userId } });
-  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  const total = item.priceCOP * item.qty + item.commission;
+  await applyStockDebit(userId, item.accountId, item.accountId2, total, item.amount2);
   await logActivity(userId, "crypto_buy", `Compra cripto: ${item.ticker}`, {
     amount: item.priceCOP * item.qty,
     ticker: item.ticker,
@@ -381,8 +418,8 @@ export async function updateStock(id: string, item: Omit<Stock, "id">) {
   const { source, ...rest } = item;
   await prisma.stock.update({ where: { id, userId }, data: rest });
   // Reverse old debit, apply new debit
-  if (old?.accountId) await adjustBalance(userId, old.accountId, old.priceCOP * old.qty + old.commission);
-  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  if (old) await reverseStockDebit(userId, old.accountId, old.accountId2, old.priceCOP * old.qty + old.commission, old.amount2);
+  await applyStockDebit(userId, item.accountId, item.accountId2, item.priceCOP * item.qty + item.commission, item.amount2);
   await logActivity(userId, "stock_edit", `Edición acción: ${item.ticker}`, { ticker: item.ticker });
 }
 
@@ -390,7 +427,7 @@ export async function deleteStock(id: string) {
   const userId = await getUserId();
   const row = await prisma.stock.findUnique({ where: { id } });
   await prisma.stock.delete({ where: { id, userId } });
-  if (row?.accountId) await adjustBalance(userId, row.accountId, row.priceCOP * row.qty + row.commission);
+  if (row) await reverseStockDebit(userId, row.accountId, row.accountId2, row.priceCOP * row.qty + row.commission, row.amount2);
   await logActivity(userId, "stock_delete", `Eliminación acción: ${row?.ticker ?? id}`, { ticker: row?.ticker });
 }
 
@@ -399,8 +436,8 @@ export async function updateCrypto(id: string, item: Omit<Crypto, "id">) {
   const old = await prisma.crypto.findUnique({ where: { id } });
   const trm = old && old.date === item.date ? old.trm : await resolveTrmForDate(item.date);
   await prisma.crypto.update({ where: { id, userId }, data: { ...item, trm } });
-  if (old?.accountId) await adjustBalance(userId, old.accountId, old.priceCOP * old.qty + old.commission);
-  await adjustBalance(userId, item.accountId, -(item.priceCOP * item.qty + item.commission));
+  if (old) await reverseStockDebit(userId, old.accountId, old.accountId2, old.priceCOP * old.qty + old.commission, old.amount2);
+  await applyStockDebit(userId, item.accountId, item.accountId2, item.priceCOP * item.qty + item.commission, item.amount2);
   await logActivity(userId, "crypto_edit", `Edición cripto: ${item.ticker}`, { ticker: item.ticker });
 }
 
@@ -408,7 +445,7 @@ export async function deleteCrypto(id: string) {
   const userId = await getUserId();
   const row = await prisma.crypto.findUnique({ where: { id } });
   await prisma.crypto.delete({ where: { id, userId } });
-  if (row?.accountId) await adjustBalance(userId, row.accountId, row.priceCOP * row.qty + row.commission);
+  if (row) await reverseStockDebit(userId, row.accountId, row.accountId2, row.priceCOP * row.qty + row.commission, row.amount2);
   await logActivity(userId, "crypto_delete", `Eliminación cripto: ${row?.ticker ?? id}`, { ticker: row?.ticker });
 }
 
@@ -446,7 +483,13 @@ export async function deleteTransfer(id: string) {
 // from the whole position, not just one lot — and proportionally, so the
 // booked cost basis matches the weighted-average cost (`avg`/`totalCost`)
 // already shown everywhere else in the UI (see transforms.ts toAssets()).
-export async function sellStock(ticker: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string, commissionCOP: number = 0, detail?: string) {
+// Sale proceeds can optionally be split across two destination accounts
+// (e.g. part stays in the broker, part gets transferred out to a bank
+// account) — one Transfer row per destination.
+export async function sellStock(
+  ticker: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string,
+  date?: string, commissionCOP: number = 0, detail?: string, toAccountId2?: string, toAccountName2?: string, amount2?: number,
+) {
   const userId = await getUserId();
   const rows = await prisma.stock.findMany({ where: { userId, ticker } });
   const totalQty = rows.reduce((s, r) => s + r.qty, 0);
@@ -470,19 +513,34 @@ export async function sellStock(ticker: string, qty: number, sellPriceCOP: numbe
 
   const netProceeds = sellPriceCOP - commissionCOP;
   const realizedPL = netProceeds - costBasis;
-  await adjustBalance(userId, toAccountId, netProceeds);
+  const { amount1, amount2: a2 } = splitDebit(netProceeds, toAccountId2 ? amount2 : 0);
+  await adjustBalance(userId, toAccountId, amount1);
   await prisma.transfer.create({
     data: {
-      userId, date: d, amount: netProceeds, costBasis, qty: soldQty, commission: commissionCOP, detail: detail || undefined,
+      userId, date: d, amount: amount1, costBasis, qty: soldQty, commission: commissionCOP, detail: detail || undefined,
       note: `Venta ${ticker} (${soldQty} uds)${commissionCOP > 0 ? ` · comisión ${commissionCOP}` : ""}`,
       fromAccountId: `stock:${ticker}`, fromAccountName: `Acción ${ticker}`,
       toAccountId, toAccountName,
     },
   });
+  if (toAccountId2 && a2 > 0) {
+    await adjustBalance(userId, toAccountId2, a2);
+    await prisma.transfer.create({
+      data: {
+        userId, date: d, amount: a2, detail: detail || undefined,
+        note: `Venta ${ticker} (${soldQty} uds) · segunda cuenta`,
+        fromAccountId: `stock:${ticker}`, fromAccountName: `Acción ${ticker}`,
+        toAccountId: toAccountId2, toAccountName: toAccountName2,
+      },
+    });
+  }
   await logActivity(userId, "stock_sell", `Venta acción: ${ticker}`, { amount: realizedPL, ticker, accountName: toAccountName });
 }
 
-export async function sellCrypto(ticker: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string, date?: string, commissionCOP: number = 0, detail?: string) {
+export async function sellCrypto(
+  ticker: string, qty: number, sellPriceCOP: number, toAccountId: string, toAccountName?: string,
+  date?: string, commissionCOP: number = 0, detail?: string, toAccountId2?: string, toAccountName2?: string, amount2?: number,
+) {
   const userId = await getUserId();
   const rows = await prisma.crypto.findMany({ where: { userId, ticker } });
   const totalQty = rows.reduce((s, r) => s + r.qty, 0);
@@ -506,16 +564,65 @@ export async function sellCrypto(ticker: string, qty: number, sellPriceCOP: numb
 
   const netProceeds = sellPriceCOP - commissionCOP;
   const realizedPL = netProceeds - costBasis;
-  await adjustBalance(userId, toAccountId, netProceeds);
+  const { amount1, amount2: a2 } = splitDebit(netProceeds, toAccountId2 ? amount2 : 0);
+  await adjustBalance(userId, toAccountId, amount1);
   await prisma.transfer.create({
     data: {
-      userId, date: d, amount: netProceeds, costBasis, qty: soldQty, commission: commissionCOP, detail: detail || undefined,
+      userId, date: d, amount: amount1, costBasis, qty: soldQty, commission: commissionCOP, detail: detail || undefined,
       note: `Venta ${ticker} (${soldQty} uds)${commissionCOP > 0 ? ` · comisión ${commissionCOP}` : ""}`,
       fromAccountId: `crypto:${ticker}`, fromAccountName: `Cripto ${ticker}`,
       toAccountId, toAccountName,
     },
   });
+  if (toAccountId2 && a2 > 0) {
+    await adjustBalance(userId, toAccountId2, a2);
+    await prisma.transfer.create({
+      data: {
+        userId, date: d, amount: a2, detail: detail || undefined,
+        note: `Venta ${ticker} (${soldQty} uds) · segunda cuenta`,
+        fromAccountId: `crypto:${ticker}`, fromAccountName: `Cripto ${ticker}`,
+        toAccountId: toAccountId2, toAccountName: toAccountName2,
+      },
+    });
+  }
   await logActivity(userId, "crypto_sell", `Venta cripto: ${ticker}`, { amount: realizedPL, ticker, accountName: toAccountName });
+}
+
+// ── DIVIDENDS ── (the full list already comes from loadAll — dividends are
+// few enough per user that per-ticker lazy loading isn't worth the extra
+// round trip; ViewDetalle filters initialData.dividends by ticker.)
+export async function addDividend(item: Omit<Dividend, "id">) {
+  const userId = await getUserId();
+  const row = await prisma.dividend.create({ data: { ...item, userId } });
+  if (item.accountId) {
+    await adjustBalance(userId, item.accountId, item.amount);
+    // A dividend landing in an account is money actually entering it — it
+    // must count toward the DIAN "consignaciones" threshold, same as any
+    // other ingreso (see [[dian-consignaciones]] logic in ProfileSettings).
+    await prisma.finance.create({
+      data: {
+        id: crypto.randomUUID(), userId, date: item.date, type: "ingreso",
+        category: "Dividendos", desc: item.note || `Dividendo ${item.ticker}`,
+        amount: item.amount, accountId: item.accountId, accountName: item.accountName,
+      },
+    });
+  }
+  await logActivity(userId, "dividend", `Dividendo: ${item.ticker}`, { amount: item.amount, ticker: item.ticker });
+  return row.id;
+}
+
+export async function deleteDividend(id: string) {
+  const userId = await getUserId();
+  const row = await prisma.dividend.findFirst({ where: { id, userId } });
+  if (!row) return;
+  if (row.accountId) {
+    await adjustBalance(userId, row.accountId, -row.amount);
+    await prisma.finance.deleteMany({
+      where: { userId, accountId: row.accountId, date: row.date, category: "Dividendos", amount: row.amount },
+    });
+  }
+  await prisma.dividend.delete({ where: { id } });
+  await logActivity(userId, "dividend_delete", `Dividendo eliminado: ${row.ticker}`, { amount: row.amount, ticker: row.ticker });
 }
 
 // ── BANK ACCOUNTS ──
@@ -1202,6 +1309,44 @@ export async function saveSummaryWidgets(keys: string[]) {
   });
 }
 
+// EMA lines drawn on the technical chart (period, color, visibility) — a
+// per-user preference like theme or summaryWidgets, not a per-browser one,
+// so it follows the account across devices instead of living in localStorage.
+export async function saveChartEmaConfig(emas: { id: string; period: number; color: string; visible: boolean }[]) {
+  const userId = await getUserId();
+  const json = JSON.stringify(emas);
+  await prisma.userConfig.upsert({
+    where: { userId },
+    create: { userId, chartEmaConfig: json },
+    update: { chartEmaConfig: json },
+  });
+}
+
+// ── CHART DRAWINGS (trendlines, Fibonacci, text, measurements) ──
+export async function loadChartDrawings(ticker: string) {
+  const userId = await getUserId();
+  const rows = await prisma.chartDrawing.findMany({ where: { userId, ticker }, orderBy: { createdAt: "asc" } });
+  return rows.map(r => ({ id: r.id, kind: r.kind, data: JSON.parse(r.data) }));
+}
+
+export async function addChartDrawing(ticker: string, kind: string, data: unknown) {
+  const userId = await getUserId();
+  const row = await prisma.chartDrawing.create({
+    data: { userId, ticker, kind, data: JSON.stringify(data) },
+  });
+  return row.id;
+}
+
+export async function deleteChartDrawing(id: string) {
+  const userId = await getUserId();
+  await prisma.chartDrawing.deleteMany({ where: { id, userId } });
+}
+
+export async function clearChartDrawings(ticker: string) {
+  const userId = await getUserId();
+  await prisma.chartDrawing.deleteMany({ where: { userId, ticker } });
+}
+
 // ── GOALS ──
 export async function addGoal(item: { name: string; target: number; saved?: number; deadline?: string; color?: string }) {
   const userId = await getUserId();
@@ -1393,12 +1538,26 @@ export async function addFiadoMovement(
   const userId = await getUserId();
   const customer = await prisma.customer.findFirst({ where: { id: customerId, userId } });
   if (!customer) throw new Error("Cliente no encontrado");
-  await prisma.fiadoMovement.create({
-    data: { userId, customerId, date: todayISO(), type, amount, note, dueDate },
+  const movement = await prisma.fiadoMovement.create({
+    data: { userId, customerId, date: todayISO(), type, amount, note, dueDate, accountId: type === "abono" ? accountId : undefined },
   });
   const isSupplier = customer.kind === "supplier";
   if (type === "abono" && accountId) {
     await adjustBalance(userId, accountId, isSupplier ? -amount : amount);
+    // A customer paying off fiado is money actually entering an account —
+    // it must count toward the DIAN "consignaciones" threshold, same as any
+    // other ingreso. A payment to a supplier is an egreso and never counts.
+    if (!isSupplier) {
+      const account = await prisma.bankAccount.findFirst({ where: { id: accountId, userId } });
+      const finance = await prisma.finance.create({
+        data: {
+          id: crypto.randomUUID(), userId, date: todayISO(), type: "ingreso",
+          category: "Fiado", desc: note ?? `Abono de ${customer.name}`,
+          amount, accountId, accountName: account?.name,
+        },
+      });
+      await prisma.fiadoMovement.update({ where: { id: movement.id }, data: { financeId: finance.id } });
+    }
   }
   await logActivity(
     userId, type,
@@ -1411,7 +1570,16 @@ export async function addFiadoMovement(
 
 export async function deleteFiadoMovement(id: string) {
   const userId = await getUserId();
-  await prisma.fiadoMovement.deleteMany({ where: { id, userId } });
+  const row = await prisma.fiadoMovement.findFirst({ where: { id, userId }, include: { customer: true } });
+  if (!row) return;
+  // Reverse the balance + linked Finance row an "abono" created, so deleting
+  // a mistaken payment also removes it from the DIAN consignaciones tally.
+  if (row.type === "abono" && row.accountId) {
+    const isSupplier = row.customer.kind === "supplier";
+    await adjustBalance(userId, row.accountId, isSupplier ? row.amount : -row.amount);
+    if (row.financeId) await prisma.finance.deleteMany({ where: { id: row.financeId, userId } });
+  }
+  await prisma.fiadoMovement.delete({ where: { id } });
 }
 
 // ── COMERCIO: PRODUCTOS, VENTAS, COMPRAS Y CAJA ──

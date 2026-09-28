@@ -39,6 +39,8 @@ model User {
   customers      Customer[]
   fiadoMovements FiadoMovement[]
   products       Product[]
+  chartDrawings  ChartDrawing[]
+  dividends      Dividend[]
   sales          Sale[]
   cashCloses     CashClose[]
   transfers      Transfer[]
@@ -98,6 +100,9 @@ model Stock {
   commission  Float
   accountId   String?
   accountName String?
+  accountId2  String? // optional second funding source (e.g. broker cash + a bank transfer)
+  accountName2 String?
+  amount2     Float?  // portion of the total cost taken from accountId2 (rest comes from accountId)
   user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -114,7 +119,34 @@ model Crypto {
   commission  Float
   accountId   String?
   accountName String?
+  accountId2  String?
+  accountName2 String?
+  amount2     Float?
   user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Dividend payments, tracked per ticker and shown in that asset's detail
+// history. Only `amount` (net received) and `date` are required — the
+// breakdown (shares, per-share rate, gross, admin cost, tax) is optional
+// detail some brokers (Trii) show but not all users will bother entering.
+model Dividend {
+  id          String   @id @default(cuid())
+  userId      String
+  ticker      String
+  date        String
+  amount      Float    // net amount actually received
+  shares      Float?
+  perShare    Float?
+  grossAmount Float?
+  adminCost   Float?
+  tax         Float?
+  accountId   String?  // if set, credits this account + counts as a DIAN ingreso
+  accountName String?
+  note        String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ticker])
 }
 
 model Finance {
@@ -204,6 +236,7 @@ model UserConfig {
   trm            Float?
   trmUpdatedAt   DateTime?
   summaryWidgets String?
+  chartEmaConfig String?
   telegramId     String?
   showCommerce   Boolean   @default(false)
   salesGoal      Float?    // meta de ventas mensual (perfil comercio)
@@ -331,6 +364,22 @@ model Customer {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// Drawings (trendlines, Fibonacci, text, measurements) a user places on a
+// stock/crypto's technical chart. Scoped per ticker, not global like
+// UserConfig.chartEmaConfig, since these are specific to that instrument's
+// price action, not a general chart style preference.
+model ChartDrawing {
+  id        String   @id @default(cuid())
+  userId    String
+  ticker    String
+  kind      String   // "line" | "hline" | "fib" | "text" | "measure"
+  data      String   // JSON: points (date/price), color, text, etc.
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ticker])
+}
+
 model FiadoMovement {
   id         String   @id @default(cuid())
   userId     String
@@ -341,6 +390,8 @@ model FiadoMovement {
   note       String?
   dueDate    String?  // vencimiento (cuentas por pagar)
   saleId     String?  // venta fiada que originó la deuda
+  accountId  String?  // cuenta afectada por un abono (para revertir saldo al borrar)
+  financeId  String?  // Finance creado por un abono de cliente (para revertirlo al borrar)
   createdAt  DateTime @default(now())
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)

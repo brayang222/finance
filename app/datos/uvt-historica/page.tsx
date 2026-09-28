@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE_URL } from "@/content/posts";
+import { UVT_BY_YEAR } from "@/lib/uvt";
 
 export const metadata: Metadata = {
   title: "Valor de la UVT: histórico 2016-2026",
@@ -10,19 +11,9 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/datos/uvt-historica` },
 };
 
-const data: [number, number][] = [
-  [2026, 52_374],
-  [2025, 49_799],
-  [2024, 47_065],
-  [2023, 42_412],
-  [2022, 38_004],
-  [2021, 36_308],
-  [2020, 35_607],
-  [2019, 34_270],
-  [2018, 33_156],
-  [2017, 31_859],
-  [2016, 29_753],
-];
+const data: [number, number][] = Object.entries(UVT_BY_YEAR)
+  .map(([año, uvt]) => [Number(año), uvt] as [number, number])
+  .sort((a, b) => b[0] - a[0]);
 
 const f = (n: number) => "$" + n.toLocaleString("es-CO");
 

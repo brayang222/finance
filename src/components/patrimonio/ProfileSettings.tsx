@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { UserConfig, Category, ShareInfo, Finance, Transfer } from "../../types";
+import type { UserConfig, Category, ShareInfo, Finance, Transfer, Stock, Crypto, HysAccount } from "../../types";
 import {
   updateModules,
   addCategory,
@@ -17,6 +17,7 @@ import {
 } from "../../../lib/actions";
 import { fieldClass } from "./ModalShell";
 import { COP } from "../../data/mock";
+import { dianConsignacionesThreshold } from "../../../lib/uvt";
 
 const MODULE_OPTIONS = [
   { key: "showCommerce", label: "Perfil de comercio",      sub: "Ventas, inventario y clientes" },
@@ -65,7 +66,7 @@ const cardTitle = "text-[11.5px] tracking-[0.08em] uppercase text-dim font-mediu
 
 export default function ProfileSettings({
   config, categories, sharesGiven = [], sharesReceived = [],
-  finances = [], transfers = [],
+  finances = [], transfers = [], stocks = [], crypto = [], hysAccounts = [],
 }: {
   config: UserConfig | null;
   categories: Category[];
@@ -73,6 +74,9 @@ export default function ProfileSettings({
   sharesReceived?: ShareInfo[];
   finances?: Finance[];
   transfers?: Transfer[];
+  stocks?: Stock[];
+  crypto?: Crypto[];
+  hysAccounts?: HysAccount[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -209,20 +213,32 @@ export default function ProfileSettings({
   const [profileTab, setProfileTab] = useState<"config" | "tributario">("config");
 
   // ── DIAN Tributario ──
-  // DIAN mide "consignaciones bancarias": cada depósito/crédito que ENTRA a una cuenta.
-  // Egresos NO suman (dinero sale). Transferencias SÍ (dinero entra a la cuenta destino).
+  // Uno de los criterios de obligación a declarar renta es "consignaciones
+  // bancarias, depósitos o inversiones financieras" (no solo consignaciones
+  // bancarias): además de lo que entra a una cuenta (ingresos, transferencias),
+  // suma el dinero que se destina a una inversión (comprar acciones/cripto,
+  // abrir o abonar un CDT/cuenta de alto rendimiento), incluso si esa compra
+  // se registró directo desde la cuenta bancaria sin pasar por una
+  // transferencia intermedia. Egresos normales (gastos) NO suman.
   // Período = año gravable (calendario).
   const currentYear = new Date().getFullYear();
   const yearStr = String(currentYear);
 
   const yearFinances = finances.filter(f => f.date.startsWith(yearStr));
   const yearTransfers = transfers.filter(t => t.date.startsWith(yearStr));
+  const yearStocks = stocks.filter(s => s.date.startsWith(yearStr));
+  const yearCrypto = crypto.filter(c => c.date.startsWith(yearStr));
+  const yearHysDeposits = hysAccounts.flatMap(a => a.movements)
+    .filter(m => m.type === "deposito" && m.date.startsWith(yearStr));
 
   const totalIngresos = yearFinances.filter(f => f.type === "ingreso").reduce((s, f) => s + f.amount, 0);
   const totalTransfers = yearTransfers.reduce((s, t) => s + t.amount, 0);
-  // ponytail: consignaciones = ingresos + transferencias (cada entrada a cuenta). Egresos no cuentan.
-  const consignaciones = totalIngresos + totalTransfers;
-  const DIAN_THRESHOLD = 69_718_000;
+  const totalInversiones =
+    yearStocks.reduce((s, r) => s + r.priceCOP * r.qty + r.commission, 0) +
+    yearCrypto.reduce((s, r) => s + r.priceCOP * r.qty + r.commission, 0) +
+    yearHysDeposits.reduce((s, m) => s + m.amount, 0);
+  const consignaciones = totalIngresos + totalTransfers + totalInversiones;
+  const DIAN_THRESHOLD = dianConsignacionesThreshold(currentYear);
   const rotacionPct = Math.min((consignaciones / DIAN_THRESHOLD) * 100, 100);
   const debeDeclarar = consignaciones >= DIAN_THRESHOLD;
 
@@ -278,7 +294,7 @@ export default function ProfileSettings({
           <div className={cardClass}>
             <div className={cardTitle}>Consignaciones {currentYear}</div>
             <div className="text-xs text-muted -mt-2">
-              La DIAN suma cada depósito que entra a tus cuentas. Si supera ~$69.7M COP en el año, debes declarar renta.
+              La DIAN suma cada depósito que entra a tus cuentas, más lo que inviertes (acciones, cripto, CDT). Si supera ~$69.7M COP en el año, debes declarar renta.
             </div>
 
             {/* Progress bar */}
@@ -308,6 +324,7 @@ export default function ProfileSettings({
               {[
                 { label: "Ingresos recibidos", sub: "Dinero que entró a tus cuentas", value: totalIngresos, color: "text-pos" },
                 { label: "Transferencias entre cuentas", sub: "Cada movimiento cuenta como consignación", value: totalTransfers, color: "text-accent" },
+                { label: "Inversiones financieras", sub: "Compras de acciones, cripto y abonos a CDT/alto rendimiento", value: totalInversiones, color: "text-amber-400" },
               ].map(r => (
                 <div key={r.label} className="flex items-center justify-between gap-4">
                   <div>
@@ -333,7 +350,10 @@ export default function ProfileSettings({
                 const prefix = `${yearStr}-${mm}`;
                 const mFin = yearFinances.filter(f => f.type === "ingreso" && f.date.startsWith(prefix)).reduce((s, f) => s + f.amount, 0);
                 const mTr = yearTransfers.filter(t => t.date.startsWith(prefix)).reduce((s, t) => s + t.amount, 0);
-                const mTotal = mFin + mTr;
+                const mStocks = yearStocks.filter(r => r.date.startsWith(prefix)).reduce((s, r) => s + r.priceCOP * r.qty + r.commission, 0);
+                const mCrypto = yearCrypto.filter(r => r.date.startsWith(prefix)).reduce((s, r) => s + r.priceCOP * r.qty + r.commission, 0);
+                const mHys = yearHysDeposits.filter(m => m.date.startsWith(prefix)).reduce((s, m) => s + m.amount, 0);
+                const mTotal = mFin + mTr + mStocks + mCrypto + mHys;
                 if (mTotal === 0) return null;
                 const monthName = new Date(currentYear, i).toLocaleString("es-CO", { month: "short" });
                 const barW = consignaciones > 0 ? (mTotal / consignaciones) * 100 : 0;
