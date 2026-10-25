@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { auth } from "../auth";
 import { prisma } from "./prisma";
 import {
@@ -90,7 +91,7 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, dividends, sharesGiven, sharesReceived] =
+  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, dividends, openOrders, sharesGiven, sharesReceived, debts, priceAlerts, dividendSchedules] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
@@ -111,6 +112,7 @@ async function _loadAll() {
       prisma.recurring.findMany({ where: { userId: targetUserId }, orderBy: { nextDate: 'asc' } }),
       prisma.transfer.findMany({ where: { userId: targetUserId }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }),
       prisma.dividend.findMany({ where: { userId: targetUserId }, orderBy: { date: 'desc' } }),
+      prisma.openOrder.findMany({ where: { userId: targetUserId }, orderBy: { date: 'desc' } }),
       // Sharing metadata always from the real user
       prisma.shareInvite.findMany({
         where: { ownerId: userId, status: { not: "revoked" } },
@@ -122,6 +124,9 @@ async function _loadAll() {
         include: { owner: { select: { name: true, email: true } } },
         orderBy: { createdAt: "desc" },
       }),
+      prisma.debt.findMany({ where: { userId: targetUserId }, orderBy: { createdAt: 'asc' } }),
+      prisma.priceAlert.findMany({ where: { userId: targetUserId, active: true }, orderBy: { createdAt: 'desc' } }),
+      prisma.dividendSchedule.findMany({ where: { userId: targetUserId }, orderBy: { expectedDate: 'asc' } }),
     ]);
 
   const [customers, products, sales, cashCloses] = profile === "business"
@@ -192,6 +197,7 @@ async function _loadAll() {
 
   const typedStocks = stocks.map(s => ({
     ...s,
+    exchange: s.exchange ?? undefined,
     accountId: s.accountId ?? undefined,
     accountName: s.accountName ?? undefined,
     accountId2: s.accountId2 ?? undefined,
@@ -317,6 +323,28 @@ async function _loadAll() {
       shares: d.shares ?? undefined, perShare: d.perShare ?? undefined, grossAmount: d.grossAmount ?? undefined,
       adminCost: d.adminCost ?? undefined, tax: d.tax ?? undefined,
       accountId: d.accountId ?? undefined, accountName: d.accountName ?? undefined, note: d.note ?? undefined,
+    })),
+    openOrders: openOrders.map(o => ({
+      id: o.id, ticker: o.ticker, kind: o.kind as "cripto" | "stock", side: o.side as "buy" | "sell",
+      orderType: o.orderType, qty: o.qty, limitPrice: o.limitPrice ?? undefined,
+      totalUSD: o.totalUSD ?? undefined, currency: o.currency,
+      date: o.date, status: o.status as "open" | "filled" | "cancelled",
+      broker: o.broker ?? undefined, note: o.note ?? undefined,
+    })),
+    debts: debts.map(d => ({
+      id: d.id, name: d.name, type: d.type as "hipoteca" | "credito" | "tarjeta" | "otro",
+      balance: d.balance, originalAmount: d.originalAmount ?? undefined, rate: d.rate,
+      currency: d.currency, startDate: d.startDate ?? undefined, endDate: d.endDate ?? undefined,
+      monthlyPayment: d.monthlyPayment ?? undefined, notes: d.notes ?? undefined,
+    })),
+    priceAlerts: priceAlerts.map(a => ({
+      id: a.id, ticker: a.ticker, kind: a.kind as "stock" | "crypto",
+      direction: a.direction as "above" | "below", price: a.price,
+      triggered: a.triggered, active: a.active,
+    })),
+    dividendSchedules: dividendSchedules.map(s => ({
+      id: s.id, ticker: s.ticker, expectedDate: s.expectedDate,
+      perShare: s.perShare ?? undefined, note: s.note ?? undefined,
     })),
   };
 }
@@ -479,6 +507,81 @@ export async function deleteTransfer(id: string) {
   await logActivity(userId, "transfer_delete", `Transferencia eliminada`, { amount: row.amount });
 }
 
+// ── OPEN ORDERS ──
+export async function addOpenOrder(item: {
+  ticker: string; kind: string; side: string; orderType?: string;
+  qty: number; limitPrice?: number; totalUSD?: number; currency?: string;
+  date: string; broker?: string; note?: string;
+}) {
+  const userId = await getUserId();
+  await prisma.openOrder.create({
+    data: { ...item, orderType: item.orderType ?? "limit", currency: item.currency ?? "USD", status: "open", userId },
+  });
+}
+
+export async function updateOpenOrderStatus(id: string, status: "open" | "filled" | "cancelled") {
+  const userId = await getUserId();
+  await prisma.openOrder.update({ where: { id, userId }, data: { status } });
+}
+
+// Marks an order as filled AND adds the corresponding position to the portfolio.
+// trm: current COP/USD exchange rate for storing priceCOP.
+export async function fillOpenOrder(id: string, trm: number) {
+  const userId = await getUserId();
+  const order = await prisma.openOrder.findUnique({ where: { id, userId } });
+  if (!order || order.status !== "open") return;
+  if (order.limitPrice == null) return; // market orders require a fill price — cannot auto-fill
+
+  await prisma.openOrder.update({ where: { id }, data: { status: "filled" } });
+
+  const priceUSD = order.limitPrice;
+  const priceCOP = priceUSD * trm;
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (order.kind === "cripto") {
+    // Find the broker's cripto account to link the lot
+    const account = await prisma.bankAccount.findFirst({
+      where: { userId, type: "cripto", name: { contains: order.broker ?? "", mode: "insensitive" } },
+    });
+    await prisma.crypto.create({
+      data: {
+        id: randomUUID(),
+        userId, ticker: order.ticker.toUpperCase(),
+        qty: order.qty, price: priceUSD, currency: "USD",
+        trm, priceCOP, commission: 0,
+        date: today,
+        accountId: account?.id ?? null,
+        accountName: account?.name ?? (order.broker ?? null),
+      },
+    });
+  } else {
+    const account = await prisma.bankAccount.findFirst({
+      where: { userId, type: "bolsa", name: { contains: order.broker ?? "", mode: "insensitive" } },
+    });
+    await prisma.stock.create({
+      data: {
+        id: randomUUID(),
+        userId, ticker: order.ticker.toUpperCase(),
+        qty: order.qty, price: priceCOP, currency: "COP",
+        trm, priceCOP, commission: 0,
+        date: today,
+        accountId: account?.id ?? null,
+        accountName: account?.name ?? (order.broker ?? null),
+      },
+    });
+  }
+
+  await logActivity(userId, order.kind === "cripto" ? "crypto_buy" : "stock_buy",
+    `Orden ejecutada: ${order.qty} ${order.ticker} @ ${order.limitPrice ? `$${order.limitPrice}` : "mercado"}`,
+    { amount: (order.totalUSD ?? 0) * trm, ticker: order.ticker }
+  );
+}
+
+export async function deleteOpenOrder(id: string) {
+  const userId = await getUserId();
+  await prisma.openOrder.delete({ where: { id, userId } });
+}
+
 // A position can be split across several buy lots (rows). Selling must draw
 // from the whole position, not just one lot — and proportionally, so the
 // booked cost basis matches the weighted-average cost (`avg`/`totalCost`)
@@ -626,10 +729,11 @@ export async function deleteDividend(id: string) {
 }
 
 // ── BANK ACCOUNTS ──
-export async function createBankAccount(item: Omit<BankAccount, "id">) {
+export async function createBankAccount(item: Omit<BankAccount, "id">): Promise<string> {
   const userId = await getUserId();
-  await prisma.bankAccount.create({ data: { ...item, userId } });
+  const row = await prisma.bankAccount.create({ data: { ...item, userId } });
   await logActivity(userId, "account_create", `Nueva cuenta: ${item.name}`, { accountName: item.name });
+  return row.id;
 }
 
 export async function updateBankAccount(id: string, item: Omit<BankAccount, "id">) {
@@ -681,24 +785,83 @@ const COINGECKO_IDS: Record<string, string> = {
   USDT: "tether", BNB: "binancecoin", XRP: "ripple", DOT: "polkadot",
   MATIC: "matic-network", AVAX: "avalanche-2", DOGE: "dogecoin",
   LINK: "chainlink", LTC: "litecoin", UNI: "uniswap", ATOM: "cosmos",
+  XAUT: "tether-gold",
 };
 
-export async function refreshPrices(stockTickers: string[], cryptoTickers: string[]) {
+// usdStockTickers: tickers of stocks priced in USD (NYSE/NASDAQ) — fetched without .CL suffix,
+// price multiplied by TRM before storing so the DB always holds COP values.
+export async function refreshPrices(stockTickers: string[], cryptoTickers: string[], usdStockTickers: string[] = []) {
   const userId = await getUserId();
   const pricesMap: Record<string, number> = {};
+  const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes shared cache
+  const now = Date.now();
 
-  for (const ticker of stockTickers) {
+  // Load global cache for all requested tickers
+  const allRequested = [
+    ...stockTickers,
+    ...usdStockTickers,
+    ...cryptoTickers.map(t => t.toUpperCase()),
+  ];
+  const cached = await prisma.globalPrice.findMany({
+    where: { ticker: { in: allRequested } },
+  });
+  const freshCache: Record<string, number> = {};
+  for (const row of cached) {
+    if (now - row.updatedAt.getTime() < CACHE_TTL_MS) {
+      freshCache[row.ticker] = row.value;
+    }
+  }
+
+  // Use cached prices immediately
+  for (const [ticker, value] of Object.entries(freshCache)) {
+    pricesMap[ticker] = value;
+  }
+
+  // Only fetch tickers not in fresh cache
+  const staleStocks    = stockTickers.filter(t => !freshCache[t]);
+  const staleUSDStocks = usdStockTickers.filter(t => !freshCache[t]);
+  const staleCryptos   = cryptoTickers.filter(t => !freshCache[t.toUpperCase()]);
+
+  const globalUpdates: Array<{ ticker: string; value: number; kind: string }> = [];
+
+  // COP-denominated BVC stocks — Yahoo suffix .CL, price already in COP
+  for (const ticker of staleStocks) {
     try {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.CL?range=1d&interval=1d`;
       const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 0 } });
       if (!res.ok) continue;
       const json = await res.json();
       const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (price && price > 0) pricesMap[ticker] = price;
+      if (price && price > 0) {
+        pricesMap[ticker] = price;
+        globalUpdates.push({ ticker, value: price, kind: "stock" });
+      }
     } catch { /* skip */ }
   }
 
-  const ids = cryptoTickers.map(t => COINGECKO_IDS[t.toUpperCase()]).filter(Boolean);
+  // USD-denominated stocks (NYSE/NASDAQ) — no .CL suffix; price in USD → convert to COP
+  if (staleUSDStocks.length > 0) {
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const usdToCop = (await fetchOfficialTrmForDate(todayISO)) ?? (await fetchUsdToCop());
+    if (usdToCop) {
+      for (const ticker of staleUSDStocks) {
+        try {
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
+          const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 0 } });
+          if (!res.ok) continue;
+          const json = await res.json();
+          const priceUSD = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+          if (priceUSD && priceUSD > 0) {
+            const priceCOP = priceUSD * usdToCop;
+            pricesMap[ticker] = priceCOP;
+            globalUpdates.push({ ticker, value: priceCOP, kind: "stock" });
+          }
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  const ids = staleCryptos.map(t => COINGECKO_IDS[t.toUpperCase()]).filter(Boolean);
   if (ids.length > 0) {
     try {
       // CoinGecko's simple/price endpoint does not support "cop" as vs_currency
@@ -711,10 +874,14 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
         const todayISO = new Date().toISOString().slice(0, 10);
         const usdToCop = (await fetchOfficialTrmForDate(todayISO)) ?? (await fetchUsdToCop());
         if (usdToCop) {
-          for (const ticker of cryptoTickers) {
+          for (const ticker of staleCryptos) {
             const coinId = COINGECKO_IDS[ticker.toUpperCase()];
             const usd = coinId && json[coinId]?.usd;
-            if (usd) pricesMap[ticker.toUpperCase()] = usd * usdToCop;
+            if (usd) {
+              const copValue = usd * usdToCop;
+              pricesMap[ticker.toUpperCase()] = copValue;
+              globalUpdates.push({ ticker: ticker.toUpperCase(), value: copValue, kind: "crypto" });
+            }
           }
         }
       }
@@ -723,6 +890,20 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
 
   if (Object.keys(pricesMap).length === 0) return { updated: 0 };
 
+  // Persist fresh fetches to global cache (fire-and-forget on errors)
+  if (globalUpdates.length > 0) {
+    await Promise.all(
+      globalUpdates.map(({ ticker, value, kind }) =>
+        prisma.globalPrice.upsert({
+          where: { ticker },
+          create: { ticker, value, kind },
+          update: { value },
+        }).catch(() => {})
+      )
+    );
+  }
+
+  // Update this user's per-ticker price table
   await Promise.all(
     Object.entries(pricesMap).map(([ticker, value]) =>
       prisma.price.upsert({
@@ -732,7 +913,26 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
       })
     )
   );
-  return { updated: Object.keys(pricesMap).length };
+
+  // Check price alerts — mark triggered ones so the UI can toast them
+  if (Object.keys(pricesMap).length > 0) {
+    const alerts = await prisma.priceAlert.findMany({
+      where: { userId, active: true, triggered: false },
+    });
+    const triggered: string[] = [];
+    for (const alert of alerts) {
+      const mktPrice = pricesMap[alert.ticker.toUpperCase()];
+      if (mktPrice == null) continue;
+      const hit = alert.direction === "above" ? mktPrice >= alert.price : mktPrice <= alert.price;
+      if (hit) {
+        await prisma.priceAlert.update({ where: { id: alert.id }, data: { triggered: true } });
+        triggered.push(alert.id);
+      }
+    }
+    if (triggered.length > 0) return { updated: Object.keys(pricesMap).length, fromCache: Object.keys(freshCache).length, triggeredAlerts: triggered };
+  }
+
+  return { updated: Object.keys(pricesMap).length, fromCache: Object.keys(freshCache).length };
 }
 
 // ── PORTFOLIO HISTORY (real mark-to-market, for P/G-over-time — not just
@@ -1627,4 +1827,66 @@ export async function setSalesGoal(amount: number | null) {
     create: { userId, salesGoal: amount },
     update: { salesGoal: amount },
   });
+}
+
+// ── DEUDAS / PASIVOS ──
+export async function addDebt(item: {
+  name: string; type: string; balance: number; originalAmount?: number;
+  rate?: number; currency?: string; startDate?: string; endDate?: string;
+  monthlyPayment?: number; notes?: string;
+}) {
+  const userId = await getUserId();
+  await prisma.debt.create({ data: { userId, rate: 0, currency: "COP", ...item } });
+}
+
+export async function updateDebt(id: string, item: {
+  name: string; type: string; balance: number; originalAmount?: number | null;
+  rate?: number; currency?: string; startDate?: string | null; endDate?: string | null;
+  monthlyPayment?: number | null; notes?: string | null;
+}) {
+  const userId = await getUserId();
+  await prisma.debt.update({ where: { id, userId }, data: item });
+}
+
+export async function deleteDebt(id: string) {
+  const userId = await getUserId();
+  await prisma.debt.delete({ where: { id, userId } });
+}
+
+// ── PRICE ALERTS ──
+export async function addPriceAlert(item: {
+  ticker: string; kind: string; direction: string; price: number;
+}) {
+  const userId = await getUserId();
+  await prisma.priceAlert.create({ data: { userId, ...item } });
+}
+
+export async function deletePriceAlert(id: string) {
+  const userId = await getUserId();
+  await prisma.priceAlert.delete({ where: { id, userId } });
+}
+
+export async function resetPriceAlert(id: string) {
+  const userId = await getUserId();
+  await prisma.priceAlert.update({ where: { id, userId }, data: { triggered: false } });
+}
+
+// ── DIVIDEND SCHEDULES ──
+export async function addDividendSchedule(item: {
+  ticker: string; expectedDate: string; perShare?: number; note?: string;
+}) {
+  const userId = await getUserId();
+  await prisma.dividendSchedule.create({ data: { userId, ...item } });
+}
+
+export async function updateDividendSchedule(id: string, item: {
+  expectedDate?: string; perShare?: number | null; note?: string | null;
+}) {
+  const userId = await getUserId();
+  await prisma.dividendSchedule.update({ where: { id, userId }, data: item });
+}
+
+export async function deleteDividendSchedule(id: string) {
+  const userId = await getUserId();
+  await prisma.dividendSchedule.delete({ where: { id, userId } });
 }

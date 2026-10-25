@@ -11,18 +11,19 @@ import ModalAccion from "./ModalAccion";
 import ModalCripto from "./ModalCripto";
 import ModalCuenta from "./ModalCuenta";
 import { PrivacyContext } from "./PrivacyContext";
+import { CurrencyContext } from "./CurrencyContext";
 import FloatingCalc from "./FloatingCalc";
 import Onboarding from "./Onboarding";
-import { switchViewAs, addFinance } from "../../../lib/actions";
+import { switchViewAs, addFinance, refreshTrm } from "../../../lib/actions";
 import { ToastProvider, useToast } from "./Toast";
 import CommandPalette from "./CommandPalette";
 import CsvImport from "./CsvImport";
 
-type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals" | "recurrentes" | "clientes" | "proveedores" | "productos" | "caja";
+type Section = "summary" | "investments" | "crypto" | "transactions" | "accounts" | "detail" | "history" | "profile" | "savings" | "analytics" | "goals" | "recurrentes" | "clientes" | "proveedores" | "productos" | "caja" | "fiscal" | "deudas" | "dividends";
 
 function sectionFromPath(path: string): Section {
   const seg = path.split("/")[1] || "transactions";
-  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals", "recurrentes", "clientes", "proveedores", "productos", "caja"].includes(seg)) {
+  if (["summary", "investments", "crypto", "transactions", "accounts", "detail", "history", "profile", "savings", "analytics", "goals", "recurrentes", "clientes", "proveedores", "productos", "caja", "fiscal", "deudas", "dividends"].includes(seg)) {
     return seg as Section;
   }
   return "transactions";
@@ -30,7 +31,7 @@ function sectionFromPath(path: string): Section {
 
 const PAGE_META: Record<Section, { title: string; sub: string }> = {
   summary:      { title: "Resumen",            sub: "Tu patrimonio de un vistazo" },
-  investments:  { title: "Inversiones",        sub: "Portafolio en bolsa (BVC)" },
+  investments:  { title: "Inversiones",        sub: "Portafolio en bolsa" },
   crypto:       { title: "Cripto",             sub: "Activos digitales" },
   detail:       { title: "Detalle del activo", sub: "Posición individual" },
   transactions: { title: "Transacciones",      sub: "Ingresos y egresos" },
@@ -41,6 +42,9 @@ const PAGE_META: Record<Section, { title: string; sub: string }> = {
   analytics:    { title: "Análisis",           sub: "Presupuesto, categorías y tendencias" },
   goals:        { title: "Metas",              sub: "Objetivos de ahorro" },
   recurrentes:  { title: "Recurrentes",        sub: "Arriendo, salario, suscripciones" },
+  fiscal:       { title: "Informe Fiscal",     sub: "Ganancias realizadas, dividendos y P/G" },
+  deudas:       { title: "Deudas",             sub: "Pasivos, créditos y obligaciones" },
+  dividends:    { title: "Dividendos",         sub: "Próximos pagos y rendimiento por acción" },
   clientes:     { title: "Clientes y fiado",   sub: "Cuentas por cobrar de tu negocio" },
   proveedores:  { title: "Proveedores",        sub: "Cuentas por pagar y vencimientos" },
   productos:    { title: "Productos",          sub: "Catálogo, inventario y márgenes" },
@@ -70,6 +74,8 @@ function AppShellInner({
   const toast = useToast();
 
   const [theme, setTheme]             = useState<"dark" | "light">("dark");
+  const [currency, setCurrency]       = useState<"COP" | "USD">("COP");
+  const [trmLoading, setTrmLoading]   = useState(false);
   const [privacy, setPrivacy]         = useState(false);
   const [isMobile, setIsMobile]       = useState(false);
   const [showModal, setShowModal]     = useState(false);
@@ -93,6 +99,15 @@ function AppShellInner({
     try { localStorage.setItem("gfp-theme", theme); } catch {}
     document.cookie = `gfp-theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
   }, [theme]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("gfp-currency") as "COP" | "USD" | null;
+    if (stored) setCurrency(stored);
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("gfp-currency", currency); } catch {}
+  }, [currency]);
 
   useEffect(() => {
     const update = () => setIsMobile(window.innerWidth < 880);
@@ -256,6 +271,23 @@ function AppShellInner({
   const isViewingAs = !!data.viewingAs;
   const showRegistrar = REGISTRAR_SECTIONS.includes(section) && !isViewingAs;
 
+  const handleCurrencyChange = async (next: "COP" | "USD") => {
+    if (next === currency) return;
+    if (next === "USD") {
+      setTrmLoading(true);
+      try {
+        await refreshTrm();
+        router.refresh();
+      } catch {
+        toast.error("No se pudo obtener la TRM. Verifica tu conexión.");
+        setTrmLoading(false);
+        return;
+      }
+      setTrmLoading(false);
+    }
+    setCurrency(next);
+  };
+
   const exitViewAs = async () => {
     await switchViewAs(null);
     router.refresh();
@@ -282,7 +314,7 @@ function AppShellInner({
       );
       case "investments":  return <ModalAccion bankAccounts={allAccounts} onClose={close} />;
       case "crypto":       return <ModalCripto bankAccounts={allAccounts} onClose={close} />;
-      case "accounts":     return <ModalCuenta onClose={close} />;
+      case "accounts":     return <ModalCuenta onClose={close} bankAccounts={allAccounts} />;
       default:              return null;
     }
   }, [showModal, section, allAccounts, data.categories, data.finances, data.budgets, data.budgetConfigs]);
@@ -291,6 +323,7 @@ function AppShellInner({
   const onNavStart = () => setNavLoading(true);
 
   return (
+    <CurrencyContext.Provider value={currency}>
     <PrivacyContext.Provider value={privacy}>
       {navLoading && (
         <div className="fixed top-0 left-0 right-0 z-[500] h-[2px] overflow-hidden pointer-events-none">
@@ -330,9 +363,12 @@ function AppShellInner({
             pageSub={meta.sub}
             privacy={privacy}
             theme={theme}
+            currency={currency}
             showRegistrar={showRegistrar}
             onTogglePrivacy={() => setPrivacy(p => !p)}
             onToggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")}
+            onCurrencyChange={handleCurrencyChange}
+            trmLoading={trmLoading}
             onOpenModal={() => setShowModal(true)}
             onOpenCsvImport={() => setShowCsvImport(true)}
           />
@@ -381,6 +417,7 @@ function AppShellInner({
         )}
       </div>
     </PrivacyContext.Provider>
+    </CurrencyContext.Provider>
   );
 }
 

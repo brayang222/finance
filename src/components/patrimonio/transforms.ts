@@ -32,19 +32,32 @@ function metaFor(ticker: string) {
 }
 
 export function toAssets(rows: Stock[] | CryptoType[], prices: Record<string, number>): Asset[] {
-  const map = new Map<string, { totalQty: number; totalPricePaid: number; totalCost: number }>();
+  const map = new Map<string, {
+    totalQty: number; totalPricePaid: number; totalCost: number;
+    totalPricePaidUSD: number | null; totalCostUSD: number | null;
+  }>();
   for (const r of rows) {
     const key = r.ticker.toUpperCase();
-    const prev = map.get(key) ?? { totalQty: 0, totalPricePaid: 0, totalCost: 0 };
+    const prev = map.get(key) ?? { totalQty: 0, totalPricePaid: 0, totalCost: 0, totalPricePaidUSD: null, totalCostUSD: null };
+    // USD-native lots: price holds real USD value when price !== priceCOP.
+    // COP-native lots (BVC stocks): trm is stored as 1 — treat as no USD conversion available.
+    // Only convert via TRM when it looks like a real FX rate (> 100 COP/USD).
+    const hasRealUSD = r.price !== r.priceCOP;
+    const realTRM = r.trm > 100 ? r.trm : null;
+    const usdPerUnit = hasRealUSD ? r.price : (realTRM ? r.priceCOP / realTRM : null);
+    const trmForCommission = realTRM;
     map.set(key, {
       totalQty: prev.totalQty + r.qty,
-      // No commission here — this backs `avg`, the PPA (precio promedio de
-      // adquisición) brokers quote, which is a price-per-share figure. Mixing
-      // commission into it can push it above every price actually paid.
+      // PPA: price only, no commission (backs avg shown to user)
       totalPricePaid: prev.totalPricePaid + r.qty * r.priceCOP,
-      // Commission included here — this backs `totalCost`, the real cash
-      // outlay used for P/G, which must match the portfolio evolution chart.
+      // Real cash outlay: includes commission (backs totalCost used for P/G)
       totalCost: prev.totalCost + r.qty * r.priceCOP + (r.commission ?? 0),
+      totalPricePaidUSD: usdPerUnit != null
+        ? (prev.totalPricePaidUSD ?? 0) + r.qty * usdPerUnit
+        : prev.totalPricePaidUSD,
+      totalCostUSD: usdPerUnit != null
+        ? (prev.totalCostUSD ?? 0) + r.qty * usdPerUnit + (trmForCommission ? (r.commission ?? 0) / trmForCommission : 0)
+        : prev.totalCostUSD,
     });
   }
   return Array.from(map.entries())
@@ -53,7 +66,9 @@ export function toAssets(rows: Stock[] | CryptoType[], prices: Record<string, nu
       const avg = v.totalPricePaid / v.totalQty;
       const price = prices[ticker] ?? avg;
       const { name, mono } = metaFor(ticker);
-      return { ticker, name, mono, qty: v.totalQty, avg, totalCost: v.totalCost, price, dayPct: 0, spark: [] };
+      const avgUSD = v.totalPricePaidUSD != null ? v.totalPricePaidUSD / v.totalQty : undefined;
+      const totalCostUSD = v.totalCostUSD != null ? v.totalCostUSD : undefined;
+      return { ticker, name, mono, qty: v.totalQty, avg, totalCost: v.totalCost, price, dayPct: 0, spark: [], avgUSD, totalCostUSD };
     });
 }
 

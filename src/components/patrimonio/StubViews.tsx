@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Asset, Account, COP, USD, PCT, today } from "../../data/mock";
 import type { AllData, Stock, Crypto, Bien, Transfer, Dividend as DividendT } from "../../types";
 import { Bal, Segmented } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
+import { useCurrency } from "./CurrencyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer, deleteDividend } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer, deleteDividend, updateOpenOrderStatus, deleteOpenOrder, fillOpenOrder } from "../../../lib/actions";
+import type { OpenOrder } from "../../types";
 import ModalTransfer from "./ModalTransfer";
 import ModalSellInvestment from "./ModalSellInvestment";
 import { useToast } from "./Toast";
@@ -19,6 +21,7 @@ import ModalBien from "./ModalBien";
 import ModalLoseBien from "./ModalLoseBien";
 import ModalMovimiento from "./ModalMovimiento";
 import ModalShell from "./ModalShell";
+import ModalCambio from "./ModalCambio";
 import { IconEdit, IconTrash } from "./Icons";
 import AssetTechnical from "./AssetTechnical";
 
@@ -34,28 +37,185 @@ const monoStyle = { fontFamily: "'IBM Plex Mono', monospace" };
 
 const refreshBtnClass = "border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer";
 
+function OpenOrdersTable({
+  orders, kind, onRefresh, prices, trm, currency = "USD", pricesFresh = false,
+}: {
+  orders: OpenOrder[];
+  kind: "cripto" | "stock";
+  onRefresh: () => void;
+  prices?: Record<string, number>;
+  trm?: number | null;
+  currency?: "COP" | "USD";
+  pricesFresh?: boolean;
+}) {
+  const toast = useToast();
+  const router = useRouter();
+  const filtered = orders.filter(o => o.kind === kind);
+  const [loading, setLoading] = useState<string | null>(null);
+
+  // Auto-execute limit orders only after a manual price refresh (never on stale cached prices)
+  useEffect(() => {
+    if (!pricesFresh || !prices || !trm) return;
+    const open = filtered.filter(o => o.status === "open" && o.limitPrice != null);
+    if (open.length === 0) return;
+    (async () => {
+      let changed = false;
+      for (const o of open) {
+        const mktUSD = (prices[o.ticker.toUpperCase()] ?? 0) / trm;
+        const hit = o.side === "buy" ? mktUSD <= o.limitPrice! : mktUSD >= o.limitPrice!;
+        if (hit) {
+          await fillOpenOrder(o.id, trm);
+          toast.success(`Orden ${o.ticker} ejecutada automáticamente — posición añadida`);
+          changed = true;
+        }
+      }
+      if (changed) router.refresh();
+    })();
+  }, [pricesFresh]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (filtered.length === 0) return null;
+
+  const inCOP = currency === "COP" && !!trm;
+  const fmtAmt = (usdVal: number) => inCOP ? COP(usdVal * trm!) : USD(usdVal);
+
+  const statusBadge = (s: string) => {
+    const cls = s === "open" ? "bg-accent/20 text-accent" : s === "filled" ? "bg-pos/20 text-pos" : "bg-neg/20 text-neg";
+    const label = s === "open" ? "Abierta" : s === "filled" ? "Ejecutada" : "Cancelada";
+    return <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>;
+  };
+
+  const handleStatus = async (id: string, status: "filled" | "cancelled") => {
+    if (status === "filled" && !trm) {
+      toast.error("Se necesita la TRM para ejecutar la orden — actualiza los precios primero");
+      return;
+    }
+    setLoading(id);
+    try {
+      if (status === "filled") {
+        await fillOpenOrder(id, trm!);
+        toast.success("Orden ejecutada — posición añadida al portafolio");
+      } else {
+        await updateOpenOrderStatus(id, status);
+        toast.success("Orden cancelada");
+      }
+      router.refresh();
+    } catch { toast.error("Error al actualizar la orden"); }
+    finally { setLoading(null); }
+  };
+
+  const handleDelete = async (id: string) => {
+    setLoading(id);
+    try {
+      await deleteOpenOrder(id);
+      router.refresh();
+    } catch { toast.error("Error al eliminar la orden"); }
+    finally { setLoading(null); }
+  };
+
+  const oth = "text-[11.5px] tracking-[0.04em] uppercase text-dim font-medium text-left pb-[10px] pr-5";
+  const otd = "py-3 border-t border-line text-[13.5px] pr-5 whitespace-nowrap";
+  const amtLabel = inCOP ? "Total COP" : "Total USD";
+  const priceLbl = "Precio límite";
+
+  return (
+    <div className={cardClass}>
+      <div className="text-[11.5px] tracking-[0.04em] uppercase text-dim font-medium mb-3">Órdenes abiertas</div>
+      <table className="w-full">
+        <thead>
+          <tr>
+            <th className={oth}>Ticker</th>
+            <th className={oth}>Lado</th>
+            <th className={`${oth} text-right`}>Qty</th>
+            <th className={`${oth} text-right`}>{priceLbl}</th>
+            <th className={`${oth} text-right`}>{amtLabel}</th>
+            <th className={oth}>Fecha</th>
+            <th className={oth}>Estado</th>
+            <th className={oth}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map(o => (
+            <tr key={o.id}>
+              <td className={otd}><span className="font-semibold text-primary">{o.ticker}</span></td>
+              <td className={otd}><span className={o.side === "buy" ? "text-pos" : "text-neg"}>{o.side === "buy" ? "Compra" : "Venta"}</span></td>
+              <td className={`${otd} text-right`} style={monoStyle}>{o.qty}</td>
+              <td className={`${otd} text-right`} style={monoStyle}>{o.limitPrice != null ? fmtAmt(o.limitPrice) : "—"}</td>
+              <td className={`${otd} text-right`} style={monoStyle}>{o.totalUSD != null ? fmtAmt(o.totalUSD) : "—"}</td>
+              <td className={`${otd} text-dim`}>{o.date}</td>
+              <td className={otd}>{statusBadge(o.status)}</td>
+              <td className={`${otd} text-right`}>
+                <div className="flex items-center justify-end gap-1">
+                  {o.status === "open" && (
+                    <>
+                      <button disabled={loading === o.id} onClick={() => handleStatus(o.id, "filled")}
+                        className="text-[11px] px-2 py-0.5 rounded border border-pos/40 text-pos hover:bg-pos/10 cursor-pointer">
+                        Ejecutar
+                      </button>
+                      <button disabled={loading === o.id} onClick={() => handleStatus(o.id, "cancelled")}
+                        className="text-[11px] px-2 py-0.5 rounded border border-line text-muted hover:bg-panel2 cursor-pointer">
+                        Cancelar
+                      </button>
+                    </>
+                  )}
+                  <button disabled={loading === o.id} onClick={() => handleDelete(o.id)}
+                    className="text-neg hover:opacity-70 cursor-pointer p-1">
+                    <IconTrash size={13} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function EmptyPortfolio({ kind, onAdd }: { kind: "inversiones" | "cripto"; onAdd?: () => void }) {
+  const isStock = kind === "inversiones";
+  return (
+    <div className={`${cardClass} py-12 flex flex-col items-center text-center`}>
+      <div className="text-4xl mb-3">{isStock ? "📈" : "₿"}</div>
+      <div className="text-[15px] font-medium mb-1">Sin posiciones registradas</div>
+      <div className="text-[13px] text-muted max-w-xs mb-5">
+        {isStock
+          ? "Registrá tu primera compra de acciones (BVC, ETF) para ver tu portafolio aquí."
+          : "Registrá tu primera compra de cripto para ver tu portafolio aquí."}
+      </div>
+      {onAdd && (
+        <button
+          onClick={onAdd}
+          className="h-9 px-5 bg-accent text-accentFg rounded-[10px] text-[13px] font-medium border-none cursor-pointer"
+        >
+          {isStock ? "+ Agregar inversión" : "+ Agregar cripto"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AssetTable({
   assets,
   privacy,
   onSelect,
+  onAdd,
   currency = "COP",
   trm,
+  kind = "inversiones",
 }: {
   assets: Asset[];
   privacy: boolean;
   onSelect: (t: string) => void;
+  onAdd?: () => void;
   currency?: "COP" | "USD";
   trm?: number | null;
+  kind?: "inversiones" | "cripto";
 }) {
   const inUSD = currency === "USD" && !!trm;
   const fmt = (copValue: number) => (inUSD ? USD(copValue / trm!) : COP(copValue));
 
   if (assets.length === 0) {
-    return (
-      <div className={`${cardClass} text-muted text-[13px]`}>
-        No hay posiciones registradas.
-      </div>
-    );
+    return <EmptyPortfolio kind={kind} onAdd={onAdd} />;
   }
   return (
     <div className={cardClass}>
@@ -73,11 +233,25 @@ function AssetTable({
           </thead>
           <tbody>
             {assets.map((a) => {
-              const value = a.qty * a.price;
-              const cost  = a.totalCost;
-              const pl    = value - cost;
-              const plPct = cost > 0 ? pl / cost : 0;
+              // USD-native assets: P/G always in USD regardless of display mode,
+              // to avoid TRM fluctuations distorting the return %.
+              const isUSDAsset = a.avgUSD != null && a.totalCostUSD != null && !!trm;
+              const mktPriceUSD = isUSDAsset || inUSD ? a.price / (trm ?? 1) : 0;
+              const value    = a.qty * a.price;
+              const valueUSD = a.qty * mktPriceUSD;
+              const cost     = a.totalCost;
+              const costUSD  = a.totalCostUSD ?? (trm ? cost / trm : 0);
+              // P/G: USD-native assets → always compare in USD; COP assets → compare in COP
+              const pl     = isUSDAsset ? (valueUSD - costUSD) * (inUSD ? 1 : (trm ?? 1))
+                                        : (inUSD ? valueUSD - costUSD : value - cost);
+              const plBase = isUSDAsset ? costUSD * (inUSD ? 1 : (trm ?? 1))
+                                        : (inUSD ? costUSD : cost);
+              const plPct = plBase > 0 ? (isUSDAsset ? (valueUSD - costUSD) / costUSD : pl / plBase) : 0;
               const pos   = pl >= 0;
+              // PPA: use USD field for USD assets (avoids TRM-drift)
+              const ppaDisplay = isUSDAsset
+                ? (inUSD ? USD(a.avgUSD!) : COP(a.avgUSD! * (trm ?? 1)))
+                : (privacy ? "••••" : fmt(a.avg));
               return (
                 <tr key={a.ticker} onClick={() => onSelect(a.ticker)} className="cursor-pointer">
                   <td className={tdClass}>
@@ -98,18 +272,18 @@ function AssetTable({
                     {a.qty % 1 === 0 ? a.qty.toLocaleString("es-CO") : a.qty.toFixed(4)}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                    {privacy ? "••••" : fmt(a.price)}
+                    {privacy ? "••••" : inUSD ? USD(mktPriceUSD) : COP(a.price)}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
-                    {privacy ? "••••" : fmt(a.avg)}
+                    {privacy ? "••••" : ppaDisplay}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                    {inUSD ? (privacy ? "••••" : fmt(value)) : <Bal n={value} privacy={privacy} />}
+                    {inUSD ? (privacy ? "••••" : USD(valueUSD)) : <Bal n={value} privacy={privacy} />}
                   </td>
                   <td className={`${tdClass} text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
                     <div>{PCT(plPct)}</div>
                     <div className="text-[12px] opacity-80">
-                      {privacy ? "••••" : `${pos ? "+" : "−"}${fmt(Math.abs(pl))}`}
+                      {privacy ? "••••" : `${pos ? "+" : "−"}${inUSD ? USD(Math.abs(pl)) : fmt(Math.abs(pl))}`}
                     </div>
                   </td>
                 </tr>
@@ -126,11 +300,17 @@ function SalesHistoryTable({
   transfers,
   prefix,
   privacy,
+  currency = "COP",
+  trm,
 }: {
   transfers: Transfer[];
   prefix: "stock:" | "crypto:";
   privacy: boolean;
+  currency?: "COP" | "USD";
+  trm?: number | null;
 }) {
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
   const sales = transfers.filter(t => t.fromAccountId.startsWith(prefix));
 
   if (sales.length === 0) {
@@ -172,13 +352,13 @@ function SalesHistoryTable({
                     {t.qty == null ? "—" : t.qty % 1 === 0 ? t.qty.toLocaleString("es-CO") : t.qty.toFixed(8)}
                   </td>
                   <td className={`${tdClass} pl-6 text-right tabular-nums`} style={monoStyle}>
-                    {privacy ? "••••" : COP(gross)}
+                    {privacy ? "••••" : fmt(gross)}
                   </td>
                   <td className={`${tdClass} pl-6 text-right tabular-nums text-muted`} style={monoStyle}>
-                    {privacy ? "••" : COP(commission)}
+                    {privacy ? "••" : fmt(commission)}
                   </td>
                   <td className={`${tdClass} pl-6 text-right tabular-nums ${pos ? "text-pos" : "text-neg"}`} style={monoStyle}>
-                    {privacy ? "••••" : `${pos ? "+" : ""}${COP(pl)}`}
+                    {privacy ? "••••" : `${pos ? "+" : ""}${fmt(pl)}`}
                   </td>
                   <td className={`${tdClass} pl-6 text-muted`}>{t.toAccountName ?? "—"}</td>
                   <td className={`${tdClass} pl-6 text-muted text-[12.5px] max-w-40 truncate`} title={t.detail ?? undefined}>
@@ -194,22 +374,165 @@ function SalesHistoryTable({
   );
 }
 
+function RebalanceoView({ assets, privacy, currency = "COP", trm }: { assets: Asset[]; privacy: boolean; currency?: "COP" | "USD"; trm?: number | null }) {
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
+  const [targets, setTargets] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("gfp-rebalance") ?? "{}"); } catch { return {}; }
+  });
+  const savedRef = useRef(targets);
+
+  const saveTarget = (ticker: string, val: string) => {
+    const next = { ...savedRef.current, [ticker]: val };
+    savedRef.current = next;
+    setTargets(next);
+    try { localStorage.setItem("gfp-rebalance", JSON.stringify(next)); } catch {}
+  };
+
+  const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
+  const totalTargetPct = assets.reduce((s, a) => s + (parseFloat(targets[a.ticker] ?? "0") || 0), 0);
+  const unallocated = Math.max(0, 100 - totalTargetPct);
+
+  const rows = useMemo(() => assets.map((a) => {
+    const currentPct = totalValue > 0 ? (a.qty * a.price) / totalValue * 100 : 0;
+    const targetPct = parseFloat(targets[a.ticker] ?? "0") || 0;
+    const diffPct = targetPct - currentPct;
+    const targetValue = totalValue * targetPct / 100;
+    const currentValue = a.qty * a.price;
+    const diffValue = targetValue - currentValue;
+    const action: "buy" | "sell" | "hold" = Math.abs(diffValue) < totalValue * 0.005
+      ? "hold"
+      : diffValue > 0 ? "buy" : "sell";
+    return { ...a, currentPct, targetPct, diffPct, diffValue, action };
+  }), [assets, targets, totalValue]);
+
+  if (assets.length === 0) return null;
+
+  return (
+    <div className={cardClass}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-[13.5px] font-medium">Asignación objetivo</div>
+        <div className={`text-[12px] ${Math.abs(totalTargetPct - 100) < 0.5 ? "text-pos" : "text-muted"}`}>
+          {totalTargetPct.toFixed(1)}% asignado · {unallocated.toFixed(1)}% libre
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse min-w-120">
+          <thead>
+            <tr>
+              <th className={thClass}>Activo</th>
+              <th className={`${thClass} text-right`}>Actual</th>
+              <th className={`${thClass} text-right`}>Objetivo %</th>
+              <th className={`${thClass} text-right`}>Diferencia</th>
+              <th className={`${thClass} text-right`}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.ticker}>
+                <td className={tdClass}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-panel2 border border-line flex items-center justify-center text-[11px] text-muted" style={monoStyle}>
+                      {row.mono}
+                    </span>
+                    <span className="text-[13px]" style={monoStyle}>{row.ticker}</span>
+                  </div>
+                </td>
+                <td className={`${tdClass} text-right text-muted`} style={monoStyle}>
+                  <div>{row.currentPct.toFixed(1)}%</div>
+                  <div className="text-[11.5px]">{privacy ? "••••" : fmt(row.qty * row.price)}</div>
+                </td>
+                <td className={`${tdClass} text-right`}>
+                  <div className="flex items-center justify-end gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={targets[row.ticker] ?? ""}
+                      onChange={(e) => saveTarget(row.ticker, e.target.value)}
+                      placeholder="0"
+                      className="w-16 text-right text-[13px] border border-line rounded-lg px-2 py-1 bg-panel2 text-fg outline-none focus:border-accent tabular-nums"
+                      style={monoStyle}
+                    />
+                    <span className="text-muted text-[13px]">%</span>
+                  </div>
+                </td>
+                <td className={`${tdClass} text-right tabular-nums ${row.diffPct > 0 ? "text-pos" : row.diffPct < 0 ? "text-neg" : "text-muted"}`} style={monoStyle}>
+                  {row.targetPct > 0 ? (
+                    <>
+                      <div>{row.diffPct >= 0 ? "+" : ""}{row.diffPct.toFixed(1)}%</div>
+                      <div className="text-[11.5px]">
+                        {privacy ? "••••" : `${row.diffValue >= 0 ? "+" : ""}${fmt(row.diffValue)}`}
+                      </div>
+                    </>
+                  ) : <span className="text-dim">—</span>}
+                </td>
+                <td className={`${tdClass} text-right`}>
+                  {row.targetPct > 0 && row.action !== "hold" ? (
+                    <span className={`text-[11.5px] px-2 py-0.5 rounded-full font-medium ${row.action === "buy" ? "bg-pos/20 text-pos" : "bg-neg/20 text-neg"}`}>
+                      {row.action === "buy" ? "Comprar" : "Vender"}
+                    </span>
+                  ) : row.targetPct > 0 ? (
+                    <span className="text-[11.5px] px-2 py-0.5 rounded-full font-medium bg-accent/15 text-accent">OK</span>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {totalTargetPct > 100.5 && (
+        <div className="mt-3 text-[12px] text-neg">⚠ Los porcentajes suman {totalTargetPct.toFixed(1)}% — superan el 100%.</div>
+      )}
+      <div className="mt-3 text-[12px] text-dim">
+        Los objetivos se guardan en este navegador. La diferencia se calcula sobre el valor total actual del portafolio.
+      </div>
+    </div>
+  );
+}
+
 export function ViewInversiones({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
+  const currency = useCurrency();
   const router = useRouter();
-  const assets = toAssets(initialData.stocks, initialData.prices);
+  const trm = initialData.config?.trm ?? null;
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState<"Actuales" | "Histórico" | "Rebalanceo">("Actuales");
+  const [showCambio, setShowCambio] = useState(false);
+
+  // Exchange filter
+  const exchanges = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const s of initialData.stocks) {
+      set.add(s.exchange ?? (s.currency === "USD" ? "NYSE/NASDAQ" : "BVC"));
+    }
+    return Array.from(set).sort();
+  }, [initialData.stocks]);
+  const [exchangeFilter, setExchangeFilter] = useState<string>("Todas");
+
+  const filteredStocks = React.useMemo(() => {
+    if (exchangeFilter === "Todas") return initialData.stocks;
+    return initialData.stocks.filter(s => {
+      const ex = s.exchange ?? (s.currency === "USD" ? "NYSE/NASDAQ" : "BVC");
+      return ex === exchangeFilter;
+    });
+  }, [initialData.stocks, exchangeFilter]);
+
+  const assets = toAssets(filteredStocks, initialData.prices);
   const onSelect = (t: string) => router.push(`/detail/${t}`);
   const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
   const totalCost  = assets.reduce((s, a) => s + a.totalCost, 0);
   const totalPL    = totalValue - totalCost;
-  const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<"Actuales" | "Histórico">("Actuales");
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const tickers = [...new Set(initialData.stocks.map(s => s.ticker.toUpperCase()))];
-      await refreshPrices(tickers, []);
+      const copTickers = [...new Set(initialData.stocks.filter(s => s.currency !== "USD").map(s => s.ticker.toUpperCase()))];
+      const usdTickers = [...new Set(initialData.stocks.filter(s => s.currency === "USD").map(s => s.ticker.toUpperCase()))];
+      await refreshPrices(copTickers, [], usdTickers);
       router.refresh();
     } finally {
       setRefreshing(false);
@@ -223,13 +546,13 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
       <div className="flex items-center justify-between">
 
         <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          <SummaryCard label="Valor del portafolio" value={<Bal n={totalValue} privacy={privacy} />} />
-          <SummaryCard label="Costo invertido" value={<Bal n={totalCost} privacy={privacy} />} />
+          <SummaryCard label="Valor del portafolio" value={privacy ? "••••••" : fmt(totalValue)} />
+          <SummaryCard label="Costo invertido" value={privacy ? "••••••" : fmt(totalCost)} />
           <SummaryCard
             label="Rendimiento P/G"
             value={
               <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-                <Bal n={Math.abs(totalPL)} privacy={privacy} />
+                {privacy ? "••••••" : `${totalPL >= 0 ? "+" : "−"}${fmt(Math.abs(totalPL))}`}
               </span>
             }
             sub={
@@ -243,16 +566,58 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
         </div>
       </div>
 
-      <div className="shrink-0 flex items-center justify-between gap-2.5">
-          <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
-            {refreshing ? "Actualizando…" : "Actualizar precios"}
-          </button>
-          <Segmented options={["Actuales", "Histórico"]} value={tab} onChange={(v) => setTab(v as "Actuales" | "Histórico")} />
+      <div className="shrink-0 flex items-center justify-between gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
+              {refreshing ? "Actualizando…" : "Actualizar precios"}
+            </button>
+            {exchanges.length > 0 && (
+              <div className="flex gap-1 flex-wrap">
+                {(["Todas", ...exchanges] as string[]).map(ex => (
+                  <button
+                    key={ex}
+                    onClick={() => setExchangeFilter(ex)}
+                    className={[
+                      "border cursor-pointer px-2.5 py-1 rounded-lg text-[12px] font-medium transition-colors",
+                      exchangeFilter === ex
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-line bg-panel2 text-muted hover:bg-hover",
+                    ].join(" ")}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Segmented options={["Actuales", "Histórico", "Rebalanceo"]} value={tab} onChange={(v) => setTab(v as "Actuales" | "Histórico" | "Rebalanceo")} />
         </div>
+      {inUSD && <div className="text-[12px] text-dim -mt-1">TRM: {COP(trm!)}</div>}
       {tab === "Actuales" ? (
-        <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} />
+        <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} kind="inversiones" currency={currency} trm={trm} />
+      ) : tab === "Histórico" ? (
+        <SalesHistoryTable transfers={initialData.transfers} prefix="stock:" privacy={privacy} currency={currency} trm={trm} />
       ) : (
-        <SalesHistoryTable transfers={initialData.transfers} prefix="stock:" privacy={privacy} />
+        <RebalanceoView assets={assets} privacy={privacy} currency={currency} trm={trm} />
+      )}
+      <OpenOrdersTable orders={initialData.openOrders} kind="stock" onRefresh={handleRefresh} prices={initialData.prices} trm={trm} currency={currency} />
+
+      {/* Cambio de moneda shortcut */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowCambio(true)}
+          className="text-[12px] text-muted border border-line bg-panel2 px-3 py-1.5 rounded-lg hover:bg-hover cursor-pointer"
+        >
+          Registrar cambio de moneda (COP → USD)
+        </button>
+      </div>
+
+      {showCambio && (
+        <ModalCambio
+          bankAccounts={initialData.bankAccounts}
+          trm={trm}
+          onClose={() => setShowCambio(false)}
+        />
       )}
     </div>
   );
@@ -264,41 +629,39 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
   const toast = useToast();
   const assets = toAssets(initialData.crypto, initialData.prices);
   const onSelect = (t: string) => router.push(`/detail/${t}`);
-  const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
-  const totalCost  = assets.reduce((s, a) => s + a.totalCost, 0);
-  const totalPL    = totalValue - totalCost;
+  const currency = useCurrency();
   const [refreshing, setRefreshing] = useState(false);
-  const [currency, setCurrency] = useState<"COP" | "USD">("COP");
   const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
-  const [loadingTrm, setLoadingTrm] = useState(false);
   const [tab, setTab] = useState<"Actuales" | "Histórico">("Actuales");
+  const [pricesFresh, setPricesFresh] = useState(false);
   const inUSD = currency === "USD" && !!trm;
   const fmt = (copValue: number) => (inUSD ? USD(copValue / trm!) : COP(copValue));
 
+  // USD-native totals: use avgUSD/totalCostUSD when available to avoid TRM-drift
+  const totalValueUSD = inUSD ? assets.reduce((s, a) => s + a.qty * a.price / trm!, 0) : 0;
+  const totalCostUSD  = inUSD ? assets.reduce((s, a) => s + (a.totalCostUSD ?? a.totalCost / trm!), 0) : 0;
+  const totalPLUSD    = totalValueUSD - totalCostUSD;
+  // COP totals for COP mode
+  const totalValue = assets.reduce((s, a) => s + a.qty * a.price, 0);
+  const totalCost  = assets.reduce((s, a) => s + a.totalCost, 0);
+  const totalPL    = totalValue - totalCost;
+
   const handleRefresh = async () => {
     setRefreshing(true);
+    setPricesFresh(false);
     try {
       const tickers = [...new Set(initialData.crypto.map(c => c.ticker.toUpperCase()))];
-      await refreshPrices([], tickers);
+      // Refresh prices and TRM simultaneously
+      const [, freshTrm] = await Promise.all([
+        refreshPrices([], tickers),
+        refreshTrm().catch(() => null),
+      ]);
+      if (freshTrm) setTrm(freshTrm);
       router.refresh();
+      setPricesFresh(true);
     } finally {
       setRefreshing(false);
     }
-  };
-
-  const handleCurrencyChange = async (v: string) => {
-    if (v === "USD" && !trm) {
-      setLoadingTrm(true);
-      try {
-        setTrm(await refreshTrm());
-      } catch {
-        toast.error("No se pudo obtener la TRM actual");
-        setLoadingTrm(false);
-        return;
-      }
-      setLoadingTrm(false);
-    }
-    setCurrency(v as "COP" | "USD");
   };
 
   useEffect(() => { handleRefresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -307,19 +670,19 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between">
         <div className="grid gap-3.5 flex-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          <SummaryCard label="Valor en cripto" value={inUSD ? (privacy ? "••••" : fmt(totalValue)) : <Bal n={totalValue} privacy={privacy} />} />
-          <SummaryCard label="Costo invertido" value={inUSD ? (privacy ? "••••" : fmt(totalCost)) : <Bal n={totalCost} privacy={privacy} />} />
+          <SummaryCard label="Valor en cripto" value={inUSD ? (privacy ? "••••" : USD(totalValueUSD)) : <Bal n={totalValue} privacy={privacy} />} />
+          <SummaryCard label="Costo invertido" value={inUSD ? (privacy ? "••••" : USD(totalCostUSD)) : <Bal n={totalCost} privacy={privacy} />} />
           <SummaryCard
             label="Rendimiento P/G"
             value={
-              <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-                {inUSD ? (privacy ? "••••" : fmt(Math.abs(totalPL))) : <Bal n={Math.abs(totalPL)} privacy={privacy} />}
+              <span className={(inUSD ? totalPLUSD : totalPL) >= 0 ? "text-pos" : "text-neg"}>
+                {inUSD ? (privacy ? "••••" : USD(Math.abs(totalPLUSD))) : <Bal n={Math.abs(totalPL)} privacy={privacy} />}
               </span>
             }
             sub={
-              totalCost > 0 ? (
-                <span className={totalPL >= 0 ? "text-pos" : "text-neg"}>
-                  {PCT(totalPL / totalCost)}
+              (inUSD ? totalCostUSD : totalCost) > 0 ? (
+                <span className={(inUSD ? totalPLUSD : totalPL) >= 0 ? "text-pos" : "text-neg"}>
+                  {PCT((inUSD ? totalPLUSD : totalPL) / (inUSD ? totalCostUSD : totalCost))}
                 </span>
               ) : undefined
             }
@@ -331,8 +694,6 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
             <button onClick={handleRefresh} disabled={refreshing} className={refreshBtnClass}>
               {refreshing ? "Actualizando…" : "Actualizar precios"}
             </button>
-            {tab === "Actuales" && <Segmented options={["COP", "USD"]} value={currency} onChange={handleCurrencyChange} />}
-            {tab === "Actuales" && loadingTrm && <span className="text-dim text-[12px]">Consultando TRM…</span>}
             {tab === "Actuales" && inUSD && <span className="text-dim text-[12px]">TRM: {COP(trm!)}</span>}
           </div>
           <Segmented options={["Actuales", "Histórico"]} value={tab} onChange={(v) => setTab(v as "Actuales" | "Histórico")} />
@@ -340,8 +701,9 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
       {tab === "Actuales" ? (
         <AssetTable assets={assets} privacy={privacy} onSelect={onSelect} currency={currency} trm={trm} />
       ) : (
-        <SalesHistoryTable transfers={initialData.transfers} prefix="crypto:" privacy={privacy} />
+        <SalesHistoryTable transfers={initialData.transfers} prefix="crypto:" privacy={privacy} currency={currency} trm={trm} />
       )}
+      <OpenOrdersTable orders={initialData.openOrders} kind="cripto" onRefresh={handleRefresh} prices={initialData.prices} trm={trm} currency={currency} pricesFresh={pricesFresh} />
     </div>
   );
 }
@@ -356,35 +718,61 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const selFrom: "inversiones" | "cripto" = isCrypto ? "cripto" : "inversiones";
   const onBack = () => router.push(isCrypto ? "/crypto" : "/investments");
   const asset = [...holdings, ...cryptoAssets].find((a) => a.ticker === selected);
-  const pl = asset ? asset.qty * asset.price - asset.totalCost : 0;
-  const plPct = asset && asset.totalCost > 0 ? pl / asset.totalCost : 0;
 
   const rawTrades = isCrypto
     ? initialData.crypto.filter(t => t.ticker.toUpperCase() === selected)
     : initialData.stocks.filter(t => t.ticker.toUpperCase() === selected);
 
+  const currency = useCurrency();
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
   const [sellItem, setSellItem] = useState<Asset | null>(null);
   const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
   const [tab, setTab] = useState<"Resumen" | "Técnico">("Resumen");
   const [dividendModal, setDividendModal] = useState<{ prefill?: DividendT } | null>(null);
-  const firstPurchaseDate = rawTrades.length > 0
-    ? rawTrades.reduce((min, t) => (t.date < min ? t.date : min), rawTrades[0].date)
+  const toast = useToast();
+
+  // Optimistic local state: remove lot immediately, revert on server error
+  const [localTrades, setLocalTrades] = useState(rawTrades);
+  const [localDividends, setLocalDividends] = useState(
+    initialData.dividends.filter(d => d.ticker.toUpperCase() === selected)
+  );
+
+  // Sync local state when initial data changes (e.g. after router.refresh())
+  useEffect(() => { setLocalTrades(rawTrades); }, [rawTrades]);
+  useEffect(() => {
+    setLocalDividends(initialData.dividends.filter(d => d.ticker.toUpperCase() === selected));
+  }, [initialData.dividends, selected]);
+
+  const firstPurchaseDate = localTrades.length > 0
+    ? localTrades.reduce((min, t) => (t.date < min ? t.date : min), localTrades[0].date)
     : undefined;
-  const dividends = initialData.dividends.filter(d => d.ticker.toUpperCase() === selected);
-  const totalDividends = dividends.reduce((s, d) => s + d.amount, 0);
+  const totalDividends = localDividends.reduce((s, d) => s + d.amount, 0);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("¿Eliminar esta operación?")) return;
-    if (isCrypto) await deleteCrypto(id);
-    else await deleteStock(id);
-    router.refresh();
+    const prev = localTrades;
+    setLocalTrades(t => t.filter(r => r.id !== id));
+    try {
+      if (isCrypto) await deleteCrypto(id);
+      else await deleteStock(id);
+      router.refresh();
+    } catch {
+      setLocalTrades(prev);
+      toast.error("Error al eliminar la operación");
+    }
   };
 
   const handleDeleteDividend = async (id: string) => {
     if (!window.confirm("¿Eliminar este dividendo?")) return;
-    await deleteDividend(id);
-    router.refresh();
+    const prev = localDividends;
+    setLocalDividends(d => d.filter(r => r.id !== id));
+    try {
+      await deleteDividend(id);
+      router.refresh();
+    } catch {
+      setLocalDividends(prev);
+      toast.error("Error al eliminar el dividendo");
+    }
   };
 
   useEffect(() => {
@@ -392,10 +780,17 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
     refreshTrm().then(setTrm).catch(() => {});
   }, [isCrypto]);
 
+  const inUSD = currency === "USD" && !!trm;
+  const fmtLot = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
+
   // Split the COP return into "asset move (USD)" vs "FX move (TRM)" — only
   // meaningful for crypto, whose lots carry the real historical TRM at purchase.
-  const cryptoTrades = rawTrades as Crypto[];
-  const costUSD = isCrypto ? cryptoTrades.reduce((s, t) => s + (t.trm > 0 ? (t.qty * t.priceCOP) / t.trm : 0), 0) : 0;
+  const cryptoTrades = localTrades as Crypto[];
+  // USD-native cost: use price field directly when it's in USD (price !== priceCOP)
+  const costUSD = isCrypto ? cryptoTrades.reduce((s, t) => {
+    const usdPrice = t.price !== t.priceCOP ? t.price : (t.trm > 0 ? t.priceCOP / t.trm : 0);
+    return s + t.qty * usdPrice;
+  }, 0) : 0;
   const costCOP = isCrypto ? cryptoTrades.reduce((s, t) => s + t.qty * t.priceCOP, 0) : 0;
   const avgTrm = isCrypto && costUSD > 0 ? costCOP / costUSD : null;
   const avgPriceUSD = isCrypto && asset && costUSD > 0 ? costUSD / asset.qty : null;
@@ -403,6 +798,12 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const hasFxBreakdown = isCrypto && !!avgTrm && !!avgPriceUSD && !!priceNowUSD && !!trm;
   const assetReturn = hasFxBreakdown ? priceNowUSD! / avgPriceUSD! - 1 : null;
   const fxReturn = hasFxBreakdown ? trm! / avgTrm! - 1 : null;
+
+  // P/G using USD-native cost when in USD mode
+  const plUSD = asset && trm ? asset.qty * (asset.price / trm) - costUSD : 0;
+  const pl = inUSD ? plUSD * trm! : (asset ? asset.qty * asset.price - asset.totalCost : 0);
+  const plBase = inUSD ? costUSD : (asset?.totalCost ?? 1);
+  const plPct = plBase > 0 ? (inUSD ? plUSD / costUSD : pl / plBase) : 0;
 
   return (
     <div>
@@ -429,7 +830,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {rawTrades.length > 0 && (
+              {localTrades.length > 0 && (
                 <button
                   onClick={() => setSellItem(asset)}
                   className="border border-line bg-panel2 text-fg text-[12px] px-3 py-1.5 rounded-lg cursor-pointer hover:border-accent"
@@ -439,11 +840,12 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               )}
             <div className="text-right">
               <div className="text-[28px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
-                {privacy ? "••••••" : COP(asset.price)}
+                {privacy ? "••••••" : (inUSD ? USD(asset.price / trm!) : COP(asset.price))}
               </div>
               <div className={`text-[13px] ${asset.dayPct >= 0 ? "text-pos" : "text-neg"}`}>
                 {PCT(asset.dayPct)} hoy
               </div>
+              {inUSD && <div className="text-[11px] text-dim">TRM: {COP(trm!)}</div>}
             </div>
             </div>
           </div>
@@ -455,19 +857,29 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
             <>
               {/* Stats grid */}
               <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-                <SummaryCard label="Cantidad"       value={<>{asset.qty % 1 === 0 ? asset.qty.toLocaleString("es-CO") : asset.qty.toFixed(4)}</>} />
-                <SummaryCard label="Precio actual"  value={<Bal n={asset.price} privacy={privacy} />} />
-                <SummaryCard label="Costo promedio" value={<Bal n={asset.avg} privacy={privacy} />} />
-                <SummaryCard label="Total invertido" value={<Bal n={asset.totalCost} privacy={privacy} />} />
-                <SummaryCard label="Valor mercado"  value={<Bal n={asset.qty * asset.price} privacy={privacy} />} />
+                <SummaryCard label="Cantidad" value={<>{asset.qty % 1 === 0 ? asset.qty.toLocaleString("es-CO") : asset.qty.toFixed(4)}</>} />
+                <SummaryCard label="Precio actual"
+                  value={privacy ? "••••" : (inUSD ? USD(asset.price / trm!) : <Bal n={asset.price} privacy={privacy} />)} />
+                <SummaryCard label="Costo promedio"
+                  value={privacy ? "••••" : (inUSD
+                    ? USD(asset.avgUSD ?? asset.avg / trm!)
+                    : <Bal n={asset.avg} privacy={privacy} />)} />
+                <SummaryCard label="Total invertido"
+                  value={privacy ? "••••" : (inUSD
+                    ? USD(asset.totalCostUSD ?? asset.totalCost / trm!)
+                    : <Bal n={asset.totalCost} privacy={privacy} />)} />
+                <SummaryCard label="Valor mercado"
+                  value={privacy ? "••••" : (inUSD
+                    ? USD(asset.qty * asset.price / trm!)
+                    : <Bal n={asset.qty * asset.price} privacy={privacy} />)} />
                 <SummaryCard
                   label="P/G no realizada"
                   value={
-                    <span className={pl >= 0 ? "text-pos" : "text-neg"}>
-                      <Bal n={Math.abs(pl)} privacy={privacy} />
+                    <span className={(inUSD ? plUSD : pl) >= 0 ? "text-pos" : "text-neg"}>
+                      {privacy ? "••••" : (inUSD ? USD(Math.abs(plUSD)) : <Bal n={Math.abs(pl)} privacy={privacy} />)}
                     </span>
                   }
-                  sub={<span className={pl >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
+                  sub={<span className={plPct >= 0 ? "text-pos" : "text-neg"}>{PCT(plPct)}</span>}
                 />
               </div>
 
@@ -502,27 +914,32 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
                       <tr>
                         <th className={thClass}>Fecha</th>
                         <th className={`${thClass} text-right`}>Cantidad</th>
-                        <th className={`${thClass} text-right`}>Precio COP</th>
+                        <th className={`${thClass} text-right`}>Precio {inUSD ? "USD" : "COP"}</th>
                         <th className={`${thClass} text-right`}>Comisión</th>
                         <th className={thClass}></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rawTrades.length === 0 ? (
+                      {localTrades.length === 0 ? (
                         <tr>
                           <td colSpan={5} className={`${tdClass} text-dim text-center`}>Sin operaciones</td>
                         </tr>
-                      ) : rawTrades.map((t) => (
+                      ) : localTrades.map((t) => (
                         <tr key={t.id}>
                           <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>{t.date}</td>
                           <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
                             {t.qty % 1 === 0 ? t.qty.toLocaleString("es-CO") : t.qty.toFixed(8)}
                           </td>
                           <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                            {privacy ? "••••" : COP(t.priceCOP)}
+                            {privacy ? "••••" : (() => {
+                              if (!inUSD) return COP(t.priceCOP);
+                              if (isCrypto && t.price !== t.priceCOP) return USD(t.price);
+                              const lotTrm = (t as Crypto).trm > 0 ? (t as Crypto).trm : trm!;
+                              return USD(t.priceCOP / lotTrm);
+                            })()}
                           </td>
                           <td className={`${tdClass} text-right tabular-nums text-muted`} style={monoStyle}>
-                            {privacy ? "••" : COP(t.commission)}
+                            {privacy ? "••" : fmtLot(t.commission ?? 0)}
                           </td>
                           <td className={`${tdClass} text-right`}>
                             <div className="flex items-center justify-end gap-2">
@@ -545,7 +962,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               <div className={cardClass}>
                 <div className="flex items-center justify-between mb-3.5">
                   <div className="text-[13px] font-medium">
-                    Dividendos{dividends.length > 0 && <span className="text-dim font-normal"> · {COP(totalDividends)} recibidos</span>}
+                    Dividendos{localDividends.length > 0 && <span className="text-dim font-normal"> · {fmtLot(totalDividends)} recibidos</span>}
                   </div>
                   <button
                     onClick={() => setDividendModal({})}
@@ -554,7 +971,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
                     + Registrar dividendo
                   </button>
                 </div>
-                {dividends.length === 0 ? (
+                {localDividends.length === 0 ? (
                   <div className={`${tdClass} text-dim text-center border-t-0`}>Sin dividendos registrados</div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -567,13 +984,13 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
                         </tr>
                       </thead>
                       <tbody>
-                        {dividends.map((d) => (
+                        {localDividends.map((d) => (
                           <tr key={d.id}>
                             <td className={`${tdClass} text-muted whitespace-nowrap`} style={monoStyle}>
                               {d.date}{d.note ? <span className="text-dim"> · {d.note}</span> : ""}
                             </td>
                             <td className={`${tdClass} text-right tabular-nums`} style={monoStyle}>
-                              {privacy ? "••••" : COP(d.amount)}
+                              {privacy ? "••••" : fmtLot(d.amount)}
                             </td>
                             <td className={`${tdClass} text-right`}>
                               <div className="flex items-center justify-end gap-2">
@@ -1001,10 +1418,11 @@ export function ViewTransacciones({ initialData }: { initialData: AllData }) {
 
 function AccountCard({
   name, subtitle, balance, privacy, tag, tagColor,
-  onEdit, onDelete, breakdown,
+  onEdit, onDelete, breakdown, fmt,
 }: {
   name: string; subtitle?: string; balance: number; privacy: boolean;
   tag?: string; tagColor?: string; onEdit?: () => void; onDelete?: () => void;
+  fmt?: (n: number) => string;
   // For broker/exchange accounts: split the total into "cash sitting there"
   // vs. "market value of positions linked to it" — a Bolsa/Cripto account
   // isn't one number, it's disponible + invertido.
@@ -1033,14 +1451,16 @@ function AccountCard({
         </div>
       </div>
       <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
-        <Bal n={balance} privacy={privacy} />
+        {fmt ? (privacy ? "••••••" : fmt(balance)) : <Bal n={balance} privacy={privacy} />}
       </div>
       {breakdown && breakdown.length > 0 && (
         <div className="flex gap-4 mt-2.5 pt-2.5 border-t border-line">
           {breakdown.map((b) => (
             <div key={b.label} className="text-[12px]">
               <span className="text-dim">{b.label}: </span>
-              <span className="text-muted" style={monoStyle}><Bal n={b.value} privacy={privacy} /></span>
+              <span className="text-muted" style={monoStyle}>
+                {fmt ? (privacy ? "••••" : fmt(b.value)) : <Bal n={b.value} privacy={privacy} />}
+              </span>
             </div>
           ))}
         </div>
@@ -1062,6 +1482,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function ViewCuentas({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
+  const currency = useCurrency();
   const router = useRouter();
   const [editItem, setEditItem] = useState<typeof initialData.bankAccounts[0] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1078,6 +1499,8 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
   useEffect(() => { setNow(Date.now()); }, []);
   const hysAccounts = initialData.hysAccounts ?? [];
   const trm = initialData.config?.trm ?? null;
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
   const hysBalances = hysAccounts.map(a => {
     if (!now || !a.movements.length) return 0;
     const sorted = [...a.movements].sort((x, y) => x.date.localeCompare(y.date));
@@ -1153,7 +1576,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
           Patrimonio total
         </div>
         <div className="text-[38px] font-medium tracking-[-0.02em] mb-4" style={{ fontFamily: "Spectral, serif" }}>
-          <Bal n={total} privacy={privacy} />
+          {privacy ? "••••••" : fmt(total)}
         </div>
         {total > 0 && (
           <>
@@ -1167,7 +1590,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
                 <div key={p.label} className="flex items-center gap-1.5 text-[12px]">
                   <span className="w-2 h-2 rounded-xs" style={{ background: p.color }} />
                   <span className="text-muted">{p.label}</span>
-                  <span className="text-fg" style={monoStyle}>{privacy ? "••••" : COP(p.value)}</span>
+                  <span className="text-fg" style={monoStyle}>{privacy ? "••••" : fmt(p.value)}</span>
                 </div>
               ))}
             </div>
@@ -1208,7 +1631,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
                   </div>
                 </div>
                 <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
-                  <Bal n={bal} privacy={privacy} />
+                  {privacy ? "••••••" : fmt(bal)}
                 </div>
               </div>
             );
@@ -1221,7 +1644,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         <Section title="Inversiones / Bolsa">
           {bolsaAccounts.map((a) => (
             <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={bolsaBalance(a.id)}
-              privacy={privacy} tag="Bolsa" tagColor="var(--accent)22"
+              privacy={privacy} tag="Bolsa" tagColor="var(--accent)22" fmt={inUSD ? fmt : undefined}
               breakdown={[
                 { label: "Disponible", value: bolsaAvailable(a.id) },
                 { label: "Invertido", value: bolsaInvested(a.id) },
@@ -1232,7 +1655,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
       ) : stockTotal > 0 ? (
         <Section title="Inversiones / Bolsa">
           <AccountCard name="Portafolio en bolsa" subtitle="Sin broker asignado" balance={stockTotal}
-            privacy={privacy} tag="Bolsa" tagColor="var(--accent)22" />
+            privacy={privacy} tag="Bolsa" tagColor="var(--accent)22" fmt={inUSD ? fmt : undefined} />
         </Section>
       ) : null}
 
@@ -1241,7 +1664,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         <Section title="Cripto">
           {criptoAccounts.map((a) => (
             <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={criptoBalance(a.id)}
-              privacy={privacy} tag="Cripto" tagColor="#8a8f9822"
+              privacy={privacy} tag="Cripto" tagColor="#8a8f9822" fmt={inUSD ? fmt : undefined}
               breakdown={[
                 { label: "Disponible", value: criptoAvailable(a.id) },
                 { label: "Invertido", value: criptoInvested(a.id) },
@@ -1252,7 +1675,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
       ) : cryptoTotal > 0 ? (
         <Section title="Cripto">
           <AccountCard name="Portafolio cripto" subtitle="Sin exchange asignado" balance={cryptoTotal}
-            privacy={privacy} tag="Cripto" tagColor="#8a8f9822" />
+            privacy={privacy} tag="Cripto" tagColor="#8a8f9822" fmt={inUSD ? fmt : undefined} />
         </Section>
       ) : null}
 
@@ -1269,7 +1692,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm" style={{ background: "#10b98122", color: "#10b981" }}>Bien</span>
               </div>
               <div className="text-[22px] font-medium" style={{ fontFamily: "Spectral, serif" }}>
-                <Bal n={b.value} privacy={privacy} />
+                {privacy ? "••••••" : fmt(b.value)}
               </div>
             </div>
           ))}
@@ -1299,7 +1722,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
           <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
             {bankAccounts.map((a) => (
               <AccountCard key={a.id} name={a.name} subtitle={a.bank} balance={a.balance}
-                privacy={privacy}
+                privacy={privacy} fmt={inUSD ? fmt : undefined}
                 onEdit={() => setEditItem(a)} onDelete={() => handleDelete(a.id)} />
             ))}
           </div>
@@ -1318,7 +1741,7 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
                   <div className="text-[11px] text-dim">{t.date}{t.note ? ` · ${t.note}` : ""}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="tabular-nums text-muted" style={monoStyle}>{privacy ? "••••" : COP(t.amount)}</span>
+                  <span className="tabular-nums text-muted" style={monoStyle}>{privacy ? "••••" : fmt(t.amount)}</span>
                   <button
                     onClick={async () => {
                       if (!window.confirm("¿Eliminar transferencia? Se revierten los saldos.")) return;
@@ -1335,8 +1758,8 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
         </div>
       )}
 
-      {showAdd && <ModalCuenta onClose={() => setShowAdd(false)} />}
-      {editItem && <ModalCuenta editItem={editItem} onClose={() => setEditItem(null)} />}
+      {showAdd && <ModalCuenta onClose={() => setShowAdd(false)} bankAccounts={initialData.bankAccounts} />}
+      {editItem && <ModalCuenta editItem={editItem} onClose={() => setEditItem(null)} bankAccounts={initialData.bankAccounts} />}
       {showTransfer !== null && (
         <ModalTransfer
           bankAccounts={initialData.bankAccounts}
@@ -1352,6 +1775,10 @@ export function ViewCuentas({ initialData }: { initialData: AllData }) {
 
 export function ViewBienes({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
+  const currency = useCurrency();
+  const trm = initialData.config?.trm ?? null;
+  const inUSD = currency === "USD" && !!trm;
+  const fmt = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
   const [editItem, setEditItem] = useState<Bien | null>(null);
   const [loseItem, setLoseItem] = useState<Bien | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1366,7 +1793,7 @@ export function ViewBienes({ initialData }: { initialData: AllData }) {
           Valor total en bienes
         </div>
         <div className="text-[32px] font-medium tracking-[-0.02em]" style={{ fontFamily: "Spectral, serif" }}>
-          <Bal n={total} privacy={privacy} />
+          {privacy ? "••••••" : fmt(total)}
         </div>
         <div className="text-[12.5px] text-muted mt-1.5">
           Vehículos, inmuebles y otros bienes que forman parte de tu patrimonio pero no son dinero.
@@ -1393,6 +1820,7 @@ export function ViewBienes({ initialData }: { initialData: AllData }) {
               subtitle={`Desde ${b.date}`}
               balance={b.value}
               privacy={privacy}
+              fmt={inUSD ? fmt : undefined}
               onEdit={() => setEditItem(b)}
               onDelete={() => setLoseItem(b)}
             />

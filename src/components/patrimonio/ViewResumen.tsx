@@ -8,6 +8,7 @@ import {
   COP,
   COPSHORT,
   PCT,
+  USD,
 } from "../../data/mock";
 import type { AllData } from "../../types";
 import {
@@ -18,6 +19,7 @@ import {
   DONUT_COLORS,
   Segmented,
 } from "./utils";
+import { useCurrency } from "./CurrencyContext";
 import { usePrivacy } from "./PrivacyContext";
 import { toAssets, toTransactions } from "./transforms";
 import { getPortfolioHistory } from "../../../lib/actions";
@@ -52,6 +54,7 @@ const ALL_WIDGET_KEYS = ["hero", "kpis", "goals", "chart", "portfolioChart", "al
 
 export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const privacy = usePrivacy();
+  const currency = useCurrency();
   const router = useRouter();
   const onNav = (v: string) => router.push(`/${v}`);
   const transactions = toTransactions(initialData.finances);
@@ -91,7 +94,11 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const hysBalance = useMemo(() => hysEntries.reduce((s, e) => s + (e.currency === "USD" && trm ? e.balance * trm : e.balance), 0), [hysEntries, trm]);
   const cash = bankTotal + hysBalance;
   const bienesValue = initialData.bienes.reduce((s, b) => s + b.value, 0);
-  const total = stockValue + cryptoValue + cash + bienesValue;
+  const debtTotal = (initialData.debts ?? []).reduce((s, d) => {
+    const copBal = d.currency === "USD" && config?.trm ? d.balance * config.trm : d.balance;
+    return s + copBal;
+  }, 0);
+  const total = stockValue + cryptoValue + cash + bienesValue - debtTotal;
 
   // Filter transactions to current month
   const nowYM = new Date().toISOString().slice(0, 7);
@@ -371,8 +378,9 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
   const monthLabel = new Date().toLocaleDateString("es-CO", { month: "long" });
 
   // USD display when preferred and TRM known
-  const inUSD = config?.baseCurrency === "USD" && !!config?.trm;
-  const usdTotal = inUSD ? total / config!.trm! : null;
+  const inUSD = (currency === "USD" || config?.baseCurrency === "USD") && !!trm;
+  const fmt = (cop: number) => inUSD ? USD(cop / trm!) : COP(cop);
+  const usdTotal = inUSD ? total / trm! : null;
 
   // Widget order: saved config, or sensible default based on active modules
   const widgetOrder = useMemo(() => {
@@ -414,11 +422,11 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
         {(config?.showStocks ?? true) && (
           <KpiCard
             label="Inversiones · bolsa"
-            value={<Bal n={stockValue} privacy={privacy} />}
+            value={privacy ? "••••••" : fmt(stockValue)}
             sub={
               <span className={stockPL >= 0 ? "text-pos" : "text-neg"}>
                 {stockPL >= 0 ? "↑ " : "↓ "}
-                {privacy ? "••••" : COP(Math.abs(stockPL))} P/G sin realizar
+                {privacy ? "••••" : fmt(Math.abs(stockPL))} P/G sin realizar
               </span>
             }
           />
@@ -426,25 +434,25 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
         {(config?.showCrypto ?? true) && (
           <KpiCard
             label="Cripto"
-            value={<Bal n={cryptoValue} privacy={privacy} />}
+            value={privacy ? "••••••" : fmt(cryptoValue)}
             sub={
               <span className={cryptoPL >= 0 ? "text-pos" : "text-neg"}>
                 {cryptoPL >= 0 ? "↑ " : "↓ "}
-                {privacy ? "••••" : COP(Math.abs(cryptoPL))} P/G sin realizar
+                {privacy ? "••••" : fmt(Math.abs(cryptoPL))} P/G sin realizar
               </span>
             }
           />
         )}
         <KpiCard
           label="Efectivo y bancos"
-          value={<Bal n={cash} privacy={privacy} />}
+          value={privacy ? "••••••" : fmt(cash)}
           sub={
             <div className="flex flex-col gap-0.5 mt-0.5">
               {liquidAccounts.map(a => (
                 <div key={a.id} className="flex items-center justify-between gap-2">
                   <span className="text-dim truncate">{a.name}</span>
                   <span className="text-dim tabular-nums shrink-0">
-                    {privacy ? "••••" : COP(a.balance)}
+                    {privacy ? "••••" : fmt(a.balance)}
                   </span>
                 </div>
               ))}
@@ -455,7 +463,7 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
                   <div key={e.name} className="flex items-center justify-between gap-2">
                     <span className="text-dim truncate">{e.name}{e.currency === "USD" ? " (USD)" : ""}</span>
                     <span className="text-dim tabular-nums shrink-0">
-                      {privacy ? "••••" : COP(copVal)}
+                      {privacy ? "••••" : fmt(copVal)}
                     </span>
                   </div>
                 );
@@ -468,16 +476,16 @@ export default function ViewResumen({ initialData }: { initialData: AllData }) {
         />
         <KpiCard
           label={`Ingresos · ${monthLabel}`}
-          value={<span className="text-pos"><Bal n={income} privacy={privacy} /></span>}
+          value={<span className="text-pos">{privacy ? "••••••" : fmt(income)}</span>}
           sub={
             <span className="text-dim">
-              Balance {privacy ? "••••" : COP(monthBalance)}
+              Balance {privacy ? "••••" : fmt(monthBalance)}
             </span>
           }
         />
         <KpiCard
           label={`Egresos · ${monthLabel}`}
-          value={<span className="text-neg"><Bal n={expense} privacy={privacy} /></span>}
+          value={<span className="text-neg">{privacy ? "••••••" : fmt(expense)}</span>}
           sub={
             <span className="text-dim">
               {monthTx.filter((t) => t.type === "egreso").length} movimientos

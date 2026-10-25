@@ -45,6 +45,10 @@ model User {
   cashCloses     CashClose[]
   transfers      Transfer[]
   bienes         Bien[]
+  openOrders     OpenOrder[]
+  debts          Debt[]
+  priceAlerts    PriceAlert[]
+  dividendSchedules DividendSchedule[]
 
   // Perfil comercio: usuario sombra vinculado al dueño real
   businessOwnerId String?
@@ -98,6 +102,7 @@ model Stock {
   trm         Float
   priceCOP    Float
   commission  Float
+  exchange    String? // e.g. "BVC", "NYSE", "NASDAQ", "AMEX"
   accountId   String?
   accountName String?
   accountId2  String? // optional second funding source (e.g. broker cash + a bank transfer)
@@ -452,6 +457,85 @@ model CashClose {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
+}
+
+// Órdenes limit/market abiertas o históricas — cripto e inversiones
+model OpenOrder {
+  id          String  @id @default(cuid())
+  userId      String
+  ticker      String
+  kind        String  // "cripto" | "stock"
+  side        String  // "buy" | "sell"
+  orderType   String  @default("limit") // "limit" | "market"
+  qty         Float
+  limitPrice  Float?  // precio límite en USD (cripto) o COP (stock)
+  totalUSD    Float?  // valor total en USD al momento de poner la orden
+  currency    String  @default("USD")
+  date        String  // fecha de la orden
+  status      String  @default("open") // "open" | "filled" | "cancelled"
+  broker      String?
+  note        String?
+  createdAt   DateTime @default(now())
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Caché global de precios compartida entre usuarios — TTL 15 min en actions.ts.
+// Evita llamadas duplicadas a Yahoo Finance / CoinGecko cuando varios usuarios
+// refrescan al mismo tiempo. userId-independent: un sólo registro por ticker.
+model GlobalPrice {
+  id        String   @id @default(cuid())
+  ticker    String   @unique
+  value     Float    // precio en COP
+  kind      String   // "stock" | "crypto"
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+// Pasivos/deudas patrimoniales — hipotecas, créditos, tarjetas, otros
+model Debt {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  type           String   @default("otro") // "hipoteca" | "credito" | "tarjeta" | "otro"
+  balance        Float                     // saldo pendiente actual
+  originalAmount Float?                    // monto original del crédito
+  rate           Float    @default(0)      // tasa EA %
+  currency       String   @default("COP")
+  startDate      String?
+  endDate        String?                   // fecha de vencimiento/último pago
+  monthlyPayment Float?                    // cuota mensual estimada
+  notes          String?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Alertas de precio para inversiones y cripto
+model PriceAlert {
+  id        String   @id @default(cuid())
+  userId    String
+  ticker    String
+  kind      String   // "stock" | "crypto"
+  direction String   // "above" | "below"
+  price     Float    // precio en COP
+  triggered Boolean  @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ticker])
+}
+
+// Calendario de dividendos esperados — fechas futuras por ticker
+model DividendSchedule {
+  id           String   @id @default(cuid())
+  userId       String
+  ticker       String
+  expectedDate String   // YYYY-MM-DD
+  perShare     Float?   // dividendo estimado por acción (en COP)
+  note         String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ticker])
 }
 
 // Rotación de capital: transferencias entre cuentas, ventas de inversión

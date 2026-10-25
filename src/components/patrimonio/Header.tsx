@@ -10,9 +10,12 @@ export default function Header({
   pageSub,
   privacy,
   theme,
+  currency = "COP",
   showRegistrar = true,
+  trmLoading = false,
   onTogglePrivacy,
   onToggleTheme,
+  onCurrencyChange,
   onOpenModal,
   onOpenCsvImport,
 }: {
@@ -20,9 +23,12 @@ export default function Header({
   pageSub: string;
   privacy: boolean;
   theme: "dark" | "light";
+  currency?: "COP" | "USD";
   showRegistrar?: boolean;
+  trmLoading?: boolean;
   onTogglePrivacy: () => void;
   onToggleTheme: () => void;
+  onCurrencyChange?: (v: "COP" | "USD") => void;
   onOpenModal: () => void;
   onOpenCsvImport?: () => void;
 }) {
@@ -60,6 +66,27 @@ export default function Header({
           <button className={iconBtnClass} onClick={onToggleTheme} aria-label="Tema" title="Tema">
             {theme === "dark" ? <IconSun /> : <IconMoon />}
           </button>
+          {onCurrencyChange && (
+            <div
+              className="flex bg-panel2 rounded-[10px] p-[3px] gap-0.5"
+              title={trmLoading ? "Obteniendo TRM…" : "Moneda de visualización"}
+            >
+              {(["COP", "USD"] as const).map((c) => (
+                <button
+                  key={c}
+                  disabled={trmLoading}
+                  onClick={() => !trmLoading && c !== currency && onCurrencyChange(c)}
+                  className={[
+                    "border-none px-[9px] py-[5px] rounded-[7px] text-[12px] font-medium transition-opacity",
+                    trmLoading ? "cursor-wait opacity-60" : "cursor-pointer",
+                    currency === c ? "bg-accent text-accentFg" : "bg-transparent text-muted",
+                  ].join(" ")}
+                >
+                  {trmLoading && c === "USD" ? "…" : c}
+                </button>
+              ))}
+            </div>
+          )}
           {showRegistrar && onOpenCsvImport && (
             <button
               onClick={onOpenCsvImport}

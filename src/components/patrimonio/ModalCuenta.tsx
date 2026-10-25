@@ -2,36 +2,61 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBankAccount, updateBankAccount } from "../../../lib/actions";
+import { createBankAccount, updateBankAccount, addTransfer } from "../../../lib/actions";
 import ModalShell, { CancelSave, MoneyInput, fieldClass, labelClass } from "./ModalShell";
 import { useToast } from "./Toast";
 import type { BankAccount } from "../../types";
 
 const TYPES = [
-  { value: "banco",    label: "Banco / Efectivo" },
-  { value: "bolsa",   label: "Bolsa / Broker" },
-  { value: "cripto",  label: "Exchange de cripto" },
-  { value: "otro",    label: "Otro" },
+  { value: "banco",   label: "Banco / Efectivo" },
+  { value: "bolsa",  label: "Bolsa / Broker" },
+  { value: "cripto", label: "Exchange de cripto" },
+  { value: "otro",   label: "Otro" },
 ];
 
-export default function ModalCuenta({ onClose, editItem }: { onClose: () => void; editItem?: BankAccount }) {
+export default function ModalCuenta({
+  onClose,
+  editItem,
+  bankAccounts = [],
+}: {
+  onClose: () => void;
+  editItem?: BankAccount;
+  bankAccounts?: BankAccount[];
+}) {
   const router = useRouter();
-  const toast = useToast();
-  const [name, setName]       = useState(editItem?.name ?? "");
-  const [bank, setBank]       = useState(editItem?.bank ?? "");
-  const [type, setType]       = useState(editItem?.type ?? "banco");
+  const toast  = useToast();
+  const [name, setName]     = useState(editItem?.name ?? "");
+  const [bank, setBank]     = useState(editItem?.bank ?? "");
+  const [type, setType]     = useState(editItem?.type ?? "banco");
   const [balance, setBalance] = useState(editItem ? String(Math.round(editItem.balance)) : "");
-  const [saving, setSaving]   = useState(false);
+  const [fromId, setFromId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const canSave = name.trim().length > 0;
+  const isBroker = type === "bolsa" || type === "cripto";
+  const bal = Number(balance.replace(/\./g, "").replace(",", ".")) || 0;
+  // Offer transfer source only when creating a new broker with an initial balance
+  const showFromAccount = !editItem && isBroker && bal > 0;
+  const sourceAccounts = bankAccounts.filter(a => a.type !== "bolsa" && a.type !== "cripto");
+  const fromAccount = sourceAccounts.find(a => a.id === fromId);
 
   const save = async () => {
     setSaving(true);
     try {
-      const bal = Number(balance.replace(/\./g, "").replace(",", ".")) || 0;
       const item = { name: name.trim(), bank: bank.trim() || undefined, type, balance: bal };
       if (editItem) {
         await updateBankAccount(editItem.id, item);
+      } else if (showFromAccount && fromAccount) {
+        // Create broker with balance=0, then transfer funds from source account
+        const newId = await createBankAccount({ ...item, balance: 0 });
+        await addTransfer({
+          fromAccountId: fromAccount.id,
+          fromAccountName: fromAccount.name,
+          toAccountId: newId,
+          toAccountName: item.name,
+          amount: bal,
+          note: `Depósito inicial ${item.name}`,
+        });
       } else {
         await createBankAccount(item);
       }
@@ -44,11 +69,9 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
     }
   };
 
-  // Bolsa/Cripto accounts also need an editable balance now — it represents
-  // "dinero disponible" (uninvested cash sitting in the broker/exchange),
-  // separate from "invertido" (computed from linked stock/crypto positions).
-  const showBalance = true;
-  const balanceLabel = type === "bolsa" || type === "cripto" ? "Dinero disponible (sin invertir, COP)" : "Saldo actual (COP)";
+  const balanceLabel = isBroker
+    ? "Dinero disponible (sin invertir, COP)"
+    : "Saldo actual (COP)";
 
   return (
     <ModalShell
@@ -59,7 +82,7 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
       <div>
         <label className={labelClass}>Tipo de cuenta</label>
         <select value={type} onChange={(e) => setType(e.target.value)} className={fieldClass}>
-          {TYPES.map((t) => (
+          {TYPES.map(t => (
             <option key={t.value} value={t.value}>{t.label}</option>
           ))}
         </select>
@@ -76,7 +99,9 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
       </div>
 
       <div>
-        <label className={labelClass}>{type === "bolsa" ? "Broker" : type === "cripto" ? "Exchange" : "Banco"} (opcional)</label>
+        <label className={labelClass}>
+          {type === "bolsa" ? "Broker" : type === "cripto" ? "Exchange" : "Banco"} (opcional)
+        </label>
         <input
           value={bank}
           onChange={(e) => setBank(e.target.value)}
@@ -85,10 +110,25 @@ export default function ModalCuenta({ onClose, editItem }: { onClose: () => void
         />
       </div>
 
-      {showBalance && (
+      <div>
+        <label className={labelClass}>{balanceLabel}</label>
+        <MoneyInput value={balance} onChange={setBalance} prefix="$" />
+      </div>
+
+      {showFromAccount && (
         <div>
-          <label className={labelClass}>{balanceLabel}</label>
-          <MoneyInput value={balance} onChange={setBalance} prefix="$" />
+          <label className={labelClass}>Cuenta de origen del depósito inicial (opcional)</label>
+          <select value={fromId} onChange={(e) => setFromId(e.target.value)} className={fieldClass}>
+            <option value="">— No registrar transferencia —</option>
+            {sourceAccounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          {fromAccount && (
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Se registrará una transferencia de <strong>{fromAccount.name}</strong> → <strong>{name || "broker"}</strong>.
+            </p>
+          )}
         </div>
       )}
     </ModalShell>

@@ -17,6 +17,10 @@ export type Asset = {
   price: number;
   dayPct: number;
   spark: number[];
+  // Set for USD-denominated assets (crypto with real USD purchase prices stored in price field).
+  // Lets the UI avoid TRM-drift when showing PPA/P&G in USD mode.
+  avgUSD?: number;
+  totalCostUSD?: number;
 };
 
 export type TxType = "ingreso" | "egreso";

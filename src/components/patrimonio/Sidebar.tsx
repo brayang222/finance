@@ -19,6 +19,9 @@ import {
   IconUsers,
   IconStore,
   IconTruck,
+  IconReceipt,
+  IconDebt,
+  IconDividend,
 } from "./utils";
 
 type NavItem = {
@@ -39,7 +42,10 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/analytics",    label: "Análisis",         icon: IconChart },
   { href: "/goals",        label: "Metas",            icon: IconTarget,   module: "showGoals" },
   { href: "/recurrentes",  label: "Recurrentes",      icon: IconRepeat },
+  { href: "/deudas",       label: "Deudas",           icon: IconDebt },
+  { href: "/dividends",    label: "Dividendos",       icon: IconDividend },
   { href: "/history",      label: "Historial",        icon: IconClock,    module: "showActivity" },
+  { href: "/fiscal",       label: "Informe Fiscal",   icon: IconReceipt },
 ];
 
 export const BUSINESS_NAV_ITEMS: NavItem[] = [

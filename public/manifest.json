@@ -1,16 +1,46 @@
 {
-  "name": "Finance",
-  "short_name": "Finance",
+  "name": "Patrimonio Personal",
+  "short_name": "Patrimonio",
   "description": "Control de finanzas personales",
-  "start_url": "/",
+  "start_url": "/summary",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#0e0e1f",
   "theme_color": "#7B4FB5",
+  "categories": ["finance"],
   "icons": [
     {
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
+    },
+    {
+      "src": "/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    { "name": "Resumen",        "url": "/summary",      "description": "Ver patrimonio total" },
+    { "name": "Transacciones",  "url": "/transactions", "description": "Registrar movimientos" },
+    { "name": "Inversiones",    "url": "/investments",  "description": "Ver portafolio" }
   ]
 }

@@ -8,6 +8,7 @@ export interface Stock {
   trm: number
   priceCOP: number
   commission: number
+  exchange?: string  // e.g. "BVC", "NYSE", "NASDAQ", "AMEX"
   source?: string
   accountId?: string
   accountName?: string
@@ -252,6 +253,54 @@ export interface Transfer {
   note?: string
 }
 
+export interface OpenOrder {
+  id: string
+  ticker: string
+  kind: "cripto" | "stock"
+  side: "buy" | "sell"
+  orderType: string
+  qty: number
+  limitPrice?: number
+  totalUSD?: number
+  currency: string
+  date: string
+  status: "open" | "filled" | "cancelled"
+  broker?: string
+  note?: string
+}
+
+export interface Debt {
+  id: string
+  name: string
+  type: "hipoteca" | "credito" | "tarjeta" | "otro"
+  balance: number
+  originalAmount?: number
+  rate: number
+  currency: string
+  startDate?: string
+  endDate?: string
+  monthlyPayment?: number
+  notes?: string
+}
+
+export interface PriceAlert {
+  id: string
+  ticker: string
+  kind: "stock" | "crypto"
+  direction: "above" | "below"
+  price: number
+  triggered: boolean
+  active: boolean
+}
+
+export interface DividendSchedule {
+  id: string
+  ticker: string
+  expectedDate: string
+  perShare?: number
+  note?: string
+}
+
 export interface AllData {
   stocks: Stock[]
   crypto: Crypto[]
@@ -280,4 +329,8 @@ export interface AllData {
   cashCloses: CashClose[]
   transfers: Transfer[]
   dividends: Dividend[]
+  openOrders: OpenOrder[]
+  debts: Debt[]
+  priceAlerts: PriceAlert[]
+  dividendSchedules: DividendSchedule[]
 }

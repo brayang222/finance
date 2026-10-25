@@ -236,6 +236,35 @@ export const IconTruck: React.FC<{ size?: number }> = ({ size = 18 }) => (
   </svg>
 );
 
+export const IconReceipt: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2-3 2Z" />
+    <line x1="9" y1="9" x2="15" y2="9" />
+    <line x1="9" y1="13" x2="15" y2="13" />
+  </svg>
+);
+
+export const IconDebt: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+    <line x1="1" y1="10" x2="23" y2="10" />
+    <line x1="7" y1="15" x2="11" y2="15" />
+  </svg>
+);
+
+export const IconDividend: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+    <line x1="8" y1="14" x2="8" y2="18" />
+    <line x1="6" y1="16" x2="10" y2="16" />
+    <line x1="14" y1="14" x2="18" y2="14" />
+    <line x1="14" y1="18" x2="18" y2="18" />
+  </svg>
+);
+
 /** Small pill-shaped option switcher (e.g. range or currency toggles). */
 export function Segmented({
   options,

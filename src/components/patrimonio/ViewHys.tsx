@@ -641,6 +641,15 @@ export default function ViewHys({ initialData }: { initialData: AllData }) {
     ? group.reduce((s, a) => s + balanceNow(a) * a.rate, 0) / groupTotal
     : (root?.rate ?? 0);
 
+  const groupTotalEarnings = group.reduce((sum, a) => {
+    const sorted = [...a.movements].sort((x, y) => x.date.localeCompare(y.date));
+    const lastMov = sorted[sorted.length - 1];
+    const bal = lastMov ? compound(lastMov.balance, a.rate, lastMov.date, todayISO()) : 0;
+    const deps = sorted.filter(m => m.type === "inicio" || m.type === "deposito").reduce((s, m) => s + m.amount, 0);
+    const rets = sorted.filter(m => m.type === "retiro").reduce((s, m) => s + m.amount, 0);
+    return sum + bal - deps + rets;
+  }, 0);
+
   const openRoot = (i: number) => { setActiveIdx(i); setPocketId(null); setShowCreate(null); };
 
   if (accounts.length === 0 && !showCreate) {
@@ -675,14 +684,20 @@ export default function ViewHys({ initialData }: { initialData: AllData }) {
       {/* Group total + pocket tabs */}
       {root && showCreate !== "account" && pockets.length > 0 && (
         <div className={`${cardBase} flex flex-col gap-3`}>
-          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <div className={microLabel}>Total {root.name} · {pockets.length + 1} bolsillos</div>
               <div className="text-[22px] font-medium tabular-nums leading-tight">
                 {privacy ? "•••" : fmtCurrency(groupTotal, root.currency, trm)}
               </div>
             </div>
-            <span className="text-[12px] text-muted">Tasa promedio: {blendedRate.toFixed(2)}% EA</span>
+            <div className="text-right">
+              <div className={microLabel}>Ganado total</div>
+              <div className={`text-[15px] font-medium tabular-nums ${groupTotalEarnings >= 0 ? "text-green-500" : "text-red-500"}`}>
+                {privacy ? "•••" : `+ ${fmtCurrency(groupTotalEarnings, root.currency, trm)}`}
+              </div>
+              <div className="text-[11px] text-muted">Tasa promedio: {blendedRate.toFixed(2)}% EA</div>
+            </div>
           </div>
           <div className="flex gap-2 flex-wrap">
             <button

@@ -10,6 +10,14 @@ import type { Stock, BankAccount } from "../../types";
 
 const num = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
 
+const EXCHANGE_MAP: Record<string, string> = {
+  NMS: "NASDAQ", NGM: "NASDAQ", NCM: "NASDAQ",
+  NYQ: "NYSE", NYE: "NYSE",
+  BVC: "BVC", BOG: "BVC",
+  AMEX: "AMEX", PCX: "AMEX",
+};
+const normalizeExchange = (raw: string) => EXCHANGE_MAP[raw.toUpperCase()] ?? raw.toUpperCase();
+
 type LookupData = {
   symbol: string;
   name: string;
@@ -44,12 +52,18 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
   const [useSplit, setUseSplit] = useState(!!editItem?.accountId2);
   const [accountId2, setAccountId2] = useState(editItem?.accountId2 ?? "");
   const [amount2, setAmount2] = useState(editItem?.amount2 ? String(Math.round(editItem.amount2)) : "");
+  const [exchange, setExchange] = useState(editItem?.exchange ?? "");
+  const [currency, setCurrency] = useState(editItem?.currency ?? "COP");
+  const [priceUSD, setPriceUSD] = useState(editItem && editItem.currency === "USD" ? String(editItem.price) : "");
+  const [trm, setTrm] = useState(editItem?.trm && editItem.trm > 1 ? String(editItem.trm) : "");
   const [saving, setSaving] = useState(false);
   const [looking, setLooking] = useState(false);
   const [lookup, setLookup] = useState<LookupData | null>(null);
   const [lookupError, setLookupError] = useState("");
 
-  const canSave = ticker.trim().length > 0 && num(qty) > 0 && num(priceCOP) > 0;
+  const isUSD = currency === "USD";
+  const canSave = ticker.trim().length > 0 && num(qty) > 0 &&
+    (isUSD ? num(priceUSD) > 0 && num(trm) > 0 : num(priceCOP) > 0);
 
   const runLookup = async () => {
     if (!ticker.trim()) return;
@@ -64,6 +78,9 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
         return;
       }
       setLookup(json);
+      // Auto-fill exchange + currency from lookup
+      if (json.exchange && !exchange) setExchange(normalizeExchange(json.exchange));
+      if (json.currency) setCurrency(json.currency === "USD" ? "USD" : "COP");
     } catch {
       setLookupError("No se pudo conectar con la fuente de datos");
     } finally {
@@ -72,24 +89,51 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
   };
 
   const useLookupPrice = () => {
-    if (lookup?.price) setPriceCOP(String(Math.round(lookup.price)));
+    if (!lookup?.price) return;
+    if (lookup.currency === "USD") {
+      setPriceUSD(String(lookup.price));
+      const trmVal = num(trm);
+      if (trmVal > 0) setPriceCOP(String(Math.round(lookup.price * trmVal)));
+    } else {
+      setPriceCOP(String(Math.round(lookup.price)));
+    }
+  };
+
+  // When TRM changes, recalculate COP price for USD stocks
+  const handleTrmChange = (val: string) => {
+    setTrm(val);
+    if (currency === "USD" && num(priceUSD) > 0 && num(val) > 0) {
+      setPriceCOP(String(Math.round(num(priceUSD) * num(val))));
+    }
+  };
+
+  // When USD price changes, recalculate COP
+  const handlePriceUSDChange = (val: string) => {
+    setPriceUSD(val);
+    if (currency === "USD" && num(trm) > 0) {
+      setPriceCOP(String(Math.round(num(val) * num(trm))));
+    }
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      const price = num(priceCOP);
       const acct = bankAccounts.find(b => b.id === accountId);
       const acct2 = useSplit ? bankAccounts.find(b => b.id === accountId2) : undefined;
+      const isUSD = currency === "USD";
+      const usdPrice = num(priceUSD);
+      const copPrice = num(priceCOP);
+      const trmVal = isUSD && num(trm) > 0 ? num(trm) : 1;
       const data = {
         ticker: ticker.trim().toUpperCase(),
         qty: num(qty),
-        price,
-        currency: "COP",
-        trm: 1,
-        priceCOP: price,
+        price: isUSD ? usdPrice : copPrice,
+        currency,
+        trm: trmVal,
+        priceCOP: isUSD ? Math.round(usdPrice * trmVal) : copPrice,
         commission: num(commission),
         date: dateISO,
+        exchange: exchange.trim() || undefined,
         accountId: acct?.id,
         accountName: acct?.name,
         accountId2: acct2?.id,
@@ -177,20 +221,61 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
         )}
       </div>
 
+      {/* Exchange + Currency */}
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className={labelClass}>Cantidad</label>
-          <input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" className={fieldClass} />
+          <label className={labelClass}>Bolsa</label>
+          <select value={exchange} onChange={e => setExchange(e.target.value)} className={fieldClass}>
+            <option value="">— Sin especificar —</option>
+            <option value="BVC">BVC (Colombia)</option>
+            <option value="NYSE">NYSE</option>
+            <option value="NASDAQ">NASDAQ</option>
+            <option value="AMEX">AMEX</option>
+          </select>
         </div>
         <div className="flex-1">
-          <label className={labelClass}>Precio por acción (COP)</label>
-          <MoneyInput value={priceCOP} onChange={setPriceCOP} prefix="$" />
+          <label className={labelClass}>Moneda</label>
+          <select value={currency} onChange={e => { setCurrency(e.target.value); if (e.target.value === "COP") { setPriceUSD(""); setTrm(""); } }} className={fieldClass}>
+            <option value="COP">COP</option>
+            <option value="USD">USD</option>
+          </select>
         </div>
       </div>
 
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className={labelClass}>Comisión COP</label>
+          <label className={labelClass}>Cantidad</label>
+          <input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" className={fieldClass} />
+        </div>
+        {isUSD ? (
+          <div className="flex-1">
+            <label className={labelClass}>Precio USD</label>
+            <input inputMode="decimal" value={priceUSD} onChange={e => handlePriceUSDChange(e.target.value)} placeholder="0.00" className={fieldClass} />
+          </div>
+        ) : (
+          <div className="flex-1">
+            <label className={labelClass}>Precio por acción (COP)</label>
+            <MoneyInput value={priceCOP} onChange={setPriceCOP} prefix="$" />
+          </div>
+        )}
+      </div>
+
+      {isUSD && (
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelClass}>TRM (COP/USD)</label>
+            <MoneyInput value={trm} onChange={handleTrmChange} prefix="$" />
+          </div>
+          <div className="flex-1">
+            <label className={labelClass}>Precio COP (calculado)</label>
+            <MoneyInput value={priceCOP} onChange={setPriceCOP} prefix="$" />
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className={labelClass}>Comisión {currency === "USD" ? "COP" : "COP"}</label>
           <MoneyInput value={commission} onChange={setCommission} prefix="$" />
         </div>
         <div className="flex-1">
@@ -199,10 +284,18 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { 
         </div>
       </div>
 
-      {num(qty) > 0 && num(priceCOP) > 0 && (
+      {num(qty) > 0 && (isUSD ? num(priceUSD) > 0 && num(trm) > 0 : num(priceCOP) > 0) && (
         <div className="text-[13px] text-dim">
-          Total a pagar: <span className="text-muted font-medium">{COP(num(qty) * num(priceCOP) + num(commission))}</span>
-          {" "}({num(qty)} × {COP(num(priceCOP))} + comisión {COP(num(commission))})
+          Total a pagar:{" "}
+          <span className="text-muted font-medium">{COP(num(qty) * num(priceCOP) + num(commission))}</span>
+          {isUSD && num(trm) > 0 && (
+            <span className="ml-1 text-dim">
+              ({num(qty)} × {num(priceUSD).toFixed(2)} USD @ TRM {COP(num(trm))})
+            </span>
+          )}
+          {!isUSD && (
+            <span className="ml-1 text-dim">({num(qty)} × {COP(num(priceCOP))} + comisión {COP(num(commission))})</span>
+          )}
         </div>
       )}
 
