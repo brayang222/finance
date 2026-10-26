@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserIdFromRequest, apiError } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { autoSaveCategory } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +10,10 @@ export async function POST(req: NextRequest) {
     await prisma.finance.createMany({
       data: items.map(item => ({ ...item, id: crypto.randomUUID(), userId })),
     });
-    for (const item of items) await autoSaveCategory(userId, item.category, item.type);
+    const uniqueCats = [...new Map(
+      items.map(i => [`${i.type}::${i.category}`, { userId, name: i.category, type: i.type }])
+    ).values()];
+    await prisma.category.createMany({ data: uniqueCats, skipDuplicates: true });
     return NextResponse.json({ imported: items.length }, { status: 201 });
   } catch (e) { return apiError(e); }
 }

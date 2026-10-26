@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(req);
 
-    const [stocks, crypto, finances, hysAccounts, hysMovements, prices, targets, cash, config,
+    const [stocks, crypto, finances, hysAccounts, prices, targets, cash, config,
       bankAccounts, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, customers,
       products, sales, cashCloses] =
       await Promise.all([
@@ -14,7 +14,6 @@ export async function GET(req: NextRequest) {
         prisma.crypto.findMany({ where: { userId } }),
         prisma.finance.findMany({ where: { userId } }),
         prisma.hys.findMany({ where: { userId }, include: { movements: { orderBy: { date: "asc" } } } }),
-        prisma.hysMovement.findMany({ where: { userId } }),
         prisma.price.findMany({ where: { userId } }),
         prisma.target.findMany({ where: { userId } }),
         prisma.cash.findUnique({ where: { userId } }),
@@ -37,7 +36,7 @@ export async function GET(req: NextRequest) {
       stocks,
       crypto,
       finances,
-      hys: hysAccounts[0] ? { rate: hysAccounts[0].rate, movements: hysMovements } : null,
+      hys: hysAccounts[0] ? { rate: hysAccounts[0].rate, movements: hysAccounts[0].movements } : null,
       hysAccounts: hysAccounts.map(a => ({
         id: a.id, name: a.name, currency: a.currency, rate: a.rate,
         openedAt: a.openedAt, parentId: a.parentId, movements: a.movements,

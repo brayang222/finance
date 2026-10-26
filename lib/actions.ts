@@ -1,10 +1,11 @@
 "use server";
 
+import { cache } from "react";
 import { randomUUID } from "crypto";
 import { auth } from "../auth";
 import { prisma } from "./prisma";
 import {
-  resolveBusinessUser, adjustBalance,
+  resolveBusinessUser, adjustBalance, logActivity,
   createSale, removeSale, createPurchase, closeCashDay,
   type SaleItemInput, type PurchaseItemInput,
 } from "./db";
@@ -39,26 +40,17 @@ export async function switchProfile(profile: "personal" | "business") {
   }
 }
 
-async function logActivity(
-  userId: string,
-  type: string,
-  description: string,
-  extras?: { amount?: number; ticker?: string; accountName?: string }
-) {
-  await prisma.activityLog.create({
-    data: { userId, type, description, ...extras },
-  });
-}
-
 // ── LOAD ALL ──
+const _loadAllCached = cache(_loadAll);
+
 export async function loadAll() {
   try {
-    return await _loadAll();
+    return await _loadAllCached();
   } catch (e: any) {
     // Neon cold start: retry once after 2s
     if (e?.code === "P1001") {
       await new Promise(r => setTimeout(r, 2000));
-      return await _loadAll();
+      return await _loadAllCached();
     }
     throw e;
   }
@@ -91,13 +83,12 @@ async function _loadAll() {
     }
   }
 
-  const [stocks, crypto, finances, hysAccountsRaw, hysMovements, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, dividends, openOrders, sharesGiven, sharesReceived, debts, priceAlerts, dividendSchedules] =
+  const [stocks, crypto, finances, hysAccountsRaw, prices, targets, cash, config, bankAccounts, bienes, activityLogs, budgets, budgetConfigs, categories, goals, recurrings, transfers, dividends, openOrders, sharesGiven, sharesReceived, debts, priceAlerts, dividendSchedules] =
     await Promise.all([
       prisma.stock.findMany({ where: { userId: targetUserId } }),
       prisma.crypto.findMany({ where: { userId: targetUserId } }),
       prisma.finance.findMany({ where: { userId: targetUserId } }),
       prisma.hys.findMany({ where: { userId: targetUserId }, include: { movements: { orderBy: { date: "asc" } } } }),
-      prisma.hysMovement.findMany({ where: { userId: targetUserId } }),
       prisma.price.findMany({ where: { userId: targetUserId } }),
       prisma.target.findMany({ where: { userId: targetUserId } }),
       prisma.cash.findUnique({ where: { userId: targetUserId } }),
@@ -156,7 +147,7 @@ async function _loadAll() {
   const targetsMap = Object.fromEntries(targets.map(t => [t.ticker, t.value]));
   const firstHys = hysAccountsRaw[0];
   const hysData = firstHys
-    ? { rate: firstHys.rate, movements: hysMovements.map(m => ({ ...m, note: m.note ?? undefined })) }
+    ? { rate: firstHys.rate, movements: firstHys.movements.map(m => ({ ...m, note: m.note ?? undefined })) }
     : null;
 
   const typedHysAccounts = hysAccountsRaw.map(h => ({
@@ -605,14 +596,14 @@ export async function sellStock(
   const sellFraction = soldQty / totalQty;
   const costBasis = totalCost * sellFraction;
 
-  for (const row of rows) {
-    const keepQty = isFullSale ? 0 : row.qty * (1 - sellFraction);
-    if (keepQty < 1e-9) {
-      await prisma.stock.delete({ where: { id: row.id } });
-    } else {
-      await prisma.stock.update({ where: { id: row.id }, data: { qty: keepQty, commission: row.commission * (1 - sellFraction) } });
-    }
-  }
+  await prisma.$transaction(
+    rows.map(row => {
+      const keepQty = isFullSale ? 0 : row.qty * (1 - sellFraction);
+      return keepQty < 1e-9
+        ? prisma.stock.delete({ where: { id: row.id } })
+        : prisma.stock.update({ where: { id: row.id }, data: { qty: keepQty, commission: row.commission * (1 - sellFraction) } });
+    })
+  );
 
   const netProceeds = sellPriceCOP - commissionCOP;
   const realizedPL = netProceeds - costBasis;
@@ -656,14 +647,14 @@ export async function sellCrypto(
   const sellFraction = soldQty / totalQty;
   const costBasis = totalCost * sellFraction;
 
-  for (const row of rows) {
-    const keepQty = isFullSale ? 0 : row.qty * (1 - sellFraction);
-    if (keepQty < 1e-9) {
-      await prisma.crypto.delete({ where: { id: row.id } });
-    } else {
-      await prisma.crypto.update({ where: { id: row.id }, data: { qty: keepQty, commission: row.commission * (1 - sellFraction) } });
-    }
-  }
+  await prisma.$transaction(
+    rows.map(row => {
+      const keepQty = isFullSale ? 0 : row.qty * (1 - sellFraction);
+      return keepQty < 1e-9
+        ? prisma.crypto.delete({ where: { id: row.id } })
+        : prisma.crypto.update({ where: { id: row.id }, data: { qty: keepQty, commission: row.commission * (1 - sellFraction) } });
+    })
+  );
 
   const netProceeds = sellPriceCOP - commissionCOP;
   const realizedPL = netProceeds - costBasis;
@@ -924,12 +915,12 @@ export async function refreshPrices(stockTickers: string[], cryptoTickers: strin
       const mktPrice = pricesMap[alert.ticker.toUpperCase()];
       if (mktPrice == null) continue;
       const hit = alert.direction === "above" ? mktPrice >= alert.price : mktPrice <= alert.price;
-      if (hit) {
-        await prisma.priceAlert.update({ where: { id: alert.id }, data: { triggered: true } });
-        triggered.push(alert.id);
-      }
+      if (hit) triggered.push(alert.id);
     }
-    if (triggered.length > 0) return { updated: Object.keys(pricesMap).length, fromCache: Object.keys(freshCache).length, triggeredAlerts: triggered };
+    if (triggered.length > 0) {
+      await prisma.priceAlert.updateMany({ where: { id: { in: triggered } }, data: { triggered: true } });
+      return { updated: Object.keys(pricesMap).length, fromCache: Object.keys(freshCache).length, triggeredAlerts: triggered };
+    }
   }
 
   return { updated: Object.keys(pricesMap).length, fromCache: Object.keys(freshCache).length };
@@ -1137,6 +1128,7 @@ async function replayBalancesForAccount(hysId: string, fromDate: string) {
   const pivotIdx = all.findIndex(m => m.date >= fromDate);
   if (pivotIdx <= 0) return; // nothing before to base from, or nothing after
   let prev = all[pivotIdx - 1];
+  const batchUpdates: { id: string; balance: number }[] = [];
   for (let i = pivotIdx; i < all.length; i++) {
     const m = all[i];
     const accrued = compound(prev.balance, prev.rate, prev.date, m.date);
@@ -1145,9 +1137,12 @@ async function replayBalancesForAccount(hysId: string, fromDate: string) {
     const newBalance = isRetiro ? accrued - m.amount : accrued + (isDeposit ? m.amount : m.amount);
     // rendimiento movements record a 0 amount deposit (just the accrual capture)
     const finalBalance = m.type === "rendimiento" ? accrued : newBalance;
-    await prisma.hysMovement.update({ where: { id: m.id }, data: { balance: finalBalance } });
+    batchUpdates.push({ id: m.id, balance: finalBalance });
     prev = { ...m, balance: finalBalance };
   }
+  if (batchUpdates.length) await prisma.$transaction(
+    batchUpdates.map(u => prisma.hysMovement.update({ where: { id: u.id }, data: { balance: u.balance } }))
+  );
 }
 
 export async function initHys(initialBalance: number, rate: number, name = "Nubank", currency = "COP", accountId?: string, sourceAmount?: number, parentId?: string) {
@@ -1373,13 +1368,10 @@ export async function completeOnboarding(modules: {
     ...defaults.filter(d => !existingSet.has(`${d.type}::${d.name.toLowerCase()}`)),
   ];
 
-  for (const cat of toInsert) {
-    await prisma.category.upsert({
-      where: { userId_name_type: { userId, name: cat.name, type: cat.type } },
-      create: { userId, name: cat.name, type: cat.type },
-      update: {},
-    });
-  }
+  await prisma.category.createMany({
+    data: toInsert.map(cat => ({ userId, name: cat.name, type: cat.type })),
+    skipDuplicates: true,
+  });
 
   await prisma.userConfig.upsert({
     where: { userId },

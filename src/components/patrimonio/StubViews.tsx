@@ -719,9 +719,13 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const onBack = () => router.push(isCrypto ? "/crypto" : "/investments");
   const asset = [...holdings, ...cryptoAssets].find((a) => a.ticker === selected);
 
-  const rawTrades = isCrypto
-    ? initialData.crypto.filter(t => t.ticker.toUpperCase() === selected)
-    : initialData.stocks.filter(t => t.ticker.toUpperCase() === selected);
+  const rawTrades = useMemo(
+    () => isCrypto
+      ? initialData.crypto.filter(t => t.ticker.toUpperCase() === selected)
+      : initialData.stocks.filter(t => t.ticker.toUpperCase() === selected),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isCrypto, initialData.crypto, initialData.stocks, selected]
+  );
 
   const currency = useCurrency();
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);

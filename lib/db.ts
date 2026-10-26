@@ -79,14 +79,18 @@ export async function replayBalances(userId: string, fromDate: string, hysId?: s
   const pivotIdx = all.findIndex(m => m.date >= fromDate);
   if (pivotIdx <= 0) return;
   let prev = all[pivotIdx - 1];
+  const updates: { id: string; balance: number }[] = [];
   for (let i = pivotIdx; i < all.length; i++) {
     const m = all[i];
     const accrued = compound(prev.balance, prev.rate, prev.date, m.date);
     const finalBalance = m.type === "rendimiento" ? accrued
       : m.type === "retiro" ? accrued - m.amount : accrued + m.amount;
-    await prisma.hysMovement.update({ where: { id: m.id }, data: { balance: finalBalance } });
+    updates.push({ id: m.id, balance: finalBalance });
     prev = { ...m, balance: finalBalance };
   }
+  if (updates.length) await prisma.$transaction(
+    updates.map(u => prisma.hysMovement.update({ where: { id: u.id }, data: { balance: u.balance } }))
+  );
 }
 
 export function advanceDate(date: string, frequency: string): string {
@@ -184,14 +188,13 @@ export async function createSale(
   });
 
   // Descuenta inventario
-  for (const i of items) {
-    if (i.productId) {
-      await prisma.product.updateMany({
-        where: { id: i.productId, userId },
-        data: { stock: { decrement: i.qty } },
-      });
-    }
-  }
+  const stockUpdates = items
+    .filter(i => i.productId)
+    .map(i => prisma.product.updateMany({
+      where: { id: i.productId as string, userId },
+      data: { stock: { decrement: i.qty } },
+    }));
+  if (stockUpdates.length) await prisma.$transaction(stockUpdates);
 
   const desc = items.map(i => `${i.qty}x ${i.name}`).join(", ").slice(0, 120);
   if (payMethod === "fiado") {
@@ -217,14 +220,13 @@ export async function removeSale(userId: string, saleId: string) {
   const sale = await prisma.sale.findFirst({ where: { id: saleId, userId }, include: { items: true } });
   if (!sale) throw new Error("Venta no encontrada");
   // Devuelve inventario
-  for (const i of sale.items) {
-    if (i.productId) {
-      await prisma.product.updateMany({
-        where: { id: i.productId, userId },
-        data: { stock: { increment: i.qty } },
-      });
-    }
-  }
+  const restoreUpdates = sale.items
+    .filter(i => i.productId)
+    .map(i => prisma.product.updateMany({
+      where: { id: i.productId as string, userId },
+      data: { stock: { increment: i.qty } },
+    }));
+  if (restoreUpdates.length) await prisma.$transaction(restoreUpdates);
   // Reversa el dinero o el fiado
   const fin = await prisma.finance.findFirst({ where: { saleId, userId } });
   if (fin) {
@@ -247,16 +249,17 @@ export async function createPurchase(
   const total = items.reduce((s, i) => s + i.qty * i.unitCost, 0);
   if (total <= 0) throw new Error("Total inválido");
   const date = todayISOShared();
-  const names: string[] = [];
-  for (const i of items) {
-    const prod = await prisma.product.findFirst({ where: { id: i.productId, userId } });
-    if (!prod) continue;
-    names.push(`${i.qty}x ${prod.name}`);
-    await prisma.product.update({
-      where: { id: prod.id },
-      data: { stock: { increment: i.qty }, cost: i.unitCost },
-    });
-  }
+  const prods = await prisma.product.findMany({ where: { id: { in: items.map(i => i.productId) }, userId } });
+  const prodMap = Object.fromEntries(prods.map(p => [p.id, p]));
+  const names = items.filter(i => prodMap[i.productId]).map(i => `${i.qty}x ${prodMap[i.productId].name}`);
+  if (names.length) await prisma.$transaction(
+    items
+      .filter(i => prodMap[i.productId])
+      .map(i => prisma.product.update({
+        where: { id: i.productId },
+        data: { stock: { increment: i.qty }, cost: i.unitCost },
+      }))
+  );
   const desc = (opts.note || names.join(", ")).slice(0, 120);
   if (opts.supplierId) {
     // On credit: creates a debt with the supplier
