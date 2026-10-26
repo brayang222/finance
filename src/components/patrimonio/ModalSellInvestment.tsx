@@ -35,6 +35,7 @@ export default function ModalSellInvestment({ asset, kind, bankAccounts, hasHys,
   const cost = unitCost * sellQty;
 
   const [sellPrice, setSellPrice] = useState(String(Math.round(asset.price * sellQty)));
+  const [pricePerShare, setPricePerShare] = useState(String(Math.round(asset.price)));
   const [priceEdited, setPriceEdited] = useState(false);
   const [commission, setCommission] = useState("0");
   const [toAccount, setToAccount] = useState("");
@@ -50,8 +51,23 @@ export default function ModalSellInvestment({ asset, kind, bankAccounts, hasHys,
   useEffect(() => {
     if (priceEdited) return;
     setSellPrice(String(Math.round(asset.price * sellQty)));
+    setPricePerShare(String(Math.round(asset.price)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sellQty]);
+
+  const handleTotalChange = (v: string) => {
+    setSellPrice(v);
+    setPriceEdited(true);
+    const total = parseInt(v, 10) || 0;
+    if (sellQty > 0) setPricePerShare(String(Math.round(total / sellQty)));
+  };
+
+  const handlePerShareChange = (v: string) => {
+    setPricePerShare(v);
+    setPriceEdited(true);
+    const perShare = parseInt(v, 10) || 0;
+    setSellPrice(String(Math.round(perShare * sellQty)));
+  };
 
   const accounts = [
     { id: "cash", name: "Efectivo" },
@@ -148,9 +164,15 @@ export default function ModalSellInvestment({ asset, kind, bankAccounts, hasHys,
           </div>
         </div>
 
-        <div>
-          <label className={labelClass}>Precio de venta total (COP)</label>
-          <MoneyInput value={sellPrice} onChange={(v) => { setSellPrice(v); setPriceEdited(true); }} />
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelClass}>Precio por ud. (COP)</label>
+            <MoneyInput value={pricePerShare} onChange={handlePerShareChange} />
+          </div>
+          <div className="flex-1">
+            <label className={labelClass}>Total venta (COP)</label>
+            <MoneyInput value={sellPrice} onChange={handleTotalChange} />
+          </div>
         </div>
 
         <div>

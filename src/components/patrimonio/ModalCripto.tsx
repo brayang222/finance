@@ -36,10 +36,10 @@ type LookupData = {
 const fmtNum = (v?: number, digits = 2) =>
   typeof v === "number" ? v.toLocaleString("es-CO", { maximumFractionDigits: digits }) : "—";
 
-export default function ModalCripto({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Crypto; bankAccounts?: BankAccount[] }) {
+export default function ModalCripto({ onClose, editItem, bankAccounts = [], prefillTicker }: { onClose: () => void; editItem?: Crypto; bankAccounts?: BankAccount[]; prefillTicker?: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [ticker, setTicker] = useState(editItem?.ticker ?? "");
+  const [ticker, setTicker] = useState(editItem?.ticker ?? prefillTicker ?? "");
   const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
   // MoneyInput is integer-only (it strips both "." and ",") — round to whole
   // COP, same convention already used for bank account balances.

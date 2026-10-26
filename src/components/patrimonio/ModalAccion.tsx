@@ -40,10 +40,10 @@ type LookupData = {
 const fmtNum = (v?: number, digits = 2) =>
   typeof v === "number" ? v.toLocaleString("es-CO", { maximumFractionDigits: digits }) : "—";
 
-export default function ModalAccion({ onClose, editItem, bankAccounts = [] }: { onClose: () => void; editItem?: Stock; bankAccounts?: BankAccount[] }) {
+export default function ModalAccion({ onClose, editItem, bankAccounts = [], prefillTicker }: { onClose: () => void; editItem?: Stock; bankAccounts?: BankAccount[]; prefillTicker?: string }) {
   const router = useRouter();
   const toast = useToast();
-  const [ticker, setTicker] = useState(editItem?.ticker ?? "");
+  const [ticker, setTicker] = useState(editItem?.ticker ?? prefillTicker ?? "");
   const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
   const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
   const [dateISO, setDateISO] = useState(editItem?.date ?? today());

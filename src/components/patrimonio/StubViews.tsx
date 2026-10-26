@@ -726,6 +726,7 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   const currency = useCurrency();
   const [editItem, setEditItem] = useState<Stock | Crypto | null>(null);
   const [sellItem, setSellItem] = useState<Asset | null>(null);
+  const [buyMore, setBuyMore] = useState(false);
   const [trm, setTrm] = useState<number | null>(initialData.config?.trm ?? null);
   const [tab, setTab] = useState<"Resumen" | "Técnico">("Resumen");
   const [dividendModal, setDividendModal] = useState<{ prefill?: DividendT } | null>(null);
@@ -830,6 +831,12 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setBuyMore(true)}
+                className="border border-line bg-panel2 text-fg text-[12px] px-3 py-1.5 rounded-lg cursor-pointer hover:border-accent"
+              >
+                Comprar
+              </button>
               {localTrades.length > 0 && (
                 <button
                   onClick={() => setSellItem(asset)}
@@ -1036,6 +1043,12 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
       )}
       {editItem && !isCrypto && (
         <ModalAccion editItem={editItem as Stock} onClose={() => setEditItem(null)} />
+      )}
+      {buyMore && !isCrypto && (
+        <ModalAccion prefillTicker={selected} bankAccounts={initialData.bankAccounts} onClose={() => setBuyMore(false)} />
+      )}
+      {buyMore && isCrypto && (
+        <ModalCripto prefillTicker={selected} bankAccounts={initialData.bankAccounts} onClose={() => setBuyMore(false)} />
       )}
       {sellItem && (
         <ModalSellInvestment
