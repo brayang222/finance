@@ -9,6 +9,8 @@ import { useToast } from "./Toast";
 import type { Stock, BankAccount } from "../../types";
 
 const num = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
+// For fractional fields (qty, USD price) — treat both "." and "," as decimal separator
+const numDec = (s: string) => Number(s.replace(",", ".")) || 0;
 
 const EXCHANGE_MAP: Record<string, string> = {
   NMS: "NASDAQ", NGM: "NASDAQ", NCM: "NASDAQ",
@@ -44,8 +46,8 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
   const router = useRouter();
   const toast = useToast();
   const [ticker, setTicker] = useState(editItem?.ticker ?? prefillTicker ?? "");
-  const [qty, setQty] = useState(editItem ? String(editItem.qty) : "");
-  const [priceCOP, setPriceCOP] = useState(editItem ? String(editItem.priceCOP) : "");
+  const [qty, setQty] = useState(editItem ? String(editItem.qty).replace(".", ",") : "");
+  const [priceCOP, setPriceCOP] = useState(editItem ? String(Math.round(editItem.priceCOP)) : "");
   const [dateISO, setDateISO] = useState(editItem?.date ?? today());
   const [commission, setCommission] = useState(editItem ? String(editItem.commission) : "0");
   const [accountId, setAccountId] = useState(editItem?.accountId ?? "");
@@ -54,7 +56,7 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
   const [amount2, setAmount2] = useState(editItem?.amount2 ? String(Math.round(editItem.amount2)) : "");
   const [exchange, setExchange] = useState(editItem?.exchange ?? "");
   const [currency, setCurrency] = useState(editItem?.currency ?? "COP");
-  const [priceUSD, setPriceUSD] = useState(editItem && editItem.currency === "USD" ? String(editItem.price) : "");
+  const [priceUSD, setPriceUSD] = useState(editItem && editItem.currency === "USD" ? String(editItem.price).replace(".", ",") : "");
   const [trm, setTrm] = useState(editItem?.trm && editItem.trm > 1 ? String(editItem.trm) : "");
   const [saving, setSaving] = useState(false);
   const [looking, setLooking] = useState(false);
@@ -62,8 +64,8 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
   const [lookupError, setLookupError] = useState("");
 
   const isUSD = currency === "USD";
-  const canSave = ticker.trim().length > 0 && num(qty) > 0 &&
-    (isUSD ? num(priceUSD) > 0 && num(trm) > 0 : num(priceCOP) > 0);
+  const canSave = ticker.trim().length > 0 && numDec(qty) > 0 &&
+    (isUSD ? numDec(priceUSD) > 0 && num(trm) > 0 : num(priceCOP) > 0);
 
   const runLookup = async () => {
     if (!ticker.trim()) return;
@@ -102,8 +104,8 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
   // When TRM changes, recalculate COP price for USD stocks
   const handleTrmChange = (val: string) => {
     setTrm(val);
-    if (currency === "USD" && num(priceUSD) > 0 && num(val) > 0) {
-      setPriceCOP(String(Math.round(num(priceUSD) * num(val))));
+    if (currency === "USD" && numDec(priceUSD) > 0 && num(val) > 0) {
+      setPriceCOP(String(Math.round(numDec(priceUSD) * num(val))));
     }
   };
 
@@ -111,7 +113,7 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
   const handlePriceUSDChange = (val: string) => {
     setPriceUSD(val);
     if (currency === "USD" && num(trm) > 0) {
-      setPriceCOP(String(Math.round(num(val) * num(trm))));
+      setPriceCOP(String(Math.round(numDec(val) * num(trm))));
     }
   };
 
@@ -121,12 +123,12 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
       const acct = bankAccounts.find(b => b.id === accountId);
       const acct2 = useSplit ? bankAccounts.find(b => b.id === accountId2) : undefined;
       const isUSD = currency === "USD";
-      const usdPrice = num(priceUSD);
+      const usdPrice = numDec(priceUSD);
       const copPrice = num(priceCOP);
       const trmVal = isUSD && num(trm) > 0 ? num(trm) : 1;
       const data = {
         ticker: ticker.trim().toUpperCase(),
-        qty: num(qty),
+        qty: numDec(qty),
         price: isUSD ? usdPrice : copPrice,
         currency,
         trm: trmVal,
@@ -284,17 +286,17 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
         </div>
       </div>
 
-      {num(qty) > 0 && (isUSD ? num(priceUSD) > 0 && num(trm) > 0 : num(priceCOP) > 0) && (
+      {numDec(qty) > 0 && (isUSD ? numDec(priceUSD) > 0 && num(trm) > 0 : num(priceCOP) > 0) && (
         <div className="text-[13px] text-dim">
           Total a pagar:{" "}
-          <span className="text-muted font-medium">{COP(num(qty) * num(priceCOP) + num(commission))}</span>
+          <span className="text-muted font-medium">{COP(numDec(qty) * num(priceCOP) + num(commission))}</span>
           {isUSD && num(trm) > 0 && (
             <span className="ml-1 text-dim">
-              ({num(qty)} × {num(priceUSD).toFixed(2)} USD @ TRM {COP(num(trm))})
+              ({numDec(qty)} × {numDec(priceUSD).toFixed(2)} USD @ TRM {COP(num(trm))})
             </span>
           )}
           {!isUSD && (
-            <span className="ml-1 text-dim">({num(qty)} × {COP(num(priceCOP))} + comisión {COP(num(commission))})</span>
+            <span className="ml-1 text-dim">({numDec(qty)} × {COP(num(priceCOP))} + comisión {COP(num(commission))})</span>
           )}
         </div>
       )}
@@ -343,10 +345,10 @@ export default function ModalAccion({ onClose, editItem, bankAccounts = [], pref
                 <label className={labelClass}>Monto pagado desde esta cuenta (COP)</label>
                 <MoneyInput value={amount2} onChange={setAmount2} prefix="$" />
               </div>
-              {num(qty) > 0 && num(priceCOP) > 0 && (
+              {numDec(qty) > 0 && num(priceCOP) > 0 && (
                 <div className="text-[12px] text-dim">
                   Resto desde {bankAccounts.find(b => b.id === accountId)?.name ?? "la primera cuenta"}:{" "}
-                  <span className="text-muted">{COP(Math.max(0, num(qty) * num(priceCOP) + num(commission) - num(amount2)))}</span>
+                  <span className="text-muted">{COP(Math.max(0, numDec(qty) * num(priceCOP) + num(commission) - num(amount2)))}</span>
                 </div>
               )}
             </div>

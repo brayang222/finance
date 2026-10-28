@@ -8,7 +8,7 @@ import { Bal, Segmented } from "./utils";
 import { usePrivacy } from "./PrivacyContext";
 import { useCurrency } from "./CurrencyContext";
 import { toAssets, toTransactions, toAccounts } from "./transforms";
-import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer, deleteDividend, updateOpenOrderStatus, deleteOpenOrder, fillOpenOrder } from "../../../lib/actions";
+import { deleteStock, deleteCrypto, refreshPrices, refreshTrm, deleteBankAccount, deleteFinance, hysDeleteAccount, deleteTransfer, deleteDividend, updateOpenOrderStatus, deleteOpenOrder, fillOpenOrder, addOpenOrder } from "../../../lib/actions";
 import type { OpenOrder } from "../../types";
 import ModalTransfer from "./ModalTransfer";
 import ModalSellInvestment from "./ModalSellInvestment";
@@ -38,7 +38,7 @@ const monoStyle = { fontFamily: "'IBM Plex Mono', monospace" };
 const refreshBtnClass = "border border-line bg-panel2 text-muted text-[12px] px-3 py-1.5 rounded-lg cursor-pointer";
 
 function OpenOrdersTable({
-  orders, kind, onRefresh, prices, trm, currency = "USD", pricesFresh = false,
+  orders, kind, onRefresh, prices, trm, currency = "USD", pricesFresh = false, prefillTicker = "", knownTickers = [],
 }: {
   orders: OpenOrder[];
   kind: "cripto" | "stock";
@@ -47,11 +47,54 @@ function OpenOrdersTable({
   trm?: number | null;
   currency?: "COP" | "USD";
   pricesFresh?: boolean;
+  prefillTicker?: string;
+  knownTickers?: string[];
 }) {
   const toast = useToast();
   const router = useRouter();
   const filtered = orders.filter(o => o.kind === kind);
   const [loading, setLoading] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [fTicker, setFTicker] = useState(prefillTicker);
+  const [fSide, setFSide] = useState<"buy" | "sell">("buy");
+  const [fQty, setFQty] = useState("");
+  const [fPrice, setFPrice] = useState("");
+  const [fBroker, setFBroker] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const resetForm = () => { setFTicker(prefillTicker); setFSide("buy"); setFQty(""); setFPrice(""); setFBroker(""); setShowForm(false); };
+  const parseNum = (s: string) => Number(s.replace(/\./g, "").replace(",", ".")) || 0;
+  const parseQty = (s: string) => Number(s.replace(",", ".")) || 0;
+
+  const handleSave = async () => {
+    const qty = parseQty(fQty);
+    const limitPrice = parseNum(fPrice);
+    if (!fTicker.trim() || qty <= 0 || limitPrice <= 0) {
+      toast.error("Ticker, cantidad y precio límite son requeridos");
+      return;
+    }
+    setSaving(true);
+    try {
+      const totalUSD = kind === "cripto" ? qty * limitPrice : undefined;
+      await addOpenOrder({
+        ticker: fTicker.trim().toUpperCase(),
+        kind, side: fSide,
+        orderType: "limit",
+        qty, limitPrice,
+        totalUSD,
+        currency: kind === "cripto" ? "USD" : "COP",
+        date: today(),
+        broker: fBroker.trim() || undefined,
+      });
+      router.refresh();
+      resetForm();
+      toast.success("Orden registrada");
+    } catch {
+      toast.error("Error al guardar la orden");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Auto-execute limit orders only after a manual price refresh (never on stale cached prices)
   useEffect(() => {
@@ -72,8 +115,6 @@ function OpenOrdersTable({
       if (changed) router.refresh();
     })();
   }, [pricesFresh]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (filtered.length === 0) return null;
 
   const inCOP = currency === "COP" && !!trm;
   const fmtAmt = (usdVal: number) => inCOP ? COP(usdVal * trm!) : USD(usdVal);
@@ -117,56 +158,133 @@ function OpenOrdersTable({
   const amtLabel = inCOP ? "Total COP" : "Total USD";
   const priceLbl = "Precio límite";
 
+  const ifield = "w-full bg-panel2 border border-line rounded-lg px-2.5 py-1.5 text-[13px] text-fg outline-none focus:border-accent";
+
   return (
     <div className={cardClass}>
-      <div className="text-[11.5px] tracking-[0.04em] uppercase text-dim font-medium mb-3">Órdenes abiertas</div>
-      <table className="w-full">
-        <thead>
-          <tr>
-            <th className={oth}>Ticker</th>
-            <th className={oth}>Lado</th>
-            <th className={`${oth} text-right`}>Qty</th>
-            <th className={`${oth} text-right`}>{priceLbl}</th>
-            <th className={`${oth} text-right`}>{amtLabel}</th>
-            <th className={oth}>Fecha</th>
-            <th className={oth}>Estado</th>
-            <th className={oth}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map(o => (
-            <tr key={o.id}>
-              <td className={otd}><span className="font-semibold text-primary">{o.ticker}</span></td>
-              <td className={otd}><span className={o.side === "buy" ? "text-pos" : "text-neg"}>{o.side === "buy" ? "Compra" : "Venta"}</span></td>
-              <td className={`${otd} text-right`} style={monoStyle}>{o.qty}</td>
-              <td className={`${otd} text-right`} style={monoStyle}>{o.limitPrice != null ? fmtAmt(o.limitPrice) : "—"}</td>
-              <td className={`${otd} text-right`} style={monoStyle}>{o.totalUSD != null ? fmtAmt(o.totalUSD) : "—"}</td>
-              <td className={`${otd} text-dim`}>{o.date}</td>
-              <td className={otd}>{statusBadge(o.status)}</td>
-              <td className={`${otd} text-right`}>
-                <div className="flex items-center justify-end gap-1">
-                  {o.status === "open" && (
-                    <>
-                      <button disabled={loading === o.id} onClick={() => handleStatus(o.id, "filled")}
-                        className="text-[11px] px-2 py-0.5 rounded border border-pos/40 text-pos hover:bg-pos/10 cursor-pointer">
-                        Ejecutar
-                      </button>
-                      <button disabled={loading === o.id} onClick={() => handleStatus(o.id, "cancelled")}
-                        className="text-[11px] px-2 py-0.5 rounded border border-line text-muted hover:bg-panel2 cursor-pointer">
-                        Cancelar
-                      </button>
-                    </>
-                  )}
-                  <button disabled={loading === o.id} onClick={() => handleDelete(o.id)}
-                    className="text-neg hover:opacity-70 cursor-pointer p-1">
-                    <IconTrash size={13} />
-                  </button>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[11.5px] tracking-[0.04em] uppercase text-dim font-medium">Órdenes abiertas</div>
+        <button
+          onClick={() => { setShowForm(v => !v); }}
+          className="text-[12px] px-2.5 py-1 rounded-lg border border-line text-muted hover:bg-hover cursor-pointer"
+        >
+          {showForm ? "Cancelar" : "+ Nueva orden"}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="mb-4 p-3 rounded-xl bg-panel2 border border-line flex flex-col gap-2.5">
+          <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col gap-1 flex-1 min-w-24">
+              <label className="text-[11px] text-dim uppercase tracking-wide">Ticker</label>
+              <input value={fTicker} onChange={e => setFTicker(e.target.value.toUpperCase())}
+                placeholder={kind === "cripto" ? "BTC" : "ECOPETROL"} className={ifield} style={{ fontFamily: "'IBM Plex Mono', monospace" }} />
+              {knownTickers.length > 0 && (
+                <div className="flex gap-1 flex-wrap mt-0.5">
+                  {knownTickers.map(t => (
+                    <button key={t} onClick={() => setFTicker(t)}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${fTicker === t ? "border-accent/60 bg-accent/10 text-accent" : "border-line text-dim hover:border-accent/40 hover:text-fg"}`}
+                      style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                      {t}
+                    </button>
+                  ))}
                 </div>
-              </td>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-dim uppercase tracking-wide">Lado</label>
+              <div className="flex gap-1">
+                {(["buy", "sell"] as const).map(s => (
+                  <button key={s} onClick={() => setFSide(s)}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] border cursor-pointer ${fSide === s ? (s === "buy" ? "border-pos/60 bg-pos/10 text-pos" : "border-neg/60 bg-neg/10 text-neg") : "border-line text-muted hover:bg-hover"}`}>
+                    {s === "buy" ? "Compra" : "Venta"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col gap-1 flex-1 min-w-24">
+              <label className="text-[11px] text-dim uppercase tracking-wide">Cantidad</label>
+              <input value={fQty} onChange={e => setFQty(e.target.value)} placeholder="0.05"
+                inputMode="decimal" className={ifield} style={{ fontFamily: "'IBM Plex Mono', monospace" }} />
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-32">
+              <label className="text-[11px] text-dim uppercase tracking-wide">
+                Precio límite {kind === "cripto" ? "(USD)" : "(COP)"}
+              </label>
+              <input value={fPrice} onChange={e => setFPrice(e.target.value)} placeholder="60000"
+                inputMode="decimal" className={ifield} style={{ fontFamily: "'IBM Plex Mono', monospace" }} />
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-28">
+              <label className="text-[11px] text-dim uppercase tracking-wide">Broker (opcional)</label>
+              <input value={fBroker} onChange={e => setFBroker(e.target.value)} placeholder="Bitso, Binance…" className={ifield} />
+            </div>
+          </div>
+          {parseQty(fQty) > 0 && parseNum(fPrice) > 0 && (
+            <div className="text-[12px] text-dim">
+              Total: {kind === "cripto" ? `${USD(parseQty(fQty) * parseNum(fPrice))}` : `${COP(parseQty(fQty) * parseNum(fPrice))}`}
+              {kind === "cripto" && trm ? ` ≈ ${COP(parseQty(fQty) * parseNum(fPrice) * trm)}` : ""}
+            </div>
+          )}
+          <div className="flex justify-end">
+            <button onClick={handleSave} disabled={saving}
+              className="px-4 py-1.5 rounded-lg bg-fg text-bg text-[13px] font-medium cursor-pointer disabled:opacity-50 hover:opacity-90">
+              {saving ? "Guardando…" : "Registrar orden"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={oth}>Ticker</th>
+              <th className={oth}>Lado</th>
+              <th className={`${oth} text-right`}>Qty</th>
+              <th className={`${oth} text-right`}>{priceLbl}</th>
+              <th className={`${oth} text-right`}>{amtLabel}</th>
+              <th className={oth}>Fecha</th>
+              <th className={oth}>Estado</th>
+              <th className={oth}></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filtered.map(o => (
+              <tr key={o.id}>
+                <td className={otd}><span className="font-semibold text-primary">{o.ticker}</span></td>
+                <td className={otd}><span className={o.side === "buy" ? "text-pos" : "text-neg"}>{o.side === "buy" ? "Compra" : "Venta"}</span></td>
+                <td className={`${otd} text-right`} style={monoStyle}>{o.qty}</td>
+                <td className={`${otd} text-right`} style={monoStyle}>{o.limitPrice != null ? fmtAmt(o.limitPrice) : "—"}</td>
+                <td className={`${otd} text-right`} style={monoStyle}>{o.totalUSD != null ? fmtAmt(o.totalUSD) : "—"}</td>
+                <td className={`${otd} text-dim`}>{o.date}</td>
+                <td className={otd}>{statusBadge(o.status)}</td>
+                <td className={`${otd} text-right`}>
+                  <div className="flex items-center justify-end gap-1">
+                    {o.status === "open" && (
+                      <>
+                        <button disabled={loading === o.id} onClick={() => handleStatus(o.id, "filled")}
+                          className="text-[11px] px-2 py-0.5 rounded border border-pos/40 text-pos hover:bg-pos/10 cursor-pointer">
+                          Ejecutar
+                        </button>
+                        <button disabled={loading === o.id} onClick={() => handleStatus(o.id, "cancelled")}
+                          className="text-[11px] px-2 py-0.5 rounded border border-line text-muted hover:bg-panel2 cursor-pointer">
+                          Cancelar
+                        </button>
+                      </>
+                    )}
+                    <button disabled={loading === o.id} onClick={() => handleDelete(o.id)}
+                      className="text-neg hover:opacity-70 cursor-pointer p-1">
+                      <IconTrash size={13} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -233,24 +351,25 @@ function AssetTable({
           </thead>
           <tbody>
             {assets.map((a) => {
-              // USD-native assets: P/G always in USD regardless of display mode,
-              // to avoid TRM fluctuations distorting the return %.
+              // USD-native assets (all lots filled via limit orders): avgUSD/totalCostUSD
+              // hold the real historical USD cost, enabling TRM-stripped P/G in USD mode.
               const isUSDAsset = a.avgUSD != null && a.totalCostUSD != null && !!trm;
-              const mktPriceUSD = isUSDAsset || inUSD ? a.price / (trm ?? 1) : 0;
+              const mktPriceUSD = inUSD ? a.price / (trm ?? 1) : 0;
               const value    = a.qty * a.price;
-              const valueUSD = a.qty * mktPriceUSD;
+              const valueUSD = a.qty * (a.price / (trm ?? 1));
               const cost     = a.totalCost;
               const costUSD  = a.totalCostUSD ?? (trm ? cost / trm : 0);
-              // P/G: USD-native assets → always compare in USD; COP assets → compare in COP
-              const pl     = isUSDAsset ? (valueUSD - costUSD) * (inUSD ? 1 : (trm ?? 1))
-                                        : (inUSD ? valueUSD - costUSD : value - cost);
-              const plBase = isUSDAsset ? costUSD * (inUSD ? 1 : (trm ?? 1))
-                                        : (inUSD ? costUSD : cost);
-              const plPct = plBase > 0 ? (isUSDAsset ? (valueUSD - costUSD) / costUSD : pl / plBase) : 0;
-              const pos   = pl >= 0;
-              // PPA: use USD field for USD assets (avoids TRM-drift)
-              const ppaDisplay = isUSDAsset
-                ? (inUSD ? USD(a.avgUSD!) : COP(a.avgUSD! * (trm ?? 1)))
+              // COP mode: always compare in COP (value vs historical COP cost) so that
+              // individual row P/G sums correctly to the header total.
+              // USD mode: USD assets compare in USD (strips TRM effects); others use COP/trm.
+              const pl     = inUSD ? (valueUSD - costUSD) : (value - cost);
+              const plBase = inUSD ? costUSD : cost;
+              const plPct  = plBase > 0 ? pl / plBase : 0;
+              const pos    = pl >= 0;
+              // PPA: COP mode → historical COP average (what was actually paid).
+              // USD mode → actual USD purchase price for USD assets, else COP avg / trm.
+              const ppaDisplay = (isUSDAsset && inUSD)
+                ? USD(a.avgUSD!)
                 : (privacy ? "••••" : fmt(a.avg));
               return (
                 <tr key={a.ticker} onClick={() => onSelect(a.ticker)} className="cursor-pointer">
@@ -600,7 +719,7 @@ export function ViewInversiones({ initialData }: { initialData: AllData }) {
       ) : (
         <RebalanceoView assets={assets} privacy={privacy} currency={currency} trm={trm} />
       )}
-      <OpenOrdersTable orders={initialData.openOrders} kind="stock" onRefresh={handleRefresh} prices={initialData.prices} trm={trm} currency={currency} />
+      <OpenOrdersTable orders={initialData.openOrders} kind="stock" onRefresh={handleRefresh} prices={initialData.prices} trm={trm} currency={currency} knownTickers={assets.map(a => a.ticker)} />
 
       {/* Cambio de moneda shortcut */}
       <div className="flex justify-end">
@@ -703,7 +822,7 @@ export function ViewCripto({ initialData }: { initialData: AllData }) {
       ) : (
         <SalesHistoryTable transfers={initialData.transfers} prefix="crypto:" privacy={privacy} currency={currency} trm={trm} />
       )}
-      <OpenOrdersTable orders={initialData.openOrders} kind="cripto" onRefresh={handleRefresh} prices={initialData.prices} trm={trm} currency={currency} pricesFresh={pricesFresh} />
+      <OpenOrdersTable orders={initialData.openOrders} kind="cripto" onRefresh={handleRefresh} prices={initialData.prices} trm={trm} currency={currency} pricesFresh={pricesFresh} knownTickers={assets.map(a => a.ticker)} />
     </div>
   );
 }
@@ -791,24 +910,35 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
   // Split the COP return into "asset move (USD)" vs "FX move (TRM)" — only
   // meaningful for crypto, whose lots carry the real historical TRM at purchase.
   const cryptoTrades = localTrades as Crypto[];
-  // USD-native cost: use price field directly when it's in USD (price !== priceCOP)
+  // USD-native cost: use same detection logic as transforms.ts — only include lots
+  // where a real USD price exists (price !== priceCOP OR trm > 100).
+  // Lots entered manually (price = priceCOP, trm = 1) are COP-native with no USD data.
+  const allLotsHaveUSD = isCrypto && cryptoTrades.length > 0 && cryptoTrades.every(t => {
+    return t.price !== t.priceCOP || t.trm > 100;
+  });
   const costUSD = isCrypto ? cryptoTrades.reduce((s, t) => {
-    const usdPrice = t.price !== t.priceCOP ? t.price : (t.trm > 0 ? t.priceCOP / t.trm : 0);
-    return s + t.qty * usdPrice;
+    const hasRealUSD = t.price !== t.priceCOP;
+    const realTRM = t.trm > 100 ? t.trm : null;
+    const usdPrice = hasRealUSD ? t.price : (realTRM ? t.priceCOP / realTRM : null);
+    return usdPrice != null ? s + t.qty * usdPrice : s;
   }, 0) : 0;
   const costCOP = isCrypto ? cryptoTrades.reduce((s, t) => s + t.qty * t.priceCOP, 0) : 0;
-  const avgTrm = isCrypto && costUSD > 0 ? costCOP / costUSD : null;
-  const avgPriceUSD = isCrypto && asset && costUSD > 0 ? costUSD / asset.qty : null;
+  const avgTrm = isCrypto && allLotsHaveUSD && costUSD > 0 ? costCOP / costUSD : null;
+  const avgPriceUSD = isCrypto && asset && allLotsHaveUSD && costUSD > 0 ? costUSD / asset.qty : null;
   const priceNowUSD = isCrypto && trm && asset ? asset.price / trm : null;
-  const hasFxBreakdown = isCrypto && !!avgTrm && !!avgPriceUSD && !!priceNowUSD && !!trm;
+  const hasFxBreakdown = isCrypto && allLotsHaveUSD && !!avgTrm && !!avgPriceUSD && !!priceNowUSD && !!trm;
   const assetReturn = hasFxBreakdown ? priceNowUSD! / avgPriceUSD! - 1 : null;
   const fxReturn = hasFxBreakdown ? trm! / avgTrm! - 1 : null;
 
-  // P/G using USD-native cost when in USD mode
-  const plUSD = asset && trm ? asset.qty * (asset.price / trm) - costUSD : 0;
+  // P/G: COP mode always uses historical COP cost for consistency.
+  // USD mode uses real USD cost only when all lots have USD price data.
+  const valueUSDDet = asset && trm ? asset.qty * (asset.price / trm) : 0;
+  const plUSD = allLotsHaveUSD && costUSD > 0 ? valueUSDDet - costUSD
+              : asset && trm ? (asset.qty * asset.price - asset.totalCost) / trm : 0;
   const pl = inUSD ? plUSD * trm! : (asset ? asset.qty * asset.price - asset.totalCost : 0);
-  const plBase = inUSD ? costUSD : (asset?.totalCost ?? 1);
-  const plPct = plBase > 0 ? (inUSD ? plUSD / costUSD : pl / plBase) : 0;
+  const plBase = inUSD ? (allLotsHaveUSD && costUSD > 0 ? costUSD : (asset ? asset.totalCost / trm! : 1))
+               : (asset?.totalCost ?? 1);
+  const plPct = plBase > 0 ? pl / (inUSD ? plBase * trm! : plBase) : 0;
 
   return (
     <div>
@@ -1071,6 +1201,17 @@ export function ViewDetalle({ initialData, ticker }: { initialData: AllData; tic
           onClose={() => setDividendModal(null)}
         />
       )}
+
+      <OpenOrdersTable
+        orders={initialData.openOrders}
+        kind={isCrypto ? "cripto" : "stock"}
+        onRefresh={() => router.refresh()}
+        prices={initialData.prices}
+        trm={trm}
+        currency={currency}
+        prefillTicker={selected}
+        knownTickers={[selected]}
+      />
     </div>
   );
 }

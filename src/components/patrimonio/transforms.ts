@@ -35,10 +35,11 @@ export function toAssets(rows: Stock[] | CryptoType[], prices: Record<string, nu
   const map = new Map<string, {
     totalQty: number; totalPricePaid: number; totalCost: number;
     totalPricePaidUSD: number | null; totalCostUSD: number | null;
+    hasAllUSD: boolean;
   }>();
   for (const r of rows) {
     const key = r.ticker.toUpperCase();
-    const prev = map.get(key) ?? { totalQty: 0, totalPricePaid: 0, totalCost: 0, totalPricePaidUSD: null, totalCostUSD: null };
+    const prev = map.get(key) ?? { totalQty: 0, totalPricePaid: 0, totalCost: 0, totalPricePaidUSD: null, totalCostUSD: null, hasAllUSD: true };
     // USD-native lots: price holds real USD value when price !== priceCOP.
     // COP-native lots (BVC stocks): trm is stored as 1 — treat as no USD conversion available.
     // Only convert via TRM when it looks like a real FX rate (> 100 COP/USD).
@@ -58,6 +59,9 @@ export function toAssets(rows: Stock[] | CryptoType[], prices: Record<string, nu
       totalCostUSD: usdPerUnit != null
         ? (prev.totalCostUSD ?? 0) + r.qty * usdPerUnit + (trmForCommission ? (r.commission ?? 0) / trmForCommission : 0)
         : prev.totalCostUSD,
+      // Only expose USD price data when ALL lots have it — partial data causes
+      // incorrect P/G when mixing manually-entered (COP) and order-filled (USD) lots.
+      hasAllUSD: prev.hasAllUSD && usdPerUnit != null,
     });
   }
   return Array.from(map.entries())
@@ -66,8 +70,8 @@ export function toAssets(rows: Stock[] | CryptoType[], prices: Record<string, nu
       const avg = v.totalPricePaid / v.totalQty;
       const price = prices[ticker] ?? avg;
       const { name, mono } = metaFor(ticker);
-      const avgUSD = v.totalPricePaidUSD != null ? v.totalPricePaidUSD / v.totalQty : undefined;
-      const totalCostUSD = v.totalCostUSD != null ? v.totalCostUSD : undefined;
+      const avgUSD = v.totalPricePaidUSD != null && v.hasAllUSD ? v.totalPricePaidUSD / v.totalQty : undefined;
+      const totalCostUSD = v.totalCostUSD != null && v.hasAllUSD ? v.totalCostUSD : undefined;
       return { ticker, name, mono, qty: v.totalQty, avg, totalCost: v.totalCost, price, dayPct: 0, spark: [], avgUSD, totalCostUSD };
     });
 }

@@ -525,12 +525,12 @@ export async function fillOpenOrder(id: string, trm: number) {
 
   await prisma.openOrder.update({ where: { id }, data: { status: "filled" } });
 
-  const priceUSD = order.limitPrice;
-  const priceCOP = priceUSD * trm;
   const today = new Date().toISOString().slice(0, 10);
 
   if (order.kind === "cripto") {
-    // Find the broker's cripto account to link the lot
+    // Crypto: limitPrice is in USD
+    const priceUSD = order.limitPrice;
+    const priceCOP = priceUSD * trm;
     const account = await prisma.bankAccount.findFirst({
       where: { userId, type: "cripto", name: { contains: order.broker ?? "", mode: "insensitive" } },
     });
@@ -546,6 +546,7 @@ export async function fillOpenOrder(id: string, trm: number) {
       },
     });
   } else {
+    // Stock: limitPrice is in COP (per share) — do NOT multiply by TRM
     const account = await prisma.bankAccount.findFirst({
       where: { userId, type: "bolsa", name: { contains: order.broker ?? "", mode: "insensitive" } },
     });
@@ -553,8 +554,8 @@ export async function fillOpenOrder(id: string, trm: number) {
       data: {
         id: randomUUID(),
         userId, ticker: order.ticker.toUpperCase(),
-        qty: order.qty, price: priceCOP, currency: "COP",
-        trm, priceCOP, commission: 0,
+        qty: order.qty, price: order.limitPrice, currency: "COP",
+        trm: 1, priceCOP: order.limitPrice, commission: 0,
         date: today,
         accountId: account?.id ?? null,
         accountName: account?.name ?? (order.broker ?? null),
